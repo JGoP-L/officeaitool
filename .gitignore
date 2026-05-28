@@ -66,8 +66,10 @@ docs/
 !docs/design/
 !docs/design/**
 
-# 不提交 IDE/CI 配置目录
-.github/
+# 不提交本地 IDE 配置目录；GitHub Actions 工作流允许提交
+.github/*
+!.github/workflows/
+!.github/workflows/**
 .vscode/
 nuget.exe
 /c-i3s2

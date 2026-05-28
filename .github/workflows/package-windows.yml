@@ -1,0 +1,82 @@
+name: Package Windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Build VSTO installer
+    runs-on: windows-2022
+
+    env:
+      Configuration: Release
+      Platform: Any CPU
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Show build tools
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          & $vswhere -products * -format table
+          msbuild -version
+          nuget help | Select-Object -First 5
+
+      - name: Restore NuGet packages
+        run: nuget restore AiHelper.sln
+
+      - name: Build VSTO projects
+        shell: pwsh
+        run: |
+          msbuild ShareRibbon/ShareRibbon.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
+          msbuild ExcelAi/ExcelAi.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
+          msbuild WordAi/WordAi.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
+          msbuild PowerPointAi/PowerPointAi.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build-logs | Out-Null
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VSInstallerProjects2022 -property installationPath
+          if (-not $vs) {
+            throw "Visual Studio Installer Projects support was not found on this runner."
+          }
+
+          $devenv = Join-Path $vs "Common7\IDE\devenv.com"
+          $disableOutOfProcBuild = Join-Path $vs "Common7\IDE\CommonExtensions\Microsoft\VSI\DisableOutOfProcBuild\DisableOutOfProcBuild.exe"
+
+          if (Test-Path $disableOutOfProcBuild) {
+            & $disableOutOfProcBuild
+          }
+
+          & $devenv AiHelper.sln /Build "$env:Configuration|$env:Platform" /Project OfficeAgent /ProjectConfig "$env:Configuration" /Out "build-logs\devenv-installer.log"
+
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path "build-logs\devenv-installer.log") {
+              Get-Content "build-logs\devenv-installer.log"
+            }
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OfficeAI-Windows-Package
+          if-no-files-found: warn
+          path: |
+            OfficeAgent/Release/**
+            ExcelAi/bin/Release/**
+            WordAi/bin/Release/**
+            PowerPointAi/bin/Release/**
+            build-logs/**
