@@ -12,14 +12,6 @@
 
 </div>
 
-## 预览
-
-![ExcelView](./AiHelper.assets/excelai_display.png)
-
-![WordView](./AiHelper.assets/wordai_display.png)
-
-![PPTView](./AiHelper.assets/pptai_display.png)
-
 ## 概述
 
 Office AI 智能体是基于 Visual Studio 2022、Visual Basic.NET、.NET Framework 4.7.2 和 VSTO 开发的 Windows 办公插件套件，为 Excel、Word、PowerPoint 提供 AI 辅助能力。

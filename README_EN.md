@@ -12,14 +12,6 @@
 
 </div>
 
-## Screenshots
-
-![ExcelView](./AiHelper.assets/excelai_display.png)
-
-![WordView](./AiHelper.assets/wordai_display.png)
-
-![PPTView](./AiHelper.assets/pptai_display.png)
-
 ## Overview
 
 Office AI Assistant is a Windows Office add-in suite built with Visual Studio 2022, Visual Basic.NET, .NET Framework 4.7.2, and VSTO. It provides AI-assisted workflows for Excel, Word, and PowerPoint.
