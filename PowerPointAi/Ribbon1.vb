@@ -322,7 +322,7 @@ Public Class Ribbon1
             Debug.WriteLine("设置幻灯片背景失败: " & ex.Message)
         End Try
 
-        Dim accent = slide.Shapes.AddShape(Microsoft.Office.Core.MsoShapeType.msoShapeRectangle, 0, 0, slideWidth, 8)
+        Dim accent = slide.Shapes.AddShape(Microsoft.Office.Core.MsoAutoShapeType.msoShapeRectangle, 0, 0, slideWidth, 8)
         accent.Name = DemoAccentShapeName
         accent.Fill.ForeColor.RGB = RGB(37, 99, 235)
         accent.Line.Visible = Microsoft.Office.Core.MsoTriState.msoFalse

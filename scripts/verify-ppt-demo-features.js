@@ -29,7 +29,8 @@ assert(pptRibbon.includes('target.TextRange.Text = optimizedText'), '文本优�
 
 assert(pptRibbon.includes('ApplySimpleBeautifyToCurrentSlide()'), '美化单页 must call current-slide beautify');
 assert(pptRibbon.includes('wenduoduoAI_BeautifyAccent'), '美化单页 must mark demo accent shapes');
-assert(pptRibbon.includes('msoShapeRectangle'), '美化单页 must add a simple visual accent');
+assert(pptRibbon.includes('MsoAutoShapeType.msoShapeRectangle'), '美化单页 must add the accent shape with MsoAutoShapeType');
+assert(!pptRibbon.includes('MsoShapeType.msoShapeRectangle'), '美化单页 must not use MsoShapeType for AddShape');
 assert(pptRibbon.includes('BeautifyShapeText'), '美化单页 must format text shapes');
 assert(pptRibbon.includes('AutoFitPptTextShape'), '美化单页 must fit text after formatting');
 
