@@ -81,10 +81,20 @@ jobs:
           }
 
           $devenv = Join-Path $vs "Common7\IDE\devenv.com"
-          $disableOutOfProcBuild = Join-Path $vs "Common7\IDE\CommonExtensions\Microsoft\VSI\DisableOutOfProcBuild\DisableOutOfProcBuild.exe"
+          $disableOutOfProcBuildDir = Join-Path $vs "Common7\IDE\CommonExtensions\Microsoft\VSI\DisableOutOfProcBuild"
+          $disableOutOfProcBuild = Join-Path $disableOutOfProcBuildDir "DisableOutOfProcBuild.exe"
 
           if (Test-Path $disableOutOfProcBuild) {
-            & $disableOutOfProcBuild
+            Push-Location $disableOutOfProcBuildDir
+            try {
+              & ".\DisableOutOfProcBuild.exe"
+              if ($LASTEXITCODE -ne 0) {
+                throw "DisableOutOfProcBuild.exe failed with exit code $LASTEXITCODE."
+              }
+            }
+            finally {
+              Pop-Location
+            }
           }
 
           & $devenv AiHelper.sln /Build "$env:Configuration|$env:SolutionPlatform" /Project OfficeAgent /ProjectConfig "$env:Configuration" /Out "build-logs\devenv-installer.log"
