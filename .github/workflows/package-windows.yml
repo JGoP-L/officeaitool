@@ -69,6 +69,49 @@ jobs:
           Invoke-ProjectBuild "WordAi/WordAi.vbproj" "WordAi.log"
           Invoke-ProjectBuild "PowerPointAi/PowerPointAi.vbproj" "PowerPointAi.log"
 
+      - name: Prepare installer source files
+        shell: pwsh
+        run: |
+          $vdproj = "OfficeAgent\OfficeAgent.vdproj"
+          $officeAgentDir = (Resolve-Path "OfficeAgent").Path
+          $sourcePathMatches = Select-String -Path $vdproj -Pattern 'SourcePath" = "8:(?<SourcePath>[^"]+)"'
+          $createdXmlFiles = @()
+          $missingRuntimeFiles = @()
+
+          foreach ($matchInfo in $sourcePathMatches) {
+            $sourcePath = $matchInfo.Matches[0].Groups["SourcePath"].Value.Replace("\\", "\")
+
+            if (-not $sourcePath.StartsWith("..\")) {
+              continue
+            }
+
+            $fullPath = [System.IO.Path]::GetFullPath((Join-Path $officeAgentDir $sourcePath))
+
+            if (Test-Path $fullPath) {
+              continue
+            }
+
+            if ([System.IO.Path]::GetExtension($fullPath) -ieq ".xml") {
+              New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($fullPath)) | Out-Null
+              Set-Content -Path $fullPath -Encoding UTF8 -Value '<?xml version="1.0" encoding="utf-8"?><doc />'
+              $createdXmlFiles += $fullPath
+              continue
+            }
+
+            $missingRuntimeFiles += $fullPath
+          }
+
+          if ($createdXmlFiles.Count -gt 0) {
+            Write-Host "Created missing optional XML documentation files:"
+            $createdXmlFiles | ForEach-Object { Write-Host "  $_" }
+          }
+
+          if ($missingRuntimeFiles.Count -gt 0) {
+            Write-Host "Missing non-XML installer source files:"
+            $missingRuntimeFiles | ForEach-Object { Write-Host "  $_" }
+            throw "Installer source files are missing."
+          }
+
       - name: Build installer
         shell: pwsh
         run: |
