@@ -71,13 +71,19 @@ Partial Class Ribbon1
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
 
         Me.ContinuationButton.Image = ShareRibbon.SharedResources.Aiwrite
+        Me.ContinuationButton.Label = "文本优化"
+        Me.ContinuationButton.ScreenTip = "PPT文本优化"
+        Me.ContinuationButton.SuperTip = "选中文字后可润色、扩写、精简或补全文案，并替换回当前 PPT"
 
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
         Me.TranslateButton.Label = "文本翻译"
         Me.TranslateButton.ScreenTip = "PPT文本翻译"
         Me.TranslateButton.SuperTip = "翻译当前页文本并替换原文，支持多语言，翻译后自动适配文本框"
         Me.ProofreadButton.Visible = False
-        Me.ReformatButton.Visible = False
+        Me.ReformatButton.Visible = True
+        Me.ReformatButton.Label = "美化单页"
+        Me.ReformatButton.ScreenTip = "PPT单页美化"
+        Me.ReformatButton.SuperTip = "对当前页应用演示版排版美化，统一字体、颜色、标题和文本框适配"
         Me.DataAnalysisButton.Visible = False
         Me.TemplateFormatButton.Visible = False
     End Sub

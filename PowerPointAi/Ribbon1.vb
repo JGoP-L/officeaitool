@@ -1,14 +1,25 @@
 ﻿' PowerPointAi\Ribbon1.vb
 Imports System.Diagnostics
+Imports System.Drawing
+Imports System.Text.RegularExpressions
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
 Imports Microsoft.Office.Tools.Ribbon
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports ShareRibbon  ' 添加此引用
+Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 
 Public Class Ribbon1
     Inherits BaseOfficeRibbon
+
+    Private Const DemoAccentShapeName As String = "wenduoduoAI_BeautifyAccent"
+
+    Private Class PptTextTarget
+        Public Property TextRange As PowerPoint.TextRange
+        Public Property Shape As PowerPoint.Shape
+        Public Property OriginalText As String
+    End Class
 
     Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
@@ -62,24 +73,18 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 排版功能 - 进入模板选择模式
-    Protected Overrides Async Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
+    ' 演示版美化单页 - 先用本地规则快速看到效果
+    Protected Overrides Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            ' 打开Chat面板并进入模板选择模式（不再预先检查选中内容，改为选择模板后再检查）
-            Globals.ThisAddIn.ShowChatTaskPane()
-            Await Task.Delay(250)
-
-            Dim chatCtrl = ThisAddIn.chatControl
-            If chatCtrl Is Nothing Then
-                MessageBox.Show("无法获取聊天控件实例，请确认 Chat 面板已打开。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Dim changedCount = ApplySimpleBeautifyToCurrentSlide()
+            If changedCount <= 0 Then
+                MessageBox.Show("当前页没有可美化的文本框。", "美化单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
                 Return
             End If
 
-            ' 进入模板选择模式
-            chatCtrl.EnterReformatTemplateMode()
-
+            MessageBox.Show($"已美化当前页，处理 {changedCount} 个文本框。", "美化单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
         Catch ex As Exception
-            MessageBox.Show("进入排版模式出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("美化单页出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
@@ -102,6 +107,384 @@ Public Class Ribbon1
         Catch
         End Try
         Return "文本框"
+    End Function
+
+    Private Function ShowTextOptimizeDialog() As String
+        Using dialog As New Form()
+            dialog.Text = "文本优化"
+            dialog.Size = New Size(330, 170)
+            dialog.StartPosition = FormStartPosition.CenterParent
+            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
+            dialog.MaximizeBox = False
+            dialog.MinimizeBox = False
+
+            Dim label As New Label() With {
+                .Text = "选择优化方式：",
+                .Location = New Point(18, 18),
+                .AutoSize = True
+            }
+            dialog.Controls.Add(label)
+
+            Dim modeCombo As New ComboBox() With {
+                .Location = New Point(18, 44),
+                .Size = New Size(278, 24),
+                .DropDownStyle = ComboBoxStyle.DropDownList
+            }
+            modeCombo.Items.AddRange(New Object() {"润色", "扩写", "精简", "补全文案"})
+            modeCombo.SelectedIndex = 0
+            dialog.Controls.Add(modeCombo)
+
+            Dim okButton As New Button() With {
+                .Text = "开始",
+                .Location = New Point(126, 86),
+                .Size = New Size(80, 30),
+                .DialogResult = DialogResult.OK
+            }
+            dialog.Controls.Add(okButton)
+            dialog.AcceptButton = okButton
+
+            Dim cancelButton As New Button() With {
+                .Text = "取消",
+                .Location = New Point(216, 86),
+                .Size = New Size(80, 30),
+                .DialogResult = DialogResult.Cancel
+            }
+            dialog.Controls.Add(cancelButton)
+            dialog.CancelButton = cancelButton
+
+            If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
+            Return modeCombo.SelectedItem.ToString()
+        End Using
+    End Function
+
+    Private Async Function OptimizeSelectedTextAsync(modeName As String) As Task(Of Integer)
+        Dim targets = GetSelectedPptTextTargets()
+        If targets.Count = 0 Then
+            MessageBox.Show("请先选中 PPT 里的文字或文本框。", "文本优化", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return 0
+        End If
+
+        If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) OrElse
+           String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) OrElse
+           String.IsNullOrWhiteSpace(ConfigSettings.ModelName) Then
+            MessageBox.Show("请先在模型配置里填写 API 地址、API Key 和模型名称。", "文本优化", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return 0
+        End If
+
+        ShareRibbon.GlobalStatusStripAll.ShowProgress($"正在{modeName}选中文本...")
+        Dim changedCount = 0
+
+        For Each target In targets
+            Dim optimizedText = Await RequestOptimizedTextAsync(modeName, target.OriginalText)
+            If Not String.IsNullOrWhiteSpace(optimizedText) Then
+                target.TextRange.Text = optimizedText
+                If target.Shape IsNot Nothing Then AutoFitPptTextShape(target.Shape)
+                changedCount += 1
+            End If
+        Next
+
+        ShareRibbon.GlobalStatusStripAll.ShowProgress($"文本优化完成，共处理 {changedCount} 处")
+        Return changedCount
+    End Function
+
+    Private Function GetSelectedPptTextTargets() As List(Of PptTextTarget)
+        Dim targets As New List(Of PptTextTarget)()
+
+        Try
+            Dim sel = Globals.ThisAddIn.Application.ActiveWindow.Selection
+
+            Select Case sel.Type
+                Case PowerPoint.PpSelectionType.ppSelectionText
+                    Dim text = sel.TextRange.Text
+                    If Not String.IsNullOrWhiteSpace(text) Then
+                        Dim selectedShape As PowerPoint.Shape = Nothing
+                        Try
+                            selectedShape = sel.ShapeRange(1)
+                        Catch
+                        End Try
+
+                        targets.Add(New PptTextTarget() With {
+                            .TextRange = sel.TextRange,
+                            .Shape = selectedShape,
+                            .OriginalText = text.Trim()
+                        })
+                    End If
+
+                Case PowerPoint.PpSelectionType.ppSelectionShapes
+                    For i = 1 To sel.ShapeRange.Count
+                        CollectShapeTextTargets(sel.ShapeRange(i), targets)
+                    Next
+            End Select
+        Catch ex As Exception
+            Debug.WriteLine("读取 PPT 选中文本失败: " & ex.Message)
+        End Try
+
+        Return targets
+    End Function
+
+    Private Sub CollectShapeTextTargets(shape As PowerPoint.Shape, targets As List(Of PptTextTarget))
+        Try
+            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoGroup Then
+                For i = 1 To shape.GroupItems.Count
+                    CollectShapeTextTargets(shape.GroupItems(i), targets)
+                Next
+                Return
+            End If
+
+            If shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                Dim table = shape.Table
+                For row = 1 To table.Rows.Count
+                    For col = 1 To table.Columns.Count
+                        Dim cellShape = table.Cell(row, col).Shape
+                        If cellShape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
+                           cellShape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                            Dim cellText = cellShape.TextFrame.TextRange.Text
+                            If Not String.IsNullOrWhiteSpace(cellText) Then
+                                targets.Add(New PptTextTarget() With {
+                                    .TextRange = cellShape.TextFrame.TextRange,
+                                    .Shape = cellShape,
+                                    .OriginalText = cellText.Trim()
+                                })
+                            End If
+                        End If
+                    Next
+                Next
+                Return
+            End If
+
+            If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
+               shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                Dim text = shape.TextFrame.TextRange.Text
+                If Not String.IsNullOrWhiteSpace(text) Then
+                    targets.Add(New PptTextTarget() With {
+                        .TextRange = shape.TextFrame.TextRange,
+                        .Shape = shape,
+                        .OriginalText = text.Trim()
+                    })
+                End If
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("收集形状文本失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Async Function RequestOptimizedTextAsync(modeName As String, originalText As String) As Task(Of String)
+        Dim systemPrompt = "你是一个专业的 PowerPoint 文案优化助手。你只返回处理后的文本，不要解释，不要添加标题，不要输出 Markdown。"
+        Dim prompt = BuildTextOptimizationPrompt(modeName, originalText)
+        Dim requestBody = LLMUtil.CreateLlmRequestBody(prompt, ConfigSettings.ModelName, systemPrompt, 0.35, 1200)
+        Dim response = Await LLMUtil.SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
+
+        If response.StartsWith("错误:") Then
+            Throw New Exception(response)
+        End If
+
+        Dim jObj = JObject.Parse(response)
+        Dim content = jObj("choices")(0)("message")("content")?.ToString()
+        If String.IsNullOrWhiteSpace(content) Then Throw New Exception("模型返回内容为空")
+
+        Return content.Trim()
+    End Function
+
+    Private Function BuildTextOptimizationPrompt(modeName As String, originalText As String) As String
+        Dim instruction As String
+        Select Case modeName
+            Case "扩写"
+                instruction = "在不偏离原意的前提下扩写为更适合 PPT 展示的内容，语言自然、有条理。"
+            Case "精简"
+                instruction = "精简为更适合 PPT 的短句，保留核心信息，删除重复和口语化表达。"
+            Case "补全文案"
+                instruction = "补全为一段完整、清晰、适合放在 PPT 文本框中的文案。"
+            Case Else
+                instruction = "润色为更专业、更清晰、更适合 PPT 展示的表达。"
+        End Select
+
+        Return $"请执行：{instruction}
+
+原文：
+{originalText}"
+    End Function
+
+    Private Function ApplySimpleBeautifyToCurrentSlide() As Integer
+        Dim slide = GetCurrentSlide()
+        If slide Is Nothing Then Return 0
+
+        Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
+        Dim slideWidth As Single = CSng(presentation.PageSetup.SlideWidth)
+        Dim slideHeight As Single = CSng(presentation.PageSetup.SlideHeight)
+
+        RemoveDemoAccentShapes(slide)
+
+        Try
+            slide.FollowMasterBackground = Microsoft.Office.Core.MsoTriState.msoFalse
+            slide.Background.Fill.Solid()
+            slide.Background.Fill.ForeColor.RGB = RGB(248, 250, 252)
+        Catch ex As Exception
+            Debug.WriteLine("设置幻灯片背景失败: " & ex.Message)
+        End Try
+
+        Dim accent = slide.Shapes.AddShape(Microsoft.Office.Core.MsoShapeType.msoShapeRectangle, 0, 0, slideWidth, 8)
+        accent.Name = DemoAccentShapeName
+        accent.Fill.ForeColor.RGB = RGB(37, 99, 235)
+        accent.Line.Visible = Microsoft.Office.Core.MsoTriState.msoFalse
+
+        Dim changedCount = 0
+        For shapeIdx = 1 To slide.Shapes.Count
+            Dim shape = slide.Shapes(shapeIdx)
+            If Not shape.Name.StartsWith(DemoAccentShapeName, StringComparison.OrdinalIgnoreCase) Then
+                changedCount += BeautifyShapeText(shape, slideWidth, slideHeight)
+            End If
+        Next
+
+        Return changedCount
+    End Function
+
+    Private Function GetCurrentSlide() As PowerPoint.Slide
+        Try
+            Dim sel = Globals.ThisAddIn.Application.ActiveWindow.Selection
+            If sel IsNot Nothing AndAlso sel.SlideRange IsNot Nothing AndAlso sel.SlideRange.Count > 0 Then
+                Return sel.SlideRange(1)
+            End If
+        Catch
+        End Try
+
+        Try
+            Return TryCast(Globals.ThisAddIn.Application.ActiveWindow.View.Slide, PowerPoint.Slide)
+        Catch
+        End Try
+
+        Return Nothing
+    End Function
+
+    Private Sub RemoveDemoAccentShapes(slide As PowerPoint.Slide)
+        For i = slide.Shapes.Count To 1 Step -1
+            Try
+                If slide.Shapes(i).Name.StartsWith(DemoAccentShapeName, StringComparison.OrdinalIgnoreCase) Then
+                    slide.Shapes(i).Delete()
+                End If
+            Catch
+            End Try
+        Next
+    End Sub
+
+    Private Function BeautifyShapeText(shape As PowerPoint.Shape, slideWidth As Single, slideHeight As Single) As Integer
+        Try
+            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoGroup Then
+                Dim count = 0
+                For i = 1 To shape.GroupItems.Count
+                    count += BeautifyShapeText(shape.GroupItems(i), slideWidth, slideHeight)
+                Next
+                Return count
+            End If
+
+            If shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                Dim count = 0
+                For row = 1 To shape.Table.Rows.Count
+                    For col = 1 To shape.Table.Columns.Count
+                        count += BeautifyShapeText(shape.Table.Cell(row, col).Shape, slideWidth, slideHeight)
+                    Next
+                Next
+                Return count
+            End If
+
+            If shape.HasTextFrame <> Microsoft.Office.Core.MsoTriState.msoTrue OrElse
+               shape.TextFrame.HasText <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return 0
+
+            Dim textRange = shape.TextFrame.TextRange
+            textRange.Text = CleanPptText(textRange.Text)
+
+            Dim isTitle = IsLikelyTitleShape(shape, slideHeight)
+            textRange.Font.Name = "Microsoft YaHei UI"
+            textRange.Font.Size = If(isTitle, 30, 18)
+            textRange.Font.Bold = If(isTitle, Microsoft.Office.Core.MsoTriState.msoTrue, Microsoft.Office.Core.MsoTriState.msoFalse)
+            textRange.Font.Color.RGB = If(isTitle, RGB(15, 23, 42), RGB(51, 65, 85))
+            textRange.ParagraphFormat.Alignment = PowerPoint.PpParagraphAlignment.ppAlignLeft
+
+            shape.TextFrame.WordWrap = Microsoft.Office.Core.MsoTriState.msoTrue
+            shape.TextFrame.AutoSize = PowerPoint.PpAutoSize.ppAutoSizeNone
+
+            If isTitle Then
+                shape.Left = 36
+                shape.Top = Math.Max(24, shape.Top)
+                shape.Width = Math.Max(120, slideWidth - 72)
+            Else
+                Try
+                    shape.Line.Visible = Microsoft.Office.Core.MsoTriState.msoTrue
+                    shape.Line.ForeColor.RGB = RGB(226, 232, 240)
+                    shape.Fill.ForeColor.RGB = RGB(255, 255, 255)
+                    shape.Fill.Transparency = 0.08F
+                Catch
+                End Try
+            End If
+
+            AutoFitPptTextShape(shape)
+            Return 1
+        Catch ex As Exception
+            Debug.WriteLine("美化文本框失败: " & ex.Message)
+            Return 0
+        End Try
+    End Function
+
+    Private Function CleanPptText(text As String) As String
+        Dim normalized = text.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
+        Dim lines = normalized.Split(New String() {vbLf}, StringSplitOptions.None).
+            Select(Function(line) Regex.Replace(line.Trim(), "\s+", " ")).
+            Where(Function(line) Not String.IsNullOrWhiteSpace(line)).
+            ToList()
+
+        Return String.Join(vbCrLf, lines)
+    End Function
+
+    Private Function IsLikelyTitleShape(shape As PowerPoint.Shape, slideHeight As Single) As Boolean
+        Try
+            If shape.PlaceholderFormat IsNot Nothing Then
+                Select Case shape.PlaceholderFormat.Type
+                    Case PowerPoint.PpPlaceholderType.ppPlaceholderTitle,
+                         PowerPoint.PpPlaceholderType.ppPlaceholderCenterTitle
+                        Return True
+                End Select
+            End If
+        Catch
+        End Try
+
+        Return shape.Top < slideHeight * 0.24F
+    End Function
+
+    Private Sub AutoFitPptTextShape(shape As PowerPoint.Shape)
+        Try
+            If shape Is Nothing OrElse
+               shape.HasTextFrame <> Microsoft.Office.Core.MsoTriState.msoTrue OrElse
+               shape.TextFrame.HasText <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+
+            Dim textFrame = shape.TextFrame
+            Dim textRange = textFrame.TextRange
+            Dim currentFontSize As Single = CSng(textRange.Font.Size)
+            If currentFontSize <= 0 Then currentFontSize = 18.0F
+
+            Dim minFontSize As Single = 10.0F
+            Dim targetWidth As Single = CSng(Math.Max(1.0, shape.Width - textFrame.MarginLeft - textFrame.MarginRight))
+            Dim targetHeight As Single = CSng(Math.Max(1.0, shape.Height - textFrame.MarginTop - textFrame.MarginBottom))
+            Dim guard As Integer = 0
+
+            While guard < 12 AndAlso currentFontSize > minFontSize AndAlso PptTextOverflows(textRange, targetWidth, targetHeight)
+                currentFontSize = CSng(Math.Max(minFontSize, currentFontSize - 1.0F))
+                textRange.Font.Size = currentFontSize
+                guard += 1
+            End While
+
+            If PptTextOverflows(textRange, targetWidth, targetHeight) Then
+                textFrame.AutoSize = PowerPoint.PpAutoSize.ppAutoSizeShapeToFitText
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("适配文本框失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Function PptTextOverflows(textRange As PowerPoint.TextRange, targetWidth As Single, targetHeight As Single) As Boolean
+        Try
+            Return textRange.BoundHeight > targetHeight OrElse textRange.BoundWidth > targetWidth * 1.08F
+        Catch
+            Return False
+        End Try
     End Function
 
     ' 一键翻译功能 - PowerPoint实现
@@ -192,28 +575,18 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' AI续写功能 - PowerPoint实现
-    Protected Overrides Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
+    ' 演示版文本优化 - 复用当前模型配置
+    Protected Overrides Async Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            ' 确保侧栏已打开
-            Globals.ThisAddIn.ShowChatTaskPane()
+            Dim modeName = ShowTextOptimizeDialog()
+            If String.IsNullOrWhiteSpace(modeName) Then Return
 
-            ' 获取ChatControl并触发续写（自动模式，显示对话框）
-            Dim chatCtrl = ThisAddIn.chatControl
-            If chatCtrl IsNot Nothing Then
-                ' 稍等一下让WebView2加载完成，然后显示续写按钮并触发续写对话框
-                Task.Run(Async Function()
-                             Await Task.Delay(300)
-                             ' 先显示续写按钮
-                             Await chatCtrl.ExecuteJavaScriptAsyncJS("setContinuationButtonVisible(true);")
-                             ' 再触发续写对话框
-                             Await chatCtrl.ExecuteJavaScriptAsyncJS("triggerContinuation(true);")
-                         End Function)
-            Else
-                MessageBox.Show("请先打开AI助手面板", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Dim changedCount = Await OptimizeSelectedTextAsync(modeName)
+            If changedCount > 0 Then
+                MessageBox.Show($"文本优化完成，共处理 {changedCount} 处。", "文本优化", MessageBoxButtons.OK, MessageBoxIcon.Information)
             End If
         Catch ex As Exception
-            MessageBox.Show("触发AI续写时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("文本优化出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
