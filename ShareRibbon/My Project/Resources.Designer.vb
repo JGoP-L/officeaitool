@@ -103,7 +103,7 @@ Namespace My.Resources
         '''<summary>
         '''  查找类似 /**
         ''' * autocomplete.js - 智能输入框自动补全模块
-        ''' * 实现类似Cursor/Qoder的Tab键补全功能
+        ''' * 实现 Tab 键智能补全功能
         ''' */
         '''
         '''// ========== 状态管理 ==========
@@ -520,7 +520,7 @@ Namespace My.Resources
         '''<summary>
         '''  查找类似 /**
         ''' * ralph-agent.js - Ralph Agent 前端控制
-        ''' * 类似Cursor的自动化Agent，嵌入聊天流，自动执行步骤
+        ''' * 自动化Agent，嵌入聊天流，自动执行步骤
         ''' */
         '''
         '''// Agent 状态

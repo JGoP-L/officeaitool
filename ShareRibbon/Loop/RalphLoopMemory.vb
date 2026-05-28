@@ -8,7 +8,7 @@ Imports Newtonsoft.Json
 Public Class RalphLoopMemory
     Private Shared ReadOnly MemoryFilePath As String = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        "OfficeAiAgent",
+        ConfigSettings.OfficeAiAppDataFolder,
         "ralph_memory.json"
     )
 

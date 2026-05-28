@@ -1,6 +1,6 @@
 ﻿/**
  * ralph-agent.js - Ralph Agent 前端控制
- * 类似Cursor的自动化Agent，嵌入聊天流，自动执行步骤
+ * 自动化Agent，嵌入聊天流，自动执行步骤
  */
 
 // Agent 状态

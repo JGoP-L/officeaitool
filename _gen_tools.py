@@ -1,7 +1,8 @@
 import json
 import os
+from pathlib import Path
 
-base_dir = 'F:/ai/code/AiHelper/ShareRibbon/Tools'
+base_dir = str(Path(__file__).resolve().parent / 'ShareRibbon' / 'Tools')
 
 excel_tools = [
     {'id': 'ApplyFormula', 'name': '应用公式', 'description': '在指定单元格范围应用Excel公式，支持自动向下填充', 'category': '基础操作', 'riskLevel': 'safe', 'params': [

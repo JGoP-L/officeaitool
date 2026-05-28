@@ -499,7 +499,7 @@ Public Class ConfigApiForm
     Private Sub InitializeSkillsTab()
         ' 顶部说明
         Dim lblInfo As New Label() With {
-            .Text = "Skills目录：Documents\OfficeAiAppData\Skills，将符合Claude规范的Skills目录拷贝到此即可",
+            .Text = "Skills目录：Documents\OfficeAiAppData\Skills，将符合Skills规范的目录拷贝到此即可",
             .Location = New Point(12, 12),
             .Size = New Size(1080, 24),
             .ForeColor = Color.Gray,

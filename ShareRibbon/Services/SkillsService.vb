@@ -1,6 +1,6 @@
 ﻿' ShareRibbon\Services\SkillsService.vb
-' Skills服务：实现Claude Skills规范和渐进式披露
-' 支持从文件系统目录读取Skills（类似Trae/Cursor模式）
+' Skills服务：实现Skills规范和渐进式披露
+' 支持从文件系统目录读取Skills
 
 Imports System.Collections.Generic
 Imports System.IO
@@ -40,7 +40,7 @@ End Class
 
 ''' <summary>
 ''' Skills服务：实现渐进式披露和智能匹配
-''' 从Skills目录读取Claude规范的Skills文件
+''' 从Skills目录读取Skills文件
 ''' </summary>
 Public Class SkillsService
 

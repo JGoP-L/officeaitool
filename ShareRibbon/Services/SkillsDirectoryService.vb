@@ -1,5 +1,5 @@
 ﻿' ShareRibbon\Services\SkillsDirectoryService.vb
-' Skills目录管理服务：从文件系统读取Claude规范的Skills
+' Skills目录管理服务：从文件系统读取Skills
 
 Imports System.IO
 Imports System.Collections.Generic
@@ -9,7 +9,7 @@ Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
 ''' <summary>
-''' Skills文件定义（Claude规范格式，支持Front Matter）
+''' Skills文件定义（支持Front Matter）
 ''' </summary>
 Public Class SkillFileDefinition
     ' 必需字段
@@ -174,7 +174,7 @@ Public Class SkillsDirectoryService
     End Sub
 
     ''' <summary>
-    ''' 解析Skill目录（Claude规范）
+    ''' 解析Skill目录
     ''' 目录结构：
     ''' my-skill/
     '''   ├── SKILL.md (required)

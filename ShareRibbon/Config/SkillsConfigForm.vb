@@ -1,12 +1,12 @@
 ﻿' ShareRibbon\Config\SkillsConfigForm.vb
-' Skills配置窗口：展示Claude规范的Skills
+' Skills配置窗口：展示Skills
 
 Imports System.Drawing
 Imports System.IO
 Imports System.Windows.Forms
 
 ''' <summary>
-''' Skills配置窗口：展示Claude规范的Skills（只读列表）
+''' Skills配置窗口：展示Skills（只读列表）
 ''' </summary>
 Public Class SkillsConfigForm
     Inherits Form
@@ -48,7 +48,7 @@ Public Class SkillsConfigForm
     Private Sub InitializeUI()
         ' 顶部说明
         Dim lblInfo As New Label() With {
-            .Text = "Skills目录：Documents\OfficeAiAppData\Skills，将符合Claude规范的Skills目录拷贝到此即可",
+            .Text = "Skills目录：Documents\OfficeAiAppData\Skills，将符合Skills规范的目录拷贝到此即可",
             .Location = New Point(15, 10),
             .Size = New Size(800, 20),
             .ForeColor = Color.Gray,

@@ -2,7 +2,7 @@
 
 ## Context
 
-**现状**：Office AI Agent 的 Chat 由 ShareRibbon 的 `BaseChatControl` 承载，依赖 `ChatStateService`（内存 `List(Of HistoryMessage)`）、`HttpStreamService`（流式请求）、`HistoryService`（仅管理 `saved_chat_*.html` 导出）。上下文组装直接使用 `HistoryMessages`，无分层、无 RAG、无 Skills。
+**现状**：Office AI 的 Chat 由 ShareRibbon 的 `BaseChatControl` 承载，依赖 `ChatStateService`（内存 `List(Of HistoryMessage)`）、`HttpStreamService`（流式请求）、`HistoryService`（仅管理 `saved_chat_*.html` 导出）。上下文组装直接使用 `HistoryMessages`，无分层、无 RAG、无 Skills。
 
 **约束**：VB.Net、.NET Framework 4.7.2、VSTO、ShareRibbon 供 Excel/Word/PPT 三端复用；UI 更新须在主线程；配置通过 ConfigManager；已有 MCP 集成（McpService）。
 

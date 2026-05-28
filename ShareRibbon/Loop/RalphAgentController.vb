@@ -4,7 +4,7 @@ Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
 ''' <summary>
-''' Ralph Agent 控制器 - 类似Cursor的自动化Agent
+''' Ralph Agent 控制器 - 自动化Agent
 ''' 流程：意图识别 -> 记忆RAG检索 -> 规划 -> 用户确认 -> 自动逐步执行 -> 应用到Office
 ''' </summary>
 Public Class RalphAgentController
@@ -930,7 +930,7 @@ complexity 取值规则：
                 ' 准备下一步
                 _currentSession.CurrentStepIndex += 1
 
-                ' 自动执行下一步（类似Cursor）
+                ' 自动执行下一步
                 If _currentSession.CurrentStepIndex < _currentSession.Steps.Count Then
                     ' 短暂延迟后执行下一步，让用户看到进度
                     Await Task.Delay(500)

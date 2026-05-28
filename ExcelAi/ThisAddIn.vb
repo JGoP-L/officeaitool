@@ -158,7 +158,7 @@ Public Class ThisAddIn
 
             ' 1. 注册表路径（安装时写入，最可靠，几乎零开销）
             Try
-                Using key As RegistryKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\it235\OfficeAiAgent")
+                Using key As RegistryKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\JGoP-L\OfficeAI")
                     If key IsNot Nothing Then
                         Dim installPath As String = key.GetValue("InstallPath")?.ToString()
                         If Not String.IsNullOrEmpty(installPath) Then
@@ -173,10 +173,10 @@ Public Class ThisAddIn
 
             ' 2. 标准安装路径（固定路径，Directory.Exists 开销极低）
             Dim standardInstallPaths As String() = {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "it235", "OfficeAiAgent", "ExcelAi"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "it235", "OfficeAiAgent", "ExcelAi"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "OfficeAiAgent", "ExcelAi"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "OfficeAiAgent", "ExcelAi")
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "JGoP-L", "OfficeAI", "ExcelAi"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "JGoP-L", "OfficeAI", "ExcelAi"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "OfficeAI", "ExcelAi"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "OfficeAI", "ExcelAi")
             }
             For Each installPath In standardInstallPaths
                 If Directory.Exists(installPath) Then searchPaths.Add(installPath)
@@ -186,24 +186,11 @@ Public Class ThisAddIn
             searchPaths.Add(currentDir)
             searchPaths.Add(Path.Combine(currentDir, ".."))
 
-            ' 4. 开发环境：VSTO 影子复制目录时，尝试真实项目输出目录
-            If currentDir.Contains("AppData\Local\assembly") Then
-                Dim possibleDevPaths As String() = {
-                    "F:\ai\code\AiHelper\ExcelAi\bin\Debug",
-                    "F:\ai\code\AiHelper\ExcelAi\bin\Release",
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos", "AiHelper", "ExcelAi", "bin", "Debug"),
-                    Path.Combine("C:\", "ai", "code", "AiHelper", "ExcelAi", "bin", "Debug")
-                }
-                For Each devPath In possibleDevPaths
-                    If Directory.Exists(devPath) Then searchPaths.Add(devPath)
-                Next
-            End If
-
-            ' 5. 向上遍历目录树，查找 OfficeAiAgent 安装目录
+            ' 4. 向上遍历目录树，查找 OfficeAI 安装目录
             Dim currentDirInfo As New DirectoryInfo(currentDir)
             While currentDirInfo IsNot Nothing
-                If currentDirInfo.Name.Equals("OfficeAiAgent", StringComparison.OrdinalIgnoreCase) OrElse
-                   currentDirInfo.FullName.Contains("OfficeAiAgent") Then
+                If currentDirInfo.Name.Equals("OfficeAI", StringComparison.OrdinalIgnoreCase) OrElse
+                   currentDirInfo.FullName.Contains("OfficeAI") Then
                     Dim excelAiPath As String = Path.Combine(currentDirInfo.FullName, "ExcelAi")
                     If Directory.Exists(excelAiPath) Then searchPaths.Add(excelAiPath)
                     searchPaths.Add(currentDirInfo.FullName)
@@ -212,14 +199,14 @@ Public Class ThisAddIn
                 currentDirInfo = currentDirInfo.Parent
             End While
 
-            ' 6. 全盘扫描（最慢，仅在前几步都找不到时才执行；后台线程中不阻塞 Office UI）
+            ' 5. 全盘扫描（最慢，仅在前几步都找不到时才执行；后台线程中不阻塞 Office UI）
             Try
                 For Each drive In DriveInfo.GetDrives()
                     If drive.IsReady AndAlso drive.DriveType = DriveType.Fixed Then
                         Dim customPaths As String() = {
-                            Path.Combine(drive.Name, "OfficeAiAgent", "ExcelAi"),
-                            Path.Combine(drive.Name, "Program Files", "OfficeAiAgent", "ExcelAi"),
-                            Path.Combine(drive.Name, "Program Files (x86)", "OfficeAiAgent", "ExcelAi")
+                            Path.Combine(drive.Name, "OfficeAI", "ExcelAi"),
+                            Path.Combine(drive.Name, "Program Files", "OfficeAI", "ExcelAi"),
+                            Path.Combine(drive.Name, "Program Files (x86)", "OfficeAI", "ExcelAi")
                         }
                         For Each customPath In customPaths
                             If Directory.Exists(customPath) Then searchPaths.Add(customPath)

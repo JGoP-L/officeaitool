@@ -42,7 +42,7 @@ Public MustInherit Class BaseOfficeRibbon
         ' 基类初始化方法，子类可以重写
     End Sub
 
-    ' 关于我按钮点击事件 - 显示带git链接的对话框
+    ' 关于按钮点击事件 - 显示项目信息对话框
     Private Sub AboutButton_Click_1(sender As Object, e As RibbonControlEventArgs) Handles AboutButton.Click
         Dim aboutForm As New AboutForm()
         aboutForm.ShowDialog()
@@ -86,26 +86,14 @@ Public MustInherit Class BaseOfficeRibbon
         End If
     End Sub
 
-    ' 教学文档按钮点击事件 - 根据应用类型跳转不同URL
+    ' 项目文档按钮点击事件
     Private Sub StudyButton_Click(sender As Object, e As RibbonControlEventArgs) Handles StudyButton.Click
-        Dim appInfo = GetApplication()
-        Dim url As String = "https://www.officeso.cn/study/"
-
-        Select Case appInfo.Type
-            Case OfficeApplicationType.Word
-                url &= "word"
-            Case OfficeApplicationType.Excel
-                url &= "excel"
-            Case OfficeApplicationType.PowerPoint
-                url &= "ppt"
-            Case Else
-                url &= "word"
-        End Select
+        Dim url As String = "https://github.com/JGoP-L/officeAI"
 
         Try
             System.Diagnostics.Process.Start(url)
         Catch ex As Exception
-            MessageBox.Show("无法打开教学文档链接: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("无法打开项目文档链接: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 

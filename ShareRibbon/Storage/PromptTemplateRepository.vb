@@ -26,7 +26,7 @@ Public Class PromptTemplateRecord
     Public Property IsSkill As Integer
 
     ''' <summary>
-    ''' Skill描述（Claude规范）
+    ''' Skill描述
     ''' </summary>
     Public Property Description As String
 

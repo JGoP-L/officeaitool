@@ -52,7 +52,7 @@ Namespace Agent
         Public Sub New()
             _memoryFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "OfficeAiAgent",
+                Global.ShareRibbon.ConfigSettings.OfficeAiAppDataFolder,
                 "agent_memory.json"
             )
             LoadLongTerm()

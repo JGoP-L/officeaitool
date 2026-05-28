@@ -2,7 +2,7 @@
   "name": "Excel数据分析助手",
   "description": "帮助用户进行Excel数据分析，包括数据清洗、统计分析、图表生成等",
   "version": "1.0",
-  "author": "AiHelper Team",
+  "author": "JGoP-L",
   "keywords": ["excel", "数据分析", "统计", "图表", "数据清洗"],
   "category": "数据分析",
   "priority": 80,

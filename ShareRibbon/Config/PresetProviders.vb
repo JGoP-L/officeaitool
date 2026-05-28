@@ -32,7 +32,7 @@ Public Class PresetProviders
         Dim siliconflow As New ConfigItem()
         siliconflow.pltform = "硅基流动 (SiliconFlow)"
         siliconflow.url = "https://api.siliconflow.cn/v1/chat/completions"
-        siliconflow.registerUrl = "https://cloud.siliconflow.cn/i/PGhr3knx"
+        siliconflow.registerUrl = "https://cloud.siliconflow.cn/"
         siliconflow.providerType = ProviderType.Cloud
         siliconflow.isPreset = True
         siliconflow.key = ""

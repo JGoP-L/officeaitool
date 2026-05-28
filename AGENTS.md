@@ -1,4 +1,4 @@
-# OFFICE AI AGENT KNOWLEDGE BASE
+# OFFICE AI KNOWLEDGE BASE
 
 **Generated:** Sat Jan 24 2026
 **Commit:** N/A
@@ -7,7 +7,7 @@
 > 请用中文与我交互
 
 ## OVERVIEW
-Office AI Agent is a Visual Studio solution containing multiple VSTO add-ins for Microsoft Office applications (Excel, Word, PowerPoint) with shared components. Built with Visual Basic.NET and VSTO, it provides AI-driven assistance for office automation tasks.
+Office AI is a Visual Studio solution containing multiple VSTO add-ins for Microsoft Office applications (Excel, Word, PowerPoint) with shared components. Built with Visual Basic.NET and VSTO, it provides AI-driven assistance for office automation tasks.
 
 
 ## STRUCTURE

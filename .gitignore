@@ -69,9 +69,5 @@ docs/
 # 不提交 IDE/CI 配置目录
 .github/
 .vscode/
-.cursor/
-.trae/
-.qoder/
-.opencode
 nuget.exe
 /c-i3s2

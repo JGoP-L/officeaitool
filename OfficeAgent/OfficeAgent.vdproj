@@ -8569,7 +8569,7 @@
         "Product"
         {
         "Name" = "8:Microsoft Visual Studio"
-        "ProductName" = "8:OfficeAiAgent"
+        "ProductName" = "8:OfficeAI"
         "ProductCode" = "8:{5019066F-C546-48A6-956B-CCB1BD7FED59}"
         "PackageCode" = "8:{B9D2CC51-5CFF-4F36-8DDE-A9EE097D308A}"
         "UpgradeCode" = "8:{E9DAFC9C-EFE0-47FE-A1FF-38E23C847173}"
@@ -8579,12 +8579,12 @@
         "DetectNewerInstalledVersion" = "11:FALSE"
         "InstallAllUsers" = "11:FALSE"
         "ProductVersion" = "8:2.8.0"
-        "Manufacturer" = "8:it235"
+        "Manufacturer" = "8:JGoP-L"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
         "Title" = "8:Office AI 助手"
         "Subject" = "8:"
-        "ARPCONTACT" = "8:君哥聊编程"
+        "ARPCONTACT" = "8:JGoP-L"
         "Keywords" = "8:"
         "ARPCOMMENTS" = "8:OfficeAI智能体"
         "ARPURLINFOABOUT" = "8:"
@@ -8698,7 +8698,7 @@
                                                         {
                                                             "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_A749AAD5F7C74D29BE7B72ECF6555C4B"
                                                             {
-                                                            "Name" = "8:OfficeSO"
+                                                            "Name" = "8:OfficeAI"
                                                             "Condition" = "8:"
                                                             "AlwaysCreate" = "11:FALSE"
                                                             "DeleteAtUninstall" = "11:FALSE"
@@ -8772,7 +8772,7 @@
                                                         {
                                                             "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_867DDB9D0CA040F1BAA98BC3606FBFD6"
                                                             {
-                                                            "Name" = "8:OfficeSO"
+                                                            "Name" = "8:OfficeAI"
                                                             "Condition" = "8:"
                                                             "AlwaysCreate" = "11:FALSE"
                                                             "DeleteAtUninstall" = "11:FALSE"
@@ -8846,7 +8846,7 @@
                                                         {
                                                             "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_A97B1BCFD4084BD4AAB2BA8F2090D43C"
                                                             {
-                                                            "Name" = "8:OfficeSO"
+                                                            "Name" = "8:OfficeAI"
                                                             "Condition" = "8:"
                                                             "AlwaysCreate" = "11:FALSE"
                                                             "DeleteAtUninstall" = "11:FALSE"
@@ -8951,7 +8951,7 @@
                                                         {
                                                             "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_90CC8538D0824AF994E35E8B9EE91764"
                                                             {
-                                                            "Name" = "8:OfficeSO"
+                                                            "Name" = "8:OfficeAI"
                                                             "Condition" = "8:"
                                                             "Transitive" = "11:FALSE"
                                                             "ValueTypes" = "3:1"
@@ -8987,7 +8987,7 @@
                                                         {
                                                             "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_59BFB372886942AA9AEC7987C32B2117"
                                                             {
-                                                            "Name" = "8:OfficeSO"
+                                                            "Name" = "8:OfficeAI"
                                                             "Condition" = "8:"
                                                             "Transitive" = "11:FALSE"
                                                             "ValueTypes" = "3:1"
@@ -9023,7 +9023,7 @@
                                                         {
                                                             "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_E6742EE3FDCA4DE0BC680E23B2D03184"
                                                             {
-                                                            "Name" = "8:OfficeSO"
+                                                            "Name" = "8:OfficeAI"
                                                             "Condition" = "8:"
                                                             "Transitive" = "11:FALSE"
                                                             "ValueTypes" = "3:1"
