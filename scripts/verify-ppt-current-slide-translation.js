@@ -21,7 +21,8 @@ assert(pptRibbonDesigner.includes('自动适配文本框'), 'PowerPoint translat
 assert(translateForm.includes('Private rbCurrentSlide As RadioButton'), 'translate dialog must define current-slide scope radio');
 assert(translateForm.includes('Public Property TranslateCurrentSlide As Boolean = False'), 'translate dialog must expose TranslateCurrentSlide');
 assert(translateForm.includes('.Text = "当前页"'), 'translate dialog must show 当前页 scope');
-assert(translateForm.includes('.Checked = (_appType = "PowerPoint")'), 'PowerPoint current-slide scope must be checked by default');
+assert(translateForm.includes('.Checked = (_appType = "PowerPoint" AndAlso Not _hasSelection)'), 'PowerPoint current-slide scope must be checked only when there is no selection');
+assert(translateForm.includes('.Checked = (_appType = "PowerPoint" AndAlso _hasSelection)'), 'PowerPoint selected content scope must be checked by default when there is a selection');
 assert(translateForm.includes('rbReplace.Checked = True'), 'PowerPoint translation must default to replace mode');
 assert(translateForm.includes('TranslateCurrentSlide = (_appType = "PowerPoint"'), 'translate dialog must set TranslateCurrentSlide from current-slide radio');
 for (const lang of ['"en"', '"zh"', '"ja"', '"ko"', '"fr"', '"de"', '"es"', '"ru"', '"pt"', '"it"', '"vi"', '"th"', '"id"', '"ar"']) {

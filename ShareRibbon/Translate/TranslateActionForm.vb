@@ -192,7 +192,7 @@ Public Class TranslateActionForm
                 .Text = "当前页",
                 .Location = New Point(120, 22),
                 .AutoSize = True,
-                .Checked = (_appType = "PowerPoint")
+                .Checked = (_appType = "PowerPoint" AndAlso Not _hasSelection)
             }
             grpScope.Controls.Add(rbCurrentSlide)
         Else
@@ -203,7 +203,8 @@ Public Class TranslateActionForm
             .Text = If(_hasSelection, If(_appType = "Excel", "仅选中的单元格", "仅选中内容"), If(_appType = "Excel", "仅选中的单元格（未选中）", "仅选中内容（未选中）")),
             .Location = If(_appType = "PowerPoint", New Point(220, 22), New Point(150, 22)),
             .AutoSize = True,
-            .Enabled = _hasSelection
+            .Enabled = _hasSelection,
+            .Checked = (_appType = "PowerPoint" AndAlso _hasSelection)
         }
         grpScope.Controls.Add(rbSelection)
 
