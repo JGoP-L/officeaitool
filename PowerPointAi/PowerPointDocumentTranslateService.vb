@@ -1,5 +1,6 @@
 Imports System.Diagnostics
 Imports System.Text
+Imports System.Threading.Tasks
 Imports System.Windows.Forms
 Imports Microsoft.Office.Interop.PowerPoint
 Imports ShareRibbon
@@ -48,6 +49,49 @@ Public Class PowerPointDocumentTranslateService
         Next
 
         Return texts
+    End Function
+
+    ''' <summary>
+    ''' 翻译当前页的所有文本
+    ''' </summary>
+    Public Async Function TranslateCurrentSlideAsync() As Task(Of List(Of TranslateParagraphResult))
+        Dim paragraphs = GetCurrentSlideParagraphs()
+        Return Await TranslateParagraphsAsync(paragraphs)
+    End Function
+
+    ''' <summary>
+    ''' 获取当前显示幻灯片的所有文本
+    ''' </summary>
+    Public Function GetCurrentSlideParagraphs() As List(Of String)
+        Dim texts As New List(Of String)()
+        _textItems.Clear()
+
+        Dim slide = GetCurrentSlide()
+        If slide Is Nothing Then Return texts
+
+        ExtractTextFromSlide(slide, slide.SlideIndex, texts)
+        Return texts
+    End Function
+
+    ''' <summary>
+    ''' 获取当前窗口正在编辑或选中的幻灯片
+    ''' </summary>
+    Private Function GetCurrentSlide() As Slide
+        Try
+            Dim sel = _pptApp.ActiveWindow.Selection
+            If sel IsNot Nothing AndAlso sel.SlideRange IsNot Nothing AndAlso sel.SlideRange.Count > 0 Then
+                Return sel.SlideRange(1)
+            End If
+        Catch
+        End Try
+
+        Try
+            Dim viewSlide = TryCast(_pptApp.ActiveWindow.View.Slide, Slide)
+            If viewSlide IsNot Nothing Then Return viewSlide
+        Catch
+        End Try
+
+        Return Nothing
     End Function
 
     ''' <summary>
@@ -226,6 +270,7 @@ Public Class PowerPointDocumentTranslateService
                     Try
                         If item.Shape IsNot Nothing AndAlso item.Shape.HasTextFrame Then
                             item.Shape.TextFrame.TextRange.Text = result.TranslatedText
+                            FitTranslatedShapeText(item.Shape)
                         End If
                     Catch
                         ' 忽略无法修改的形状
@@ -236,6 +281,52 @@ Public Class PowerPointDocumentTranslateService
             MessageBox.Show("应用翻译结果时出错：" & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
+
+    ''' <summary>
+    ''' 替换译文后尽量保持文本在原文字框内可见
+    ''' </summary>
+    Private Sub FitTranslatedShapeText(shape As Shape)
+        Try
+            If shape Is Nothing OrElse shape.HasTextFrame <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+
+            Dim textFrame = shape.TextFrame
+            If textFrame.HasText <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+
+            textFrame.WordWrap = Microsoft.Office.Core.MsoTriState.msoTrue
+            textFrame.AutoSize = PpAutoSize.ppAutoSizeNone
+
+            Dim textRange = textFrame.TextRange
+            If textRange Is Nothing Then Return
+
+            Dim currentFontSize As Single = CSng(textRange.Font.Size)
+            If currentFontSize <= 0 Then currentFontSize = 18.0F
+
+            Dim minFontSize As Single = 8.0F
+            Dim targetWidth As Single = CSng(Math.Max(1.0, shape.Width - textFrame.MarginLeft - textFrame.MarginRight))
+            Dim targetHeight As Single = CSng(Math.Max(1.0, shape.Height - textFrame.MarginTop - textFrame.MarginBottom))
+            Dim guard As Integer = 0
+
+            While guard < 14 AndAlso currentFontSize > minFontSize AndAlso TextOverflows(textRange, targetWidth, targetHeight)
+                currentFontSize = CSng(Math.Max(minFontSize, currentFontSize - 1.0F))
+                textRange.Font.Size = currentFontSize
+                guard += 1
+            End While
+
+            If TextOverflows(textRange, targetWidth, targetHeight) Then
+                textFrame.AutoSize = PpAutoSize.ppAutoSizeShapeToFitText
+            End If
+        Catch ex As Exception
+            Debug.WriteLine($"FitTranslatedShapeText 出错: {ex.Message}")
+        End Try
+    End Sub
+
+    Private Function TextOverflows(textRange As TextRange, targetWidth As Single, targetHeight As Single) As Boolean
+        Try
+            Return textRange.BoundHeight > targetHeight OrElse textRange.BoundWidth > targetWidth * 1.08F
+        Catch
+            Return False
+        End Try
+    End Function
 
     ''' <summary>
     ''' 沉浸式翻译模式 - 在每页后面复制一页，替换为译文

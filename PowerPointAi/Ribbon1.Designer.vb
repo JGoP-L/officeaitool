@@ -73,6 +73,9 @@ Partial Class Ribbon1
         Me.ContinuationButton.Image = ShareRibbon.SharedResources.Aiwrite
 
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
+        Me.TranslateButton.Label = "文本翻译"
+        Me.TranslateButton.ScreenTip = "PPT文本翻译"
+        Me.TranslateButton.SuperTip = "翻译当前页文本并替换原文，支持多语言，翻译后自动适配文本框"
         Me.ProofreadButton.Visible = False
         Me.ReformatButton.Visible = False
         Me.DataAnalysisButton.Visible = False

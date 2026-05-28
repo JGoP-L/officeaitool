@@ -10,6 +10,7 @@ Public Class TranslateActionForm
     ' 翻译范围
     Private grpScope As GroupBox
     Private rbAll As RadioButton
+    Private rbCurrentSlide As RadioButton
     Private rbSelection As RadioButton
 
     ' 翻译平台和模型
@@ -51,6 +52,9 @@ Public Class TranslateActionForm
     ''' <summary>翻译范围：True=全部，False=选区</summary>
     Public Property TranslateAll As Boolean = True
 
+    ''' <summary>PowerPoint 专用：仅翻译当前页</summary>
+    Public Property TranslateCurrentSlide As Boolean = False
+
     ''' <summary>输出模式</summary>
     Public Property OutputMode As TranslateOutputMode = TranslateOutputMode.Immersive
 
@@ -63,18 +67,19 @@ Public Class TranslateActionForm
     ''' <summary>源语言（固定为auto）</summary>
     Public Property SourceLanguage As String = "auto"
 
-    Private targetLanguages As String() = {"en", "zh", "ja", "ko", "fr", "de", "es", "ru", "pt", "it"}
+    Private targetLanguages As String() = {"en", "zh", "ja", "ko", "fr", "de", "es", "ru", "pt", "it", "vi", "th", "id", "ar"}
     Private languageNames As Dictionary(Of String, String) = New Dictionary(Of String, String) From {
         {"en", "英语"}, {"zh", "中文"}, {"ja", "日语"}, {"ko", "韩语"},
         {"fr", "法语"}, {"de", "德语"}, {"es", "西班牙语"}, {"ru", "俄语"},
-        {"pt", "葡萄牙语"}, {"it", "意大利语"}
+        {"pt", "葡萄牙语"}, {"it", "意大利语"}, {"vi", "越南语"}, {"th", "泰语"},
+        {"id", "印尼语"}, {"ar", "阿拉伯语"}
     }
 
     Public Sub New(hasSelection As Boolean, appType As String)
         _hasSelection = hasSelection
         _appType = appType
 
-        Me.Text = "一键翻译"
+        Me.Text = If(_appType = "PowerPoint", "PPT文本翻译", "一键翻译")
         Me.Size = New Size(500, 560)
         Me.StartPosition = FormStartPosition.CenterParent
         Me.FormBorderStyle = FormBorderStyle.FixedDialog
@@ -178,13 +183,25 @@ Public Class TranslateActionForm
             .Text = If(_appType = "Word", "整个文档", If(_appType = "Excel", "所有单元格", "所有幻灯片")),
             .Location = New Point(15, 22),
             .AutoSize = True,
-            .Checked = True
+            .Checked = (_appType <> "PowerPoint")
         }
         grpScope.Controls.Add(rbAll)
 
+        If _appType = "PowerPoint" Then
+            rbCurrentSlide = New RadioButton() With {
+                .Text = "当前页",
+                .Location = New Point(120, 22),
+                .AutoSize = True,
+                .Checked = (_appType = "PowerPoint")
+            }
+            grpScope.Controls.Add(rbCurrentSlide)
+        Else
+            rbCurrentSlide = New RadioButton() With {.Visible = False}
+        End If
+
         rbSelection = New RadioButton() With {
             .Text = If(_hasSelection, If(_appType = "Excel", "仅选中的单元格", "仅选中内容"), If(_appType = "Excel", "仅选中的单元格（未选中）", "仅选中内容（未选中）")),
-            .Location = New Point(150, 22),
+            .Location = If(_appType = "PowerPoint", New Point(220, 22), New Point(150, 22)),
             .AutoSize = True,
             .Enabled = _hasSelection
         }
@@ -245,7 +262,7 @@ Public Class TranslateActionForm
                 .Text = "仅显示在侧栏（不修改原文）",
                 .Location = New Point(15, 48),
                 .AutoSize = True,
-                .Checked = (_appType = "PowerPoint") ' PowerPoint默认选侧栏
+                .Checked = False
             }
             AddHandler rbSidePanel.CheckedChanged, AddressOf OutputModeChanged
             grpOutput.Controls.Add(rbSidePanel)
@@ -253,7 +270,8 @@ Public Class TranslateActionForm
             rbReplace = New RadioButton() With {
                 .Text = "替换原文",
                 .Location = New Point(280, 22),
-                .AutoSize = True
+                .AutoSize = True,
+                .Checked = (_appType = "PowerPoint")
             }
             AddHandler rbReplace.CheckedChanged, AddressOf OutputModeChanged
             grpOutput.Controls.Add(rbReplace)
@@ -399,12 +417,16 @@ Public Class TranslateActionForm
         Next
 
         ' 输出模式
-        Select Case settings.OutputMode
-            Case TranslateOutputMode.Replace : rbReplace.Checked = True
-            Case TranslateOutputMode.SidePanel : rbSidePanel.Checked = True
-            Case TranslateOutputMode.NewDocument : rbNewDoc.Checked = True
-            Case Else : rbImmersive.Checked = True
-        End Select
+        If _appType = "PowerPoint" Then
+            rbReplace.Checked = True
+        Else
+            Select Case settings.OutputMode
+                Case TranslateOutputMode.Replace : rbReplace.Checked = True
+                Case TranslateOutputMode.SidePanel : rbSidePanel.Checked = True
+                Case TranslateOutputMode.NewDocument : rbNewDoc.Checked = True
+                Case Else : rbImmersive.Checked = True
+            End Select
+        End If
 
         ' 沉浸式样式
         chkItalic.Checked = settings.ImmersiveTranslationItalic
@@ -504,7 +526,8 @@ Public Class TranslateActionForm
         End If
 
         ' 设置返回值
-        TranslateAll = rbAll.Checked
+        TranslateCurrentSlide = (_appType = "PowerPoint" AndAlso rbCurrentSlide IsNot Nothing AndAlso rbCurrentSlide.Checked)
+        TranslateAll = rbAll.Checked AndAlso Not TranslateCurrentSlide
         SourceLanguage = "auto"
         TargetLanguage = targetLanguages(cbTargetLang.SelectedIndex)
         SelectedDomain = cbDomain.SelectedItem?.ToString()

@@ -147,7 +147,9 @@ Public Class Ribbon1
 
             ' 执行翻译
             Dim results As List(Of ShareRibbon.TranslateParagraphResult)
-            If actionForm.TranslateAll Then
+            If actionForm.TranslateCurrentSlide Then
+                results = Await translateService.TranslateCurrentSlideAsync()
+            ElseIf actionForm.TranslateAll Then
                 results = Await translateService.TranslateAllAsync()
             Else
                 results = Await translateService.TranslateSelectionAsync()
@@ -174,7 +176,9 @@ Public Class Ribbon1
                 End If
             Else
                 ' 应用到演示文稿
-                If actionForm.TranslateAll Then
+                If actionForm.TranslateCurrentSlide Then
+                    translateService.ApplyTranslationToSelection(results, actionForm.OutputMode)
+                ElseIf actionForm.TranslateAll Then
                     translateService.ApplyTranslation(results, actionForm.OutputMode)
                 Else
                     translateService.ApplyTranslationToSelection(results, actionForm.OutputMode)
