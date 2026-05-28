@@ -35,7 +35,7 @@
 **选择**：在 `EmbeddingService.GetEmbeddingAsync()` 入口处增加前置校验，若 embedding model 为空且默认推断也不可靠，返回 `Nothing` 而非发起 HTTP 请求。同时在 `EmbeddingService` 中增加 `IsEmbeddingAvailable()` 静态方法供其他组件预判。
 
 **关键改动**：
-- `EmbeddingService.IsEmbeddingAvailable()` — 检查 `ConfigSettings.EmbeddingModel` 和 `ConfigSettings.ApiUrl` 是否支持 embedding（DeepSeek 等已知不支持的排除）
+- `EmbeddingService.IsEmbeddingAvailable()` — 检查 `ConfigSettings.EmbeddingModel` 和 `ConfigSettings.ApiUrl` 是否支持 embedding
 - `EmbeddingService.GetEmbeddingAsync()` — 入口处调用 `IsEmbeddingAvailable()`，不可用时直接返回 `Nothing`
 - `MemoryService.SaveAtomicMemoryAsync()` — embedding 生成失败时仍保存记忆（`embedding=NULL`），确保关键词检索可用
 - `MemoryService.GetRelevantMemories()` — embedding 不可用时跳过向量生成，直接走 LIKE 回退
@@ -112,4 +112,4 @@
 - **[R2] 时间衰减可能淘汰旧但重要的记忆** → `decayRate=0.01` 意味着 100 天后仍保留约 50% 权重，长期记忆不受衰减影响（后续迭代可加 importance 字段）
 - **[R3] 分条存储增加数据库记录量** → 单条对话从 1 条变 2 条，但 `AtomicContentMaxLength` 已限制内容长度，SQLite 可轻松承受
 - **[R4] 数据库迁移版本 6** → `ALTER TABLE ADD COLUMN` 向后兼容，默认值 `'short_term'` 确保旧记录正常工作
-- **[R5] DeepSeek 等不支持 embedding 的 API** → `IsEmbeddingAvailable()` 维护已知不支持列表，可能不全 → 兜底：HTTP 调用失败后缓存结果 30 分钟不再重试
+- **[R5] 部分 API 不支持 embedding** → `IsEmbeddingAvailable()` 尽量按配置判断 → 兜底：HTTP 调用失败后缓存结果 30 分钟不再重试

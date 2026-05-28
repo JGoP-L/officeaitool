@@ -15,7 +15,7 @@ The system SHALL provide a static method `EmbeddingService.IsEmbeddingAvailable(
 - **THEN** `IsEmbeddingAvailable()` SHALL return `True`
 
 #### Scenario: API provider does not support embedding
-- **WHEN** `ConfigSettings.ApiUrl` matches a known-unsupported provider (e.g., contains "deepseek") AND `ConfigSettings.EmbeddingModel` is empty
+- **WHEN** `ConfigSettings.ApiUrl` does not map to a known embedding endpoint AND `ConfigSettings.EmbeddingModel` is empty
 - **THEN** `IsEmbeddingAvailable()` SHALL return `False`
 
 #### Scenario: API key missing

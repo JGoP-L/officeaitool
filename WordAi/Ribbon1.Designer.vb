@@ -43,7 +43,7 @@ Partial Class Ribbon1
     '不要使用代码编辑器修改它。
     <System.Diagnostics.DebuggerStepThrough()>
     Private Overloads Sub InitializeComponent()
-        Me.TabAI.Label = "Word AI"  ' 修改标签为 Excel 特定的
+        Me.TabAI.Label = "wenduoduoAI"
 
         ' 设置特定的图标
         Me.ConfigApiButton.Image = ShareRibbon.SharedResources.AiApiConfig
@@ -69,8 +69,6 @@ Partial Class Ribbon1
         Me.BatchDataGenButton.Visible = False
         Me.SpotlightButton.Visible = False
 
-        Me.DeepseekButton.Image = ShareRibbon.SharedResources.Deepseek
-        Me.DoubaoButton.Image = ShareRibbon.SharedResources.Doubao
         Me.WebCaptureButton.Image = ShareRibbon.SharedResources.Send32
 
         Me.ContinuationButton.Image = ShareRibbon.SharedResources.Aiwrite

@@ -67,7 +67,7 @@ ShareRibbon中的html非常重要，是与用户交互的入口，html采用了o
 - Shared ribbon components across Office applications
 - WebView2 for modern HTML-based UI
 - MCP protocol for AI model integration
-- DeepSeek API integration
+- OpenAI-compatible API integration
 
 ## COMMANDS
 ```bash

@@ -15,12 +15,6 @@ Public Class ThisAddIn
     Private captureTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Public Shared dataCapturePane As WebDataCapturePane
 
-    ' 在类中添加以下变量
-    Private _deepseekControl As DeepseekControl
-    Private _deepseekTaskPane As Microsoft.Office.Tools.CustomTaskPane
-    Private _doubaoControl As DoubaoChat
-    Private _doubaoTaskPane As Microsoft.Office.Tools.CustomTaskPane
-
     ' 模板编辑器
     Private _templateEditorControl As ReformatTemplateEditorControl
     Private _templateEditorTaskPane As Microsoft.Office.Tools.CustomTaskPane
@@ -38,7 +32,6 @@ Public Class ThisAddIn
 
     ' WPS 宽度修复定时器
     Private widthTimer As Timer
-    Private widthTimer1 As Timer
 
     Private Sub WordAi_Startup() Handles Me.Startup
         ' Phase 0: 仅注册事件处理器 + 状态栏初始化（微秒级，不阻塞启动）
@@ -72,11 +65,6 @@ Public Class ThisAddIn
             AddHandler widthTimer.Tick, AddressOf WidthTimer_Tick
             widthTimer.Interval = 100
         End If
-        If widthTimer1 Is Nothing Then
-            widthTimer1 = New Timer()
-            AddHandler widthTimer1.Tick, AddressOf WidthTimer1_Tick
-            widthTimer1.Interval = 100
-        End If
     End Sub
 
     Private Sub ThisAddIn_Shutdown() Handles Me.Shutdown
@@ -90,11 +78,6 @@ Public Class ThisAddIn
             widthTimer.Dispose()
             widthTimer = Nothing
         End If
-        If widthTimer1 IsNot Nothing Then
-            widthTimer1.Stop()
-            widthTimer1.Dispose()
-            widthTimer1 = Nothing
-        End If
     End Sub
 
 
@@ -102,12 +85,12 @@ Public Class ThisAddIn
     Private Sub CreateChatTaskPane()
         Try
             chatControl = New ChatControl()
-            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "Word AI智能助手")
+            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "wenduoduoAI智能助手")
                 chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
                 chatTaskPane.Width = 420
 
         Catch ex As Exception
-            MessageBox.Show($"初始化 Word AI 任务窗格失败: {ex.Message}")
+            MessageBox.Show($"初始化 wenduoduoAI 任务窗格失败: {ex.Message}")
         End Try
     End Sub
 
@@ -138,57 +121,10 @@ Public Class ThisAddIn
         End If
     End Sub
 
-    Private Sub DeepseekTaskPane_VisibleChanged(sender As Object, e As EventArgs)
-        Dim taskPane As Microsoft.Office.Tools.CustomTaskPane = CType(sender, Microsoft.Office.Tools.CustomTaskPane)
-        If taskPane.Visible Then
-            If LLMUtil.IsWpsActive() Then
-                EnsureWidthTimers()
-                widthTimer1.Start()
-            End If
-        End If
-    End Sub
-
-    Private Sub CreateDeepseekTaskPane()
-        Try
-            If _deepseekControl Is Nothing Then
-                ' 为新工作簿创建任务窗格
-                _deepseekControl = New DeepseekControl()
-                _deepseekTaskPane = Me.CustomTaskPanes.Add(_deepseekControl, "Deepseek AI智能助手")
-                _deepseekTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
-                _deepseekTaskPane.Width = 420
-                AddHandler _deepseekTaskPane.VisibleChanged, AddressOf DeepseekTaskPane_VisibleChanged
-                _deepseekTaskPane.Visible = False
-            End If
-        Catch ex As Exception
-            MessageBox.Show($"初始化任务窗格失败: {ex.Message}")
-        End Try
-    End Sub
-
-    Private Async Function CreateDoubaoTaskPane() As Task
-        Try
-            If _doubaoControl Is Nothing Then
-                ' 为新工作簿创建任务窗格
-                _doubaoControl = New DoubaoChat()
-                Await _doubaoControl.InitializeAsync()
-                _doubaoTaskPane = Me.CustomTaskPanes.Add(_doubaoControl, "Doubao AI智能助手")
-                _doubaoTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
-                _doubaoTaskPane.Width = 420
-            End If
-        Catch ex As Exception
-            MessageBox.Show($"初始化Doubao任务窗格失败: {ex.Message}")
-        End Try
-    End Function
-
     Private Sub WidthTimer_Tick(sender As Object, e As EventArgs)
         widthTimer.Stop()
         If LLMUtil.IsWpsActive() AndAlso chatTaskPane IsNot Nothing Then
             chatTaskPane.Width = 420
-        End If
-    End Sub
-    Private Sub WidthTimer1_Tick(sender As Object, e As EventArgs)
-        widthTimer1.Stop()
-        If LLMUtil.IsWpsActive() AndAlso _deepseekTaskPane IsNot Nothing Then
-            _deepseekTaskPane.Width = 420
         End If
     End Sub
 
@@ -210,20 +146,6 @@ Public Class ThisAddIn
         EnsureDataCapturePaneCreated()
         If captureTaskPane Is Nothing Then Return
         captureTaskPane.Visible = True
-    End Sub
-
-    Public Sub ShowDeepseekTaskPane()
-        EnsureCoreServicesLoaded()
-        CreateDeepseekTaskPane()
-        If _deepseekTaskPane Is Nothing Then Return
-        _deepseekTaskPane.Visible = True
-    End Sub
-
-    Public Async Sub ShowDoubaoTaskPane()
-        EnsureCoreServicesLoaded()
-        Await CreateDoubaoTaskPane()
-        If _doubaoTaskPane Is Nothing Then Return
-        _doubaoTaskPane.Visible = True
     End Sub
 
     ''' <summary>

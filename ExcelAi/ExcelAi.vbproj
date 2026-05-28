@@ -284,12 +284,6 @@
     <Compile Include="ChatControl.vb">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Include="DeepseekControl.vb">
-      <SubType>UserControl</SubType>
-    </Compile>
-    <Compile Include="DoubaoChat.vb">
-      <SubType>UserControl</SubType>
-    </Compile>
     <Compile Include="EnhancedPreviewAndConfirm.vb" />
     <Compile Include="ExcelAiComInterface.vb" />
     <Compile Include="ExcelDnaFunctions.vb" />

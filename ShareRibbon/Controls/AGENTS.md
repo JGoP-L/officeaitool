@@ -1,15 +1,14 @@
 # SHARED UI CONTROLS
 
 ## OVERVIEW
-Core user interface components shared across all Office add-ins. Provides chat interfaces, data capture panes, and deepseek chat functionality using WebView2.
+Core user interface components shared across all Office add-ins. Provides chat interfaces and data capture panes using WebView2.
 
 ## STRUCTURE
 ```
 Controls/
 ├── Services/              # UI-related services
 ├── BaseChatControl.vb     # Core chat component
-├── BaseDataCapturePane.vb # Data capture interface
-└── BaseDeepseekChat.vb    # DeepSeek-specific chat
+└── BaseDataCapturePane.vb # Data capture interface
 ```
 
 ## WHERE TO LOOK
@@ -17,7 +16,6 @@ Controls/
 |------|----------|-------|
 | Chat UI implementation | BaseChatControl.vb | Core chat functionality |
 | Data capture | BaseDataCapturePane.vb | Web content extraction |
-| DeepSeek integration | BaseDeepseekChat.vb | DeepSeek-specific features |
 | UI services | Services/ | WebView, message handling |
 
 ## CONVENTIONS

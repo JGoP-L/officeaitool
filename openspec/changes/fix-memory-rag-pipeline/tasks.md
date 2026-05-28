@@ -6,7 +6,7 @@
 
 ## 2. Embedding 守卫
 
-- [x] 2.1 在 `EmbeddingService` 中添加 `IsEmbeddingAvailable() As Boolean` 静态方法，检查 EmbeddingModel + ApiUrl + ApiKey 的可用性，维护已知不支持 embedding 的 provider 列表（如 DeepSeek）
+- [x] 2.1 在 `EmbeddingService` 中添加 `IsEmbeddingAvailable() As Boolean` 静态方法，检查 EmbeddingModel + ApiUrl + ApiKey 的可用性
 - [x] 2.2 在 `EmbeddingService` 中添加失败缓存机制：私有静态字段 `_lastFailureTime As DateTime?`，在 HTTP 请求失败时记录时间，30 分钟内不再重试
 - [x] 2.3 修改 `EmbeddingService.GetEmbeddingAsync()` 入口，调用 `IsEmbeddingAvailable()` 和检查失败缓存，不可用时直接返回 `Nothing`
 - [x] 2.4 修改 `MemoryService.GetRelevantMemories()`，在调用 `GetEmbeddingAsync` 前先检查 `IsEmbeddingAvailable()`，不可用时跳过向量生成直接走 LIKE 回退

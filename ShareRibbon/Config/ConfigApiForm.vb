@@ -1885,7 +1885,7 @@ Public Class ConfigApiForm
         End Function
 
         ''' <summary>
-        ''' 从模型名称中提取所有数字版本号（如 deepseek-v3->[3], glm-4-plus->[4], qwen2.5->[2.5], gemini-2.0->[2.0]）
+        ''' 从模型名称中提取所有数字版本号（如 glm-4-plus->[4], qwen2.5->[2.5], gemini-2.0->[2.0]）
         ''' </summary>
         Private Function ExtractVersionNumbers(name As String) As List(Of Double)
             Dim versions As New List(Of Double)()

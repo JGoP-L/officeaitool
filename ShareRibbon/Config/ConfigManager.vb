@@ -10,22 +10,15 @@ Public Class ConfigManager
         ConfigSettings.OfficeAiAppDataFolder, configFileName)
 
     Public Sub LoadConfig()
-        ' 初始化配置数据
-        ConfigData = New List(Of ConfigItem)()
-
-        ' 添加默认配置
-        If Not File.Exists(configFilePath) Then
-            ' 首次使用，加载预置配置
-            ConfigData.AddRange(PresetProviders.GetCloudProviders())
-            ConfigData.AddRange(PresetProviders.GetLocalProviders())
-        Else
-            ' 加载用户已有配置
+        Dim loadedData As List(Of ConfigItem) = Nothing
+        If File.Exists(configFilePath) Then
             Dim json As String = File.ReadAllText(configFilePath)
-            Dim loadedData = Newtonsoft.Json.JsonConvert.DeserializeObject(Of List(Of ConfigItem))(json)
-
-            ' 合并预置配置和用户配置
-            MergeConfigurations(loadedData)
+            loadedData = Newtonsoft.Json.JsonConvert.DeserializeObject(Of List(Of ConfigItem))(json)
         End If
+
+        ConfigData = New List(Of ConfigItem) From {
+            CreateOpenAICompatibleConfig(loadedData)
+        }
 
         ' 初始化配置，将数据初始化到 ConfigSettings，方便全局调用
         For Each item In ConfigData
@@ -48,6 +41,61 @@ Public Class ConfigManager
             End If
         Next
     End Sub
+
+    Private Function CreateOpenAICompatibleConfig(loadedData As List(Of ConfigItem)) As ConfigItem
+        Dim source = FindOpenAICompatibleSource(loadedData)
+        Dim modelName As String = FindSelectedChatModelName(source)
+
+        Dim config As New ConfigItem() With {
+            .pltform = "wenduoduoAI",
+            .url = If(source IsNot Nothing, source.url, String.Empty),
+            .key = If(source IsNot Nothing, source.key, String.Empty),
+            .selected = True,
+            .translateSelected = True,
+            .validated = source IsNot Nothing AndAlso source.validated,
+            .providerType = ProviderType.Cloud,
+            .isPreset = False,
+            .model = New List(Of ConfigItemModel)()
+        }
+
+        config.model.Add(New ConfigItemModel() With {
+            .modelName = modelName,
+            .displayName = modelName,
+            .selected = True,
+            .translateSelected = True,
+            .modelType = ModelType.Chat,
+            .mcpable = False,
+            .mcpValidated = False,
+            .fimSupported = False,
+            .fimUrl = config.url
+        })
+
+        Return config
+    End Function
+
+    Private Function FindOpenAICompatibleSource(loadedData As List(Of ConfigItem)) As ConfigItem
+        If loadedData Is Nothing OrElse loadedData.Count = 0 Then Return Nothing
+
+        Dim configured = loadedData.FirstOrDefault(Function(item) item.pltform = "wenduoduoAI")
+        If configured IsNot Nothing Then Return configured
+
+        configured = loadedData.FirstOrDefault(Function(item) item.selected AndAlso Not String.IsNullOrWhiteSpace(item.url))
+        If configured IsNot Nothing Then Return configured
+
+        Return loadedData.FirstOrDefault(Function(item) Not String.IsNullOrWhiteSpace(item.url))
+    End Function
+
+    Private Function FindSelectedChatModelName(source As ConfigItem) As String
+        If source Is Nothing OrElse source.model Is Nothing Then Return String.Empty
+
+        Dim selectedModel = source.model.FirstOrDefault(Function(item) item.modelType = ModelType.Chat AndAlso item.selected)
+        If selectedModel IsNot Nothing Then Return selectedModel.modelName
+
+        Dim firstChatModel = source.model.FirstOrDefault(Function(item) item.modelType = ModelType.Chat)
+        If firstChatModel IsNot Nothing Then Return firstChatModel.modelName
+
+        Return String.Empty
+    End Function
 
     ''' <summary>
     ''' 合并预置配置和用户配置

@@ -72,10 +72,10 @@ Public MustInherit Class BaseOfficeRibbon
         End If
     End Sub
 
-    ' 点击Ribbon区的配置API按钮后触发
+    ' 点击Ribbon区的模型配置按钮后触发
     Private Sub ConfigApiButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ConfigApiButton.Click
-        ' 创建并显示配置 API 的对话框
-        Dim configForm As New ConfigApiForm(GetApplication())
+        ' 创建并显示 OpenAI 兼容配置对话框
+        Dim configForm As New SimpleOpenAIConfigForm()
         If configForm.ShowDialog() = DialogResult.OK Then
         End If
     End Sub
@@ -130,12 +130,6 @@ Public MustInherit Class BaseOfficeRibbon
     ' 新增：校对与排版按钮的抽象事件（由子类实现具体流程）
     Protected MustOverride Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ProofreadButton.Click
     Protected MustOverride Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs) Handles ReformatButton.Click
-
-    ' Deepseek按钮点击事件
-    Protected MustOverride Sub DeepseekButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DeepseekButton.Click
-
-    ' Doubao按钮点击事件
-    Protected MustOverride Sub DoubaoButton_Click(sender As Object, e As RibbonControlEventArgs) Handles DoubaoButton.Click
 
     ' 批量数据生成按钮点击事件
     Protected MustOverride Sub BatchDataGenButton_Click(sender As Object, e As RibbonControlEventArgs) Handles BatchDataGenButton.Click

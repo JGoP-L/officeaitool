@@ -13,7 +13,6 @@ Imports Newtonsoft.Json.Linq
 ''' </summary>
 Public Class EmbeddingService
 
-    Private Shared ReadOnly _unsupportedProviders As String() = {"deepseek"}
     Private Shared _lastFailureTime As DateTime? = Nothing
     Private Shared ReadOnly _failureCooldown As TimeSpan = TimeSpan.FromMinutes(30)
 
@@ -25,11 +24,6 @@ Public Class EmbeddingService
         If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) Then Return False
 
         If Not String.IsNullOrWhiteSpace(ConfigSettings.EmbeddingModel) Then Return True
-
-        Dim urlLower = ConfigSettings.ApiUrl.ToLowerInvariant()
-        For Each provider In _unsupportedProviders
-            If urlLower.Contains(provider) Then Return False
-        Next
 
         Dim defaultModel = GetDefaultEmbeddingModel(ConfigSettings.ApiUrl)
         Return Not String.IsNullOrWhiteSpace(defaultModel)
