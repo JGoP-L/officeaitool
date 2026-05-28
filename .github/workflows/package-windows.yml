@@ -75,7 +75,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path build-logs | Out-Null
 
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VSInstallerProjects2022 -property installationPath
+          $vs = & $vswhere -latest -products * -requires Component.VSInstallerProjects2022 -property installationPath
           if (-not $vs) {
             throw "Visual Studio Installer Projects support was not found on this runner."
           }
