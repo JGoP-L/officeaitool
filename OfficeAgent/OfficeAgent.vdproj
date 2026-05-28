@@ -3566,7 +3566,7 @@
         {
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_009643773B774BDB95E1F7D2AB1BAD76"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Buffers.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Buffers.xml"
             "TargetName" = "8:System.Buffers.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -3659,7 +3659,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Buffers.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Buffers.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -3679,7 +3679,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_0D78CAF95A484FB6AE9D6ADD51F21DD4"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\ShareRibbon.pdb"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\ShareRibbon.pdb"
             "TargetName" = "8:ShareRibbon.pdb"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -3803,7 +3803,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Numerics.Vectors.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Numerics.Vectors.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -3834,7 +3834,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\PowerPointAi.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\PowerPointAi.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -3854,7 +3854,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_152407A9CB6B46C4AE56C5F921A6440B"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Buffers.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Buffers.xml"
             "TargetName" = "8:System.Buffers.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -3885,7 +3885,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\ShareRibbon.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\ShareRibbon.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -3905,7 +3905,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_16312DB90EEE476382CC09E34B068098"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Microsoft.Web.WebView2.WinForms.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Microsoft.Web.WebView2.WinForms.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.WinForms.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -3987,7 +3987,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_1A8C37CEEED44349AA9B8CAC47568957"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Newtonsoft.Json.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Newtonsoft.Json.xml"
             "TargetName" = "8:Newtonsoft.Json.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -4007,7 +4007,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_1C709B58449A4419BBD14EF4554C1EEF"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Newtonsoft.Json.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Newtonsoft.Json.xml"
             "TargetName" = "8:Newtonsoft.Json.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -4027,7 +4027,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_207B2DF49DAA4B00BB3EB1C32A169A6C"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Numerics.Vectors.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Numerics.Vectors.xml"
             "TargetName" = "8:System.Numerics.Vectors.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -4182,7 +4182,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Memory.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Memory.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4213,7 +4213,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Diagnostics.DiagnosticSource.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Diagnostics.DiagnosticSource.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4244,7 +4244,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Buffers.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Buffers.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -4275,7 +4275,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.Core.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.Core.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -4295,7 +4295,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_375D144179D84614ABEEDBBDCCCD2E3C"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Numerics.Vectors.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Numerics.Vectors.xml"
             "TargetName" = "8:System.Numerics.Vectors.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4326,7 +4326,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\WordAi.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\WordAi.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -4377,7 +4377,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_3B7E620BB84242DFA838E34515C0AB51"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Newtonsoft.Json.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Newtonsoft.Json.xml"
             "TargetName" = "8:Newtonsoft.Json.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4459,7 +4459,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_3D5C2B74A9D54871A2BC8D5FE43AC391"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\ShareRibbon.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\ShareRibbon.xml"
             "TargetName" = "8:ShareRibbon.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -4479,7 +4479,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_3D82273A84594330BF6E53ADE4895453"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\PowerPointAi.pdb"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\PowerPointAi.pdb"
             "TargetName" = "8:PowerPointAi.pdb"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4541,7 +4541,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\ExcelAi.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\ExcelAi.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -4561,7 +4561,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_3ECFD0AFB13D48D79226EDD5BA3B1B04"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.xml"
             "TargetName" = "8:System.Runtime.CompilerServices.Unsafe.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -4581,7 +4581,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_40404E6E4487489F956D0180B588B19C"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Numerics.Vectors.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Numerics.Vectors.xml"
             "TargetName" = "8:System.Numerics.Vectors.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -4643,7 +4643,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\ShareRibbon.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\ShareRibbon.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4674,7 +4674,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Numerics.Vectors.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Numerics.Vectors.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4829,7 +4829,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Microsoft.Web.WebView2.Core.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Microsoft.Web.WebView2.Core.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -4880,7 +4880,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_4DEC90EF59354F30BFFDB540B2A50035"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Diagnostics.DiagnosticSource.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Diagnostics.DiagnosticSource.xml"
             "TargetName" = "8:System.Diagnostics.DiagnosticSource.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -4911,7 +4911,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Collections.Immutable.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Collections.Immutable.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -4973,7 +4973,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Numerics.Vectors.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Numerics.Vectors.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5004,7 +5004,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Newtonsoft.Json.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Newtonsoft.Json.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -5086,7 +5086,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_59D2A715C46C4206BF71FF921D713636"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Memory.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Memory.xml"
             "TargetName" = "8:System.Memory.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5148,7 +5148,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Microsoft.Web.WebView2.Wpf.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Microsoft.Web.WebView2.Wpf.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -5210,7 +5210,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5230,7 +5230,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_5CEE8A0254434BBE94BF5B4653E97C2D"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Microsoft.Web.WebView2.Wpf.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Microsoft.Web.WebView2.Wpf.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.Wpf.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -5323,7 +5323,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Markdig.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Markdig.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -5436,7 +5436,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_6CFA014CDFC84F46B91E86B54D751A34"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.IO.Pipelines.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.IO.Pipelines.xml"
             "TargetName" = "8:System.IO.Pipelines.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -5467,7 +5467,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5549,7 +5549,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_706987FEB95148AEB6AFEE307AE7BEF5"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Diagnostics.DiagnosticSource.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Diagnostics.DiagnosticSource.xml"
             "TargetName" = "8:System.Diagnostics.DiagnosticSource.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -5600,7 +5600,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_70E4CBD9CF1F40C7BA48F12CD4FC0872"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.xml"
             "TargetName" = "8:System.Runtime.CompilerServices.Unsafe.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5682,7 +5682,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_73E1859CBAEB44FEA41F32E0F0A14C41"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.xml"
             "TargetName" = "8:System.Runtime.CompilerServices.Unsafe.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5713,7 +5713,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Buffers.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Buffers.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5764,7 +5764,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_774D210A524D4DFFBA5D84E9734C7AA6"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Collections.Immutable.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Collections.Immutable.xml"
             "TargetName" = "8:System.Collections.Immutable.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -5846,7 +5846,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_7B6B8747E89848C799BB50ED26080AC9"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\ShareRibbon.pdb"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\ShareRibbon.pdb"
             "TargetName" = "8:ShareRibbon.pdb"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5866,7 +5866,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_7BA64999FF404654A460C5DC962CCAE5"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Markdig.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Markdig.xml"
             "TargetName" = "8:Markdig.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -5886,7 +5886,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_835CF04C751540E09B2D5698DD0C6FC7"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\PowerPointAi.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\PowerPointAi.xml"
             "TargetName" = "8:PowerPointAi.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -5937,7 +5937,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_83B15DB1FBAE44DA937FDE15906649DB"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\ShareRibbon.pdb"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\ShareRibbon.pdb"
             "TargetName" = "8:ShareRibbon.pdb"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6019,7 +6019,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_879F42C1CC6846CA97603CEA4F84E560"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\ShareRibbon.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\ShareRibbon.xml"
             "TargetName" = "8:ShareRibbon.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6070,7 +6070,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_89210E04E83A44D6880333FAEB639AC9"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\ShareRibbon.pdb"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\ShareRibbon.pdb"
             "TargetName" = "8:ShareRibbon.pdb"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6132,7 +6132,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Data.SQLite.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Data.SQLite.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -6163,7 +6163,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Markdig.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Markdig.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6225,7 +6225,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Newtonsoft.Json.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Newtonsoft.Json.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6287,7 +6287,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Microsoft.Web.WebView2.WinForms.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Microsoft.Web.WebView2.WinForms.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6318,7 +6318,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6349,7 +6349,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.IO.Pipelines.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.IO.Pipelines.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -6411,7 +6411,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\ShareRibbon.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\ShareRibbon.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6462,7 +6462,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_97FC00C9676F4FC790E18712184C53C5"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Buffers.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Buffers.xml"
             "TargetName" = "8:System.Buffers.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6482,7 +6482,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_98432EFB399C4F3CB01FBC0060CFE465"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Collections.Immutable.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Collections.Immutable.xml"
             "TargetName" = "8:System.Collections.Immutable.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6575,7 +6575,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6595,7 +6595,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_A69457C898F74C50B0E94591D28300FE"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Buffers.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Buffers.xml"
             "TargetName" = "8:System.Buffers.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6615,7 +6615,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_A6BBB71E7B2C455D89147B4796914A19"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\ShareRibbon.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\ShareRibbon.xml"
             "TargetName" = "8:ShareRibbon.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6635,7 +6635,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_A8BD3BC865484C87B0F935A863620688"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.WinForms.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.WinForms.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.WinForms.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6697,7 +6697,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.WinForms.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.WinForms.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6728,7 +6728,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Microsoft.Web.WebView2.Wpf.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Microsoft.Web.WebView2.Wpf.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6790,7 +6790,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Microsoft.Web.WebView2.Core.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Microsoft.Web.WebView2.Core.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -6810,7 +6810,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_B4BDA9A422B84C2887F54A4AF097C7DE"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Microsoft.Web.WebView2.Wpf.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Microsoft.Web.WebView2.Wpf.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.Wpf.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -6841,7 +6841,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.WinForms.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.WinForms.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6903,7 +6903,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\ShareRibbon.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\ShareRibbon.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -6954,7 +6954,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_BB33182303C54715922F5488BB69E60D"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\ExcelAi.pdb"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\ExcelAi.pdb"
             "TargetName" = "8:ExcelAi.pdb"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -6985,7 +6985,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.Core.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.Core.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7047,7 +7047,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Markdig.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Markdig.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7078,7 +7078,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Collections.Immutable.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Collections.Immutable.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -7098,7 +7098,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_C57CF8815AF44B77869B8DCF8B7BE20E"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Markdig.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Markdig.xml"
             "TargetName" = "8:Markdig.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7118,7 +7118,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_C79E098E175D4597B93EEACEFE889C3D"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.Core.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.Core.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.Core.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7138,7 +7138,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_C9DBD0F9E484495AA0284AD8D5C01C50"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\WordAi.pdb"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\WordAi.pdb"
             "TargetName" = "8:WordAi.pdb"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7262,7 +7262,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Memory.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Memory.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -7282,7 +7282,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_CECBDAB1D0894BEAA366AE38178517AD"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Markdig.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Markdig.xml"
             "TargetName" = "8:Markdig.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -7364,7 +7364,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_D276FB69468B4871AEF081B2E507380A"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.Wpf.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.Wpf.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.Wpf.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7395,7 +7395,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Microsoft.Web.WebView2.Wpf.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Microsoft.Web.WebView2.Wpf.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7446,7 +7446,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_D4F863D09FE043F8AF44987B8FECABBF"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Memory.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Memory.xml"
             "TargetName" = "8:System.Memory.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -7559,7 +7559,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_DB700A22CA4440D29557E59EC7A68319"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Microsoft.Web.WebView2.Core.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Microsoft.Web.WebView2.Core.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.Core.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -7621,7 +7621,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Buffers.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Buffers.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -7672,7 +7672,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_E287DD238B3947D7B2AEE1CA5A9445A0"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Numerics.Vectors.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Numerics.Vectors.xml"
             "TargetName" = "8:System.Numerics.Vectors.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7723,7 +7723,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_E3BD22C985054726B687C14C555F20D4"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\ShareRibbon.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\ShareRibbon.xml"
             "TargetName" = "8:ShareRibbon.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -7743,7 +7743,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_E50816434FFB4E3287724582408C10D0"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Newtonsoft.Json.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Newtonsoft.Json.xml"
             "TargetName" = "8:Newtonsoft.Json.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7836,7 +7836,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Data.SQLite.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Data.SQLite.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -7867,7 +7867,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -7887,7 +7887,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_EA90843B33D8442EB2F00F36E6990A31"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Microsoft.Web.WebView2.Core.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Microsoft.Web.WebView2.Core.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.Core.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -7980,7 +7980,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Newtonsoft.Json.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Newtonsoft.Json.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -8031,7 +8031,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_EE4D9DFACF65438284DF7DF007BC759D"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.xml"
             "TargetName" = "8:System.Runtime.CompilerServices.Unsafe.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -8062,7 +8062,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -8093,7 +8093,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\Newtonsoft.Json.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\Newtonsoft.Json.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -8155,7 +8155,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Runtime.CompilerServices.Unsafe.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Runtime.CompilerServices.Unsafe.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -8206,7 +8206,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_F4AF05DB895049388EBAB4A5016250D5"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Microsoft.Web.WebView2.WinForms.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Microsoft.Web.WebView2.WinForms.xml"
             "TargetName" = "8:Microsoft.Web.WebView2.WinForms.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -8237,7 +8237,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -8257,7 +8257,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_F5BF0E8595D34CEA9AEF04164DA95A7E"
             {
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\ExcelAi.xml"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\ExcelAi.xml"
             "TargetName" = "8:ExcelAi.xml"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -8288,7 +8288,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\Microsoft.Web.WebView2.WinForms.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\Microsoft.Web.WebView2.WinForms.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -8370,7 +8370,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_FF10C03E1DC0458A80B4AD8ABA7D9767"
             {
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\WordAi.xml"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\WordAi.xml"
             "TargetName" = "8:WordAi.xml"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -8401,7 +8401,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\WordAi\\bin\\Debug\\System.Numerics.Vectors.dll"
+            "SourcePath" = "8:..\\WordAi\\bin\\Release\\System.Numerics.Vectors.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -8421,7 +8421,7 @@
             }
             "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_FF44FB9BA6684D94AF78E9820CF37E61"
             {
-            "SourcePath" = "8:..\\PowerPointAi\\bin\\Debug\\System.Memory.xml"
+            "SourcePath" = "8:..\\PowerPointAi\\bin\\Release\\System.Memory.xml"
             "TargetName" = "8:System.Memory.xml"
             "Tag" = "8:"
             "Folder" = "8:_49B0A40901FB4F06914B7DDBD4042A11"
@@ -8452,7 +8452,7 @@
                     "Attributes" = "3:512"
                     }
                 }
-            "SourcePath" = "8:..\\ExcelAi\\bin\\Debug\\System.Diagnostics.DiagnosticSource.dll"
+            "SourcePath" = "8:..\\ExcelAi\\bin\\Release\\System.Diagnostics.DiagnosticSource.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_373694DF7DBB46888AF9450767318AAD"
@@ -9506,7 +9506,7 @@
             }
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_49EEFAB0066E46E68C2485E4A931CC9E"
             {
-            "SourcePath" = "8:..\\WordAi\\obj\\Debug\\WordAi.dll"
+            "SourcePath" = "8:..\\WordAi\\obj\\Release\\WordAi.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_E70B76683E0241CAA71990572F17801B"
@@ -9590,7 +9590,7 @@
             }
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_791DF33F9D584A9D8A2345C14C473635"
             {
-            "SourcePath" = "8:..\\ShareRibbon\\obj\\Debug\\ShareRibbon.dll"
+            "SourcePath" = "8:..\\ShareRibbon\\obj\\Release\\ShareRibbon.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_A235B6E11ACF4199B19E7104D771D03A"
@@ -9618,7 +9618,7 @@
             }
             "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_D0C5361552AA403DA283DD4A7B6175BF"
             {
-            "SourcePath" = "8:..\\ShareRibbon\\obj\\Debug\\ShareRibbon.dll"
+            "SourcePath" = "8:..\\ShareRibbon\\obj\\Release\\ShareRibbon.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_7859C412097C48839ACF6D18F1C19FC5"
