@@ -10,7 +10,8 @@ jobs:
 
     env:
       Configuration: Release
-      Platform: Any CPU
+      ProjectPlatform: AnyCPU
+      SolutionPlatform: Any CPU
 
     steps:
       - name: Checkout
@@ -51,7 +52,7 @@ jobs:
               $ProjectPath,
               "/m",
               "/p:Configuration=$env:Configuration",
-              "/p:Platform=$env:Platform",
+              "/p:Platform=$env:ProjectPlatform",
               "/bl:build-logs\$($LogName).binlog"
             )
 
@@ -86,7 +87,7 @@ jobs:
             & $disableOutOfProcBuild
           }
 
-          & $devenv AiHelper.sln /Build "$env:Configuration|$env:Platform" /Project OfficeAgent /ProjectConfig "$env:Configuration" /Out "build-logs\devenv-installer.log"
+          & $devenv AiHelper.sln /Build "$env:Configuration|$env:SolutionPlatform" /Project OfficeAgent /ProjectConfig "$env:Configuration" /Out "build-logs\devenv-installer.log"
 
           if ($LASTEXITCODE -ne 0) {
             if (Test-Path "build-logs\devenv-installer.log") {
