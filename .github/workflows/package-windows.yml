@@ -36,10 +36,37 @@ jobs:
       - name: Build VSTO projects
         shell: pwsh
         run: |
-          msbuild ShareRibbon/ShareRibbon.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
-          msbuild ExcelAi/ExcelAi.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
-          msbuild WordAi/WordAi.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
-          msbuild PowerPointAi/PowerPointAi.vbproj /m /p:Configuration="$env:Configuration" /p:Platform="$env:Platform"
+          New-Item -ItemType Directory -Force -Path build-logs | Out-Null
+
+          function Invoke-ProjectBuild {
+            param(
+              [Parameter(Mandatory = $true)]
+              [string] $ProjectPath,
+              [Parameter(Mandatory = $true)]
+              [string] $LogName
+            )
+
+            $logPath = Join-Path "build-logs" $LogName
+            $arguments = @(
+              $ProjectPath,
+              "/m",
+              "/p:Configuration=$env:Configuration",
+              "/p:Platform=$env:Platform",
+              "/bl:build-logs\$($LogName).binlog"
+            )
+
+            Write-Host "Building $ProjectPath"
+            & msbuild @arguments 2>&1 | Tee-Object -FilePath $logPath
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "MSBuild failed for $ProjectPath. See $logPath"
+            }
+          }
+
+          Invoke-ProjectBuild "ShareRibbon/ShareRibbon.vbproj" "ShareRibbon.log"
+          Invoke-ProjectBuild "ExcelAi/ExcelAi.vbproj" "ExcelAi.log"
+          Invoke-ProjectBuild "WordAi/WordAi.vbproj" "WordAi.log"
+          Invoke-ProjectBuild "PowerPointAi/PowerPointAi.vbproj" "PowerPointAi.log"
 
       - name: Build installer
         shell: pwsh
