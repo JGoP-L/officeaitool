@@ -50,14 +50,9 @@ Partial Class BaseOfficeRibbon
         Me.GroupMCP = Me.Factory.CreateRibbonGroup
         Me.MCPButton = Me.Factory.CreateRibbonButton()
 
-        ' Group 5: 关于与设置
+        ' Group 5: 设置
         Me.GroupAbout = Me.Factory.CreateRibbonGroup
-        Me.AboutButton = Me.Factory.CreateRibbonButton
         Me.ClearCacheButton = Me.Factory.CreateRibbonButton
-
-        ' Group 6: 帮助与学习
-        Me.GroupHelp = Me.Factory.CreateRibbonGroup
-        Me.StudyButton = Me.Factory.CreateRibbonButton
 
         ' Group: 工具箱 (Excel专用)
         Me.GroupTools = Me.Factory.CreateRibbonGroup
@@ -81,8 +76,7 @@ Partial Class BaseOfficeRibbon
         Me.TabAI.Groups.Add(Me.GroupAIContent)  ' 3. AI内容提效
         Me.TabAI.Groups.Add(Me.GroupTools)      ' 4. 工具箱
         Me.TabAI.Groups.Add(Me.GroupMCP)        ' 5. MCP连接
-        Me.TabAI.Groups.Add(Me.GroupAbout)      ' 6. 关于与设置
-        Me.TabAI.Groups.Add(Me.GroupHelp)       ' 7. 帮助与学习
+        Me.TabAI.Groups.Add(Me.GroupAbout)      ' 6. 设置
 
         Me.TabAI.Label = "wenduoduoAI"
         Me.TabAI.Name = "TabAI"
@@ -206,18 +200,10 @@ Partial Class BaseOfficeRibbon
         Me.MCPButton.ScreenTip = "MCP服务器配置"
         Me.MCPButton.SuperTip = "配置MCP服务器并作为客户端调用大模型"
 
-        ' ========== Group 7: 关于与设置 ==========
-        Me.GroupAbout.Items.Add(Me.AboutButton)
+        ' ========== Group 7: 设置 ==========
         Me.GroupAbout.Items.Add(Me.ClearCacheButton)
-        Me.GroupAbout.Label = "关于与设置"
+        Me.GroupAbout.Label = "设置"
         Me.GroupAbout.Name = "GroupAbout"
-
-        Me.AboutButton.Label = "关于"
-        Me.AboutButton.Name = "AboutButton"
-        Me.AboutButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
-        Me.AboutButton.ShowImage = True
-        Me.AboutButton.ScreenTip = "关于本插件"
-        Me.AboutButton.SuperTip = "查看插件信息和开源地址"
 
         Me.ClearCacheButton.Label = "清理缓存"
         Me.ClearCacheButton.Name = "ClearCacheButton"
@@ -225,18 +211,6 @@ Partial Class BaseOfficeRibbon
         Me.ClearCacheButton.ShowImage = True
         Me.ClearCacheButton.ScreenTip = "清理配置缓存"
         Me.ClearCacheButton.SuperTip = "清除所有配置和历史记录"
-
-        ' ========== Group 8: 帮助与学习 ==========
-        Me.GroupHelp.Items.Add(Me.StudyButton)
-        Me.GroupHelp.Label = "帮助与学习"
-        Me.GroupHelp.Name = "GroupHelp"
-
-        Me.StudyButton.Label = "教学文档"
-        Me.StudyButton.Name = "StudyButton"
-        Me.StudyButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
-        Me.StudyButton.ShowImage = True
-        Me.StudyButton.ScreenTip = "查看教学文档"
-        Me.StudyButton.SuperTip = "打开在线教学文档，了解所有功能的使用方法"
 
         ' ========== 兼容旧代码 ==========
         Me.Separator1.Name = "Separator1"
@@ -284,14 +258,9 @@ Partial Class BaseOfficeRibbon
     Protected WithEvents GroupMCP As Microsoft.Office.Tools.Ribbon.RibbonGroup
     Protected WithEvents MCPButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
-    ' Group 6: 关于与设置
+    ' Group 6: 设置
     Protected WithEvents GroupAbout As Microsoft.Office.Tools.Ribbon.RibbonGroup
-    Protected WithEvents AboutButton As Microsoft.Office.Tools.Ribbon.RibbonButton
     Protected WithEvents ClearCacheButton As Microsoft.Office.Tools.Ribbon.RibbonButton
-
-    ' Group 7: 帮助与学习
-    Protected WithEvents GroupHelp As Microsoft.Office.Tools.Ribbon.RibbonGroup
-    Protected WithEvents StudyButton As Microsoft.Office.Tools.Ribbon.RibbonButton
 
     ' 兼容旧代码（保留但不再使用）
     Protected WithEvents GroupAI As Microsoft.Office.Tools.Ribbon.RibbonGroup

@@ -45,6 +45,20 @@ assert(!baseRibbonDesigner.includes(`${legacyB}Button`), 'shared ribbon designer
 assert(baseRibbon.includes('New SimpleOpenAIConfigForm'), 'config button must open SimpleOpenAIConfigForm');
 assert(!baseRibbon.includes(`Protected MustOverride Sub ${legacyA}Button_Click`), 'base ribbon must not require legacy provider override');
 assert(!baseRibbon.includes(`Protected MustOverride Sub ${legacyB}Button_Click`), 'base ribbon must not require legacy provider override');
+assert(!baseRibbonDesigner.includes('AboutButton'), 'shared ribbon designer must not include About button');
+assert(!baseRibbonDesigner.includes('StudyButton'), 'shared ribbon designer must not include teaching document button');
+assert(!baseRibbonDesigner.includes('GroupHelp'), 'shared ribbon designer must not include help group');
+assert(!baseRibbonDesigner.includes('教学文档'), 'shared ribbon designer must not include teaching document label');
+assert(!baseRibbonDesigner.includes('关于'), 'shared ribbon designer must not include about label');
+assert(!baseRibbon.includes('AboutButton_Click'), 'base ribbon must not handle About button');
+assert(!baseRibbon.includes('StudyButton_Click'), 'base ribbon must not handle teaching document button');
+assert(!shareProject.includes('Config\\AboutForm.vb'), 'AboutForm must not be compiled');
+assert(!fs.existsSync('ShareRibbon/Config/AboutForm.vb'), 'AboutForm.vb must be removed');
+assert(!fs.existsSync('ShareRibbon/Resources/about.png'), 'about icon must be removed');
+assert(!fs.existsSync('ShareRibbon/Resources/help.png'), 'teaching document icon must be removed');
+assert(!read('ShareRibbon/Resources/ShareResources.vb').match(/About|Help/), 'shared resources helper must not expose About or Help icons');
+assert(!read('ShareRibbon/My Project/Resources.resx').match(/name="about"|name="help"|about\.png|help\.png/), 'resources manifest must not include About or teaching document assets');
+assert(!read('ShareRibbon/My Project/Resources.Designer.vb').match(/Property about|Property help|GetObject\("about"|GetObject\("help"/), 'resources designer must not include About or teaching document assets');
 
 assert(fs.existsSync('ShareRibbon/Config/SimpleOpenAIConfigForm.vb'), 'SimpleOpenAIConfigForm.vb must exist');
 assert(shareProject.includes('Config\\SimpleOpenAIConfigForm.vb'), 'SimpleOpenAIConfigForm.vb must be included in ShareRibbon.vbproj');
@@ -65,6 +79,8 @@ for (const path of ribbonFiles) {
   const source = read(path);
   assert(!source.includes(`${legacyA}Button`), `${path} must not reference legacy provider button`);
   assert(!source.includes(`${legacyB}Button`), `${path} must not reference legacy provider button`);
+  assert(!source.includes('AboutButton'), `${path} must not reference AboutButton`);
+  assert(!source.includes('StudyButton'), `${path} must not reference StudyButton`);
 }
 
 for (const path of ['ExcelAi/Ribbon1.Designer.vb', 'WordAi/Ribbon1.Designer.vb', 'PowerPointAi/Ribbon1.Designer.vb']) {

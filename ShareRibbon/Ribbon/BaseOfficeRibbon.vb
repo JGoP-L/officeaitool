@@ -42,12 +42,6 @@ Public MustInherit Class BaseOfficeRibbon
         ' 基类初始化方法，子类可以重写
     End Sub
 
-    ' 关于按钮点击事件 - 显示项目信息对话框
-    Private Sub AboutButton_Click_1(sender As Object, e As RibbonControlEventArgs) Handles AboutButton.Click
-        Dim aboutForm As New AboutForm()
-        aboutForm.ShowDialog()
-    End Sub
-
     ' 清理缓存配置按钮点击事件
     Private Sub ClearCacheConfig_Click_1(sender As Object, e As RibbonControlEventArgs) Handles ClearCacheButton.Click
         ' 弹出确认框
@@ -85,18 +79,6 @@ Public MustInherit Class BaseOfficeRibbon
         If configForm.ShowDialog() = DialogResult.OK Then
         End If
     End Sub
-
-    ' 项目文档按钮点击事件
-    Private Sub StudyButton_Click(sender As Object, e As RibbonControlEventArgs) Handles StudyButton.Click
-        Dim url As String = "https://github.com/JGoP-L/officeAI"
-
-        Try
-            System.Diagnostics.Process.Start(url)
-        Catch ex As Exception
-            MessageBox.Show("无法打开项目文档链接: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
-
 
     ' 定义 ComboBoxItem 类
     Private Class ComboBoxItem

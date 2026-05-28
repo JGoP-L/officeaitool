@@ -53,7 +53,6 @@ Partial Class Ribbon1
         ' 自动补全（已禁用）
         ' Me.AutocompleteSettingsButton.Image = ShareRibbon.SharedResources.autocomplete
         Me.ChatButton.Image = ShareRibbon.SharedResources.Chat
-        Me.AboutButton.Image = ShareRibbon.SharedResources.About
         Me.ClearCacheButton.Image = ShareRibbon.SharedResources.Clear
 
         ' 设置 Excel 特定的提示
@@ -74,7 +73,6 @@ Partial Class Ribbon1
         Me.ContinuationButton.Image = ShareRibbon.SharedResources.Aiwrite
 
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
-        Me.StudyButton.Image = ShareRibbon.SharedResources.Help
         Me.ProofreadButton.Visible = False
         Me.ReformatButton.Visible = False
         Me.DataAnalysisButton.Visible = False

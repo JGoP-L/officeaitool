@@ -30,12 +30,6 @@
         End Get
     End Property
 
-    Public Shared ReadOnly Property About() As System.Drawing.Image
-        Get
-            Return CType(_resourceManager.GetObject("about"), System.Drawing.Image)
-        End Get
-    End Property
-
     Public Shared ReadOnly Property Clear() As System.Drawing.Image
         Get
             Return CType(_resourceManager.GetObject("clear"), System.Drawing.Image)
@@ -44,11 +38,6 @@
     Public Shared ReadOnly Property Wait() As System.Drawing.Image
         Get
             Return CType(_resourceManager.GetObject("wait"), System.Drawing.Image)
-        End Get
-    End Property
-    Public Shared ReadOnly Property Help() As System.Drawing.Image
-        Get
-            Return CType(_resourceManager.GetObject("help"), System.Drawing.Image)
         End Get
     End Property
     Public Shared ReadOnly Property Audit() As System.Drawing.Image
