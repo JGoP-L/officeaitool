@@ -304,8 +304,92 @@ Public Class ThemePptTaskPane
 
         Dim target = GetOrCreatePresentation()
         Dim insertAfter = target.Slides.Count
-        target.Slides.InsertFromFile(downloadPath, insertAfter)
+        Dim insertedCount = target.Slides.InsertFromFile(downloadPath, insertAfter)
+
+        If insertedCount > 0 Then
+            FixInsertedSlideReadability(target, insertAfter + 1, insertAfter + insertedCount)
+        End If
     End Sub
+
+    Private Sub FixInsertedSlideReadability(presentation As PowerPoint.Presentation, startIndex As Integer, endIndex As Integer)
+        Dim safeStart = Math.Max(1, startIndex)
+        Dim safeEnd = Math.Min(endIndex, presentation.Slides.Count)
+
+        For slideIndex As Integer = safeStart To safeEnd
+            Dim slide = presentation.Slides(slideIndex)
+            Dim slideBackgroundLuminance = GetSlideBackgroundLuminance(slide)
+
+            For Each shape As PowerPoint.Shape In slide.Shapes
+                FixShapeTextReadability(shape, slideBackgroundLuminance)
+            Next
+        Next
+    End Sub
+
+    Private Sub FixShapeTextReadability(shape As PowerPoint.Shape, slideBackgroundLuminance As Double)
+        If shape Is Nothing Then Return
+
+        Try
+            If shape.Type = MsoShapeType.msoGroup Then
+                For itemIndex As Integer = 1 To shape.GroupItems.Count
+                    FixShapeTextReadability(shape.GroupItems(itemIndex), slideBackgroundLuminance)
+                Next
+                Return
+            End If
+
+            If shape.HasTable = MsoTriState.msoTrue Then
+                For rowIndex As Integer = 1 To shape.Table.Rows.Count
+                    For columnIndex As Integer = 1 To shape.Table.Columns.Count
+                        FixShapeTextReadability(shape.Table.Cell(rowIndex, columnIndex).Shape, slideBackgroundLuminance)
+                    Next
+                Next
+            End If
+
+            If shape.HasTextFrame <> MsoTriState.msoTrue OrElse
+               shape.TextFrame.HasText <> MsoTriState.msoTrue Then
+                Return
+            End If
+
+            Dim textRange = shape.TextFrame.TextRange
+            Dim textLuminance = GetColorLuminance(textRange.Font.Color.RGB)
+            Dim backgroundLuminance = GetShapeBackgroundLuminance(shape, slideBackgroundLuminance)
+            Dim contrastGap = Math.Abs(backgroundLuminance - textLuminance)
+
+            If backgroundLuminance >= 180 AndAlso textLuminance >= 165 AndAlso contrastGap < 95 Then
+                textRange.Font.Color.RGB = RGB(45, 52, 64)
+            ElseIf backgroundLuminance <= 95 AndAlso textLuminance <= 110 AndAlso contrastGap < 80 Then
+                textRange.Font.Color.RGB = RGB(255, 255, 255)
+            End If
+        Catch
+            ' 单个形状格式读取失败时，不阻断 PPT 导入。
+        End Try
+    End Sub
+
+    Private Function GetSlideBackgroundLuminance(slide As PowerPoint.Slide) As Double
+        Try
+            Return GetColorLuminance(slide.Background.Fill.ForeColor.RGB)
+        Catch
+            Return 245.0R
+        End Try
+    End Function
+
+    Private Function GetShapeBackgroundLuminance(shape As PowerPoint.Shape, fallbackLuminance As Double) As Double
+        Try
+            If shape.Fill.Visible = MsoTriState.msoTrue Then
+                Return GetColorLuminance(shape.Fill.ForeColor.RGB)
+            End If
+        Catch
+        End Try
+
+        Return fallbackLuminance
+    End Function
+
+    Private Function GetColorLuminance(rgbValue As Integer) As Double
+        Dim red = rgbValue And &HFF
+        Dim green = (rgbValue >> 8) And &HFF
+        Dim blue = (rgbValue >> 16) And &HFF
+
+        Return (0.299R * red) + (0.587R * green) + (0.114R * blue)
+    End Function
 
     Private Function GetOrCreatePresentation() As PowerPoint.Presentation
         Try

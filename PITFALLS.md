@@ -25,3 +25,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** `GenerateContentAsync` used full-response buffering instead of reading the `text/event-stream` line by line. Docmee sends incremental `data:` events with `status=3` and `text` chunks before the final `status=4` outline.
 
 **Solution:** Read the response with `ReadAsStreamAsync` and `ReadLineAsync`, invoke a progress callback for each `text` chunk, and marshal those chunks into the task pane text box with `BeginInvoke`.
+
+## 2026-05-29 Docmee Imported Slides Need Readability Normalization
+
+**Problem:** After importing the generated Docmee PPTX into the current PowerPoint, some body text appeared very light on pale slide backgrounds and was hard to read.
+
+**Root Cause:** `Slides.InsertFromFile` appends slides from the generated file and returns only the inserted count; it does not provide a source-formatting or contrast option. Generated templates can contain low-contrast text after insertion into the active deck.
+
+**Solution:** Track the newly inserted slide range from the `InsertFromFile` return value and normalize only those slides by darkening low-contrast text on light backgrounds, leaving the user's original slides untouched.

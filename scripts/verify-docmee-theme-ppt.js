@@ -61,6 +61,11 @@ assert(pane.includes('DownloadPptxAsync'), 'ThemePptTaskPane must request a PPT 
 assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
 assert(pane.includes('ImportPptxIntoPresentation'), 'ThemePptTaskPane must import the downloaded PPT into the active presentation');
 assert(pane.includes('InsertFromFile'), 'ThemePptTaskPane must insert downloaded slides into the current PPT');
+assert(pane.includes('FixInsertedSlideReadability'), 'ThemePptTaskPane must improve readability only on newly inserted slides');
+assert(pane.includes('insertedCount = target.Slides.InsertFromFile'), 'ThemePptTaskPane must track how many slides were inserted');
+assert(pane.includes('FixShapeTextReadability'), 'ThemePptTaskPane must adjust low-contrast text on inserted slides');
+assert(pane.includes('GetSlideBackgroundLuminance'), 'ThemePptTaskPane must consider slide background luminance before adjusting text');
+assert(pane.includes('RGB(45, 52, 64)'), 'ThemePptTaskPane must darken faint text on light generated slides');
 assert(pane.includes('InsertOutlineIntoPresentation'), 'ThemePptTaskPane must insert generated outline into PPT');
 assert(pane.includes('children'), 'ThemePptTaskPane must consume outline children');
 assert(pane.includes('pages'), 'ThemePptTaskPane must consume Docmee pages responses');
