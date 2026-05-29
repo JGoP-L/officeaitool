@@ -247,7 +247,9 @@ Public Class ThemePptTaskPane
             Dim markdown = _outlineMarkdown.Trim()
 
             SetStatus("正在按所选模板生成 PPTX...")
+            AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)
             Dim pptId = Await _client.GeneratePptxAsync(_taskId, selectedTemplate.Id, markdown)
+            AppendTaskPaneLine("PPT ID: " & pptId)
 
             SetStatus("正在获取 PPTX 下载地址...")
             Dim fileUrl = Await _client.DownloadPptxAsync(pptId)
@@ -259,10 +261,12 @@ Public Class ThemePptTaskPane
             Await _client.DownloadPptxFileAsync(fileUrl, localPath)
 
             SetStatus("正在导入当前演示文稿...")
-            ImportPptxIntoPresentation(localPath)
-            SetStatus("已生成并导入当前演示文稿。")
+            Dim importedCount = ImportPptxIntoPresentation(localPath)
+            AppendTaskPaneLine("已导入页数: " & importedCount.ToString())
+            SetStatus($"已生成并导入当前演示文稿，共 {importedCount} 页。")
         Catch ex As Exception
             SetStatus("生成或导入失败。")
+            AppendTaskPaneLine("生成并导入失败: " & ex.Message)
             MessageBox.Show("生成并导入 PPT 失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             _generateButton.Enabled = True
@@ -317,7 +321,7 @@ Public Class ThemePptTaskPane
         Next
     End Sub
 
-    Private Sub ImportPptxIntoPresentation(downloadPath As String)
+    Private Function ImportPptxIntoPresentation(downloadPath As String) As Integer
         If String.IsNullOrWhiteSpace(downloadPath) OrElse Not File.Exists(downloadPath) Then
             Throw New FileNotFoundException("未找到下载后的 PPTX 文件。", downloadPath)
         End If
@@ -342,8 +346,13 @@ Public Class ThemePptTaskPane
             End If
         End Try
 
-        If importedSlides.Count > 0 Then FixInsertedSlideReadability(importedSlides)
-    End Sub
+        If importedSlides.Count = 0 Then
+            Throw New InvalidOperationException("PPTX 已下载，但没有成功导入任何幻灯片。")
+        End If
+
+        FixInsertedSlideReadability(importedSlides)
+        Return importedSlides.Count
+    End Function
 
     Private Function TryPasteSlideWithSourceFormatting(target As PowerPoint.Presentation, sourceSlide As PowerPoint.Slide) As PowerPoint.Slide
         Dim beforeCount = target.Slides.Count

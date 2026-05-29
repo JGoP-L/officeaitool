@@ -59,3 +59,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** The live Docmee stream sends Markdown through incremental `text` chunks, but the final `status=4` event can contain a JSON outline object in `result` instead of a Markdown string. Treating that final event as required Markdown discards the already streamed Markdown and raises a false error.
 
 **Solution:** Accumulate Markdown from all streamed `text` chunks and only use the final event when it actually contains a Markdown string; if the final event contains JSON, keep the accumulated Markdown.
+
+## 2026-05-29 Docmee Import Must Report Zero Imported Slides
+
+**Problem:** After selecting a template and clicking generate/import, the user could see that the operation "didn't work" without enough task-pane detail to know whether the failure was generation, download, or PowerPoint import.
+
+**Root Cause:** `ImportPptxIntoPresentation` did not return the number of pasted slides, and the caller could report success even if no generated slides were imported.
+
+**Solution:** Return the imported slide count, print the selected template ID, PPT ID, download URL, local path, and imported slide count in the task pane, and throw a clear error if the downloaded PPTX imports zero slides.

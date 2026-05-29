@@ -62,12 +62,18 @@ assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTask
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
 assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template selector');
 assert(pane.includes('Dim markdown = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must send the same markdown outline into generatePptx');
+assert(pane.includes('AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)'), 'ThemePptTaskPane must print the selected template id before generation');
 assert(pane.includes('GeneratePptxAsync'), 'ThemePptTaskPane must generate PPT with the selected template');
+assert(pane.includes('AppendTaskPaneLine("PPT ID: " & pptId)'), 'ThemePptTaskPane must print the generated PPT id');
 assert(pane.includes('DownloadPptxAsync'), 'ThemePptTaskPane must request a PPT download URL');
 assert(pane.includes('AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)'), 'ThemePptTaskPane must print the returned PPTX download URL for manual comparison');
 assert(pane.includes('AppendTaskPaneLine("本地保存路径: " & localPath)'), 'ThemePptTaskPane must print the local downloaded PPTX path for manual comparison');
 assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
 assert(pane.includes('ImportPptxIntoPresentation'), 'ThemePptTaskPane must import the downloaded PPT into the active presentation');
+assert(pane.includes('Dim importedCount = ImportPptxIntoPresentation(localPath)'), 'ThemePptTaskPane must know how many slides were imported');
+assert(pane.includes('AppendTaskPaneLine("已导入页数: " & importedCount.ToString())'), 'ThemePptTaskPane must print the imported slide count');
+assert(pane.includes('Throw New InvalidOperationException("PPTX 已下载，但没有成功导入任何幻灯片。")'), 'ThemePptTaskPane must fail loudly if PowerPoint imports zero slides');
+assert(pane.includes('AppendTaskPaneLine("生成并导入失败: " & ex.Message)'), 'ThemePptTaskPane must print import errors in the task pane');
 assert(pane.includes('Presentations.Open(downloadPath'), 'ThemePptTaskPane must open the generated PPTX before importing slides');
 assert(pane.includes('sourceSlide.Copy()'), 'ThemePptTaskPane must copy full generated slides to preserve template elements');
 assert(pane.includes('TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex))'), 'ThemePptTaskPane must use source-formatting paste for generated slides');
