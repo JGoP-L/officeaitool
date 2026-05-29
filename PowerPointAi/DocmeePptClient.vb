@@ -59,7 +59,7 @@ Public Class DocmeePptClient
         End Using
     End Function
 
-    Public Async Function GenerateContentAsync(taskId As String) As Task(Of JObject)
+    Public Async Function GenerateContentAsync(taskId As String, Optional progressHandler As Action(Of String) = Nothing) As Task(Of JObject)
         If String.IsNullOrWhiteSpace(taskId) Then
             Throw New ArgumentException("缺少 Docmee 任务 ID。", NameOf(taskId))
         End If
@@ -85,9 +85,10 @@ Public Class DocmeePptClient
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
                 Using response = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
-                    Dim responseText = Await response.Content.ReadAsStringAsync()
-                    EnsureSuccess(response, responseText)
-                    Return ExtractGeneratedOutline(responseText)
+                    EnsureSuccess(response, "")
+                    Using responseStream = Await response.Content.ReadAsStreamAsync()
+                        Return Await ReadGeneratedOutlineStreamAsync(responseStream, progressHandler)
+                    End Using
                 End Using
             End Using
         End Using
@@ -252,6 +253,45 @@ Public Class DocmeePptClient
         If String.IsNullOrWhiteSpace(message) Then message = payload.ToString(Formatting.None)
         Throw New InvalidOperationException($"Docmee 返回失败: {message}")
     End Sub
+
+    Private Shared Async Function ReadGeneratedOutlineStreamAsync(responseStream As Stream, progressHandler As Action(Of String)) As Task(Of JObject)
+        Dim rawResponse As New StringBuilder()
+        Dim finalOutline As JObject = Nothing
+
+        Using reader As New StreamReader(responseStream, Encoding.UTF8)
+            Do
+                Dim line = Await reader.ReadLineAsync()
+                If line Is Nothing Then Exit Do
+
+                rawResponse.AppendLine(line)
+
+                Dim trimmed = line.Trim()
+                If Not trimmed.StartsWith("data:") Then Continue Do
+
+                Dim dataText = trimmed.Substring(5).Trim()
+                If String.IsNullOrWhiteSpace(dataText) OrElse dataText = "[DONE]" Then Continue Do
+
+                Dim eventPayload = TryParseObject(dataText)
+                If eventPayload Is Nothing Then Continue Do
+
+                Dim chunkText = TryGetString(eventPayload("text"))
+                If Not String.IsNullOrEmpty(chunkText) AndAlso progressHandler IsNot Nothing Then
+                    progressHandler.Invoke(chunkText)
+                End If
+
+                Dim statusValue As Integer = 0
+                Dim statusToken = eventPayload("status")
+                If statusToken IsNot Nothing Then Integer.TryParse(statusToken.ToString(), statusValue)
+
+                If statusValue = 4 Then
+                    finalOutline = ExtractOutlineFromEnvelope(eventPayload)
+                End If
+            Loop
+        End Using
+
+        If finalOutline IsNot Nothing Then Return finalOutline
+        Return ExtractGeneratedOutline(rawResponse.ToString())
+    End Function
 
     Private Shared Function ExtractGeneratedOutline(responseText As String) As JObject
         Dim directJson = TryParseObject(responseText)

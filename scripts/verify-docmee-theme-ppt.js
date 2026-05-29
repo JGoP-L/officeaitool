@@ -36,6 +36,10 @@ assert(client.includes('/api/ppt/v2/generateContent'), 'Docmee client must call 
 assert(client.includes('"outlineType", "JSON"'), 'generateContent must request JSON outline');
 assert(client.includes('"questionMode", False'), 'generateContent must disable questionMode');
 assert(client.includes('"isNeedAsk", False'), 'generateContent must disable isNeedAsk');
+assert(client.includes('Optional progressHandler As Action(Of String) = Nothing'), 'GenerateContentAsync must accept a streaming progress callback');
+assert(client.includes('ReadAsStreamAsync'), 'GenerateContentAsync must read the SSE response stream');
+assert(client.includes('ReadLineAsync'), 'GenerateContentAsync must parse SSE lines incrementally');
+assert(client.includes('progressHandler.Invoke(chunkText)'), 'GenerateContentAsync must publish streaming outline text chunks');
 assert(client.includes('/api/ppt/templates'), 'Docmee client must include the template list endpoint for later template selection');
 assert(client.includes('/api/ppt/v2/generatePptx'), 'Docmee client must generate PPTX after outline');
 assert(client.includes('/api/ppt/downloadPptx'), 'Docmee client must request a downloadable PPT file URL');
@@ -46,6 +50,10 @@ assert(client.includes('DownloadPptxFileAsync'), 'Docmee client must download th
 assert(pane.includes('Class ThemePptTaskPane'), 'ThemePptTaskPane class must exist');
 assert(pane.includes('CreateTaskAsync'), 'ThemePptTaskPane must create a Docmee task');
 assert(pane.includes('GenerateContentAsync'), 'ThemePptTaskPane must generate Docmee outline content');
+assert(pane.includes('AddressOf AppendOutlineStreamText'), 'ThemePptTaskPane must wire streaming outline text into the UI');
+assert(pane.includes('AppendOutlineStreamText'), 'ThemePptTaskPane must append streamed outline text');
+assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display outline chunks while they stream');
+assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
 assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template selector');
 assert(pane.includes('GeneratePptxAsync'), 'ThemePptTaskPane must generate PPT with the selected template');

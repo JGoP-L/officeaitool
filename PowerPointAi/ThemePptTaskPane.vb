@@ -161,7 +161,8 @@ Public Class ThemePptTaskPane
             _taskId = Await _client.CreateTaskAsync(requestContent)
 
             SetStatus("正在生成 PPT 大纲...")
-            _outline = Await _client.GenerateContentAsync(_taskId)
+            _outputBox.Clear()
+            _outline = Await _client.GenerateContentAsync(_taskId, AddressOf AppendOutlineStreamText)
 
             _outputBox.Text = RenderOutlineText(_outline)
             Await LoadTemplatesAsync()
@@ -174,6 +175,19 @@ Public Class ThemePptTaskPane
             _generateButton.Enabled = True
         End Try
     End Function
+
+    Private Sub AppendOutlineStreamText(chunkText As String)
+        If String.IsNullOrEmpty(chunkText) Then Return
+
+        If _outputBox.InvokeRequired Then
+            _outputBox.BeginInvoke(CType(Sub() AppendOutlineStreamText(chunkText), MethodInvoker))
+            Return
+        End If
+
+        _outputBox.AppendText(chunkText)
+        _outputBox.SelectionStart = _outputBox.TextLength
+        _outputBox.ScrollToCaret()
+    End Sub
 
     Private Async Sub InsertButton_Click(sender As Object, e As EventArgs)
         Await GenerateAndImportPptxAsync()
