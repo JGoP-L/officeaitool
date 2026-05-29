@@ -360,7 +360,10 @@ Public Class DocmeePptClient
                 If statusToken IsNot Nothing Then Integer.TryParse(statusToken.ToString(), statusValue)
 
                 If statusValue = 4 Then
-                    finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)
+                    Dim eventMarkdown As String = ""
+                    If TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdown) Then
+                        finalMarkdown = eventMarkdown
+                    End If
                 End If
             Loop
         End Using
@@ -430,7 +433,10 @@ Public Class DocmeePptClient
             If statusToken IsNot Nothing Then Integer.TryParse(statusToken.ToString(), statusValue)
 
             If statusValue = 4 Then
-                finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)
+                Dim eventMarkdown As String = ""
+                If TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdown) Then
+                    finalMarkdown = eventMarkdown
+                End If
             End If
         Next
 
@@ -458,19 +464,33 @@ Public Class DocmeePptClient
     End Function
 
     Private Shared Function ExtractMarkdownFromEnvelope(payload As JObject) As String
+        Dim markdown As String = ""
+        If TryExtractMarkdownFromEnvelope(payload, markdown) Then Return markdown
+
+        Throw New InvalidOperationException("Docmee 返回内容中没有可用的 Markdown result。")
+    End Function
+
+    Private Shared Function TryExtractMarkdownFromEnvelope(payload As JObject, ByRef markdown As String) As Boolean
+        markdown = ""
+        If payload Is Nothing Then Return False
+
         Dim resultToken As JToken = payload("result")
         If resultToken Is Nothing AndAlso TypeOf payload("data") Is JObject Then
             resultToken = DirectCast(payload("data"), JObject)("result")
         End If
 
         If resultToken IsNot Nothing AndAlso resultToken.Type = JTokenType.String Then
-            Return resultToken.ToString()
+            markdown = resultToken.ToString()
+            Return Not String.IsNullOrWhiteSpace(markdown)
         End If
 
         Dim textValue = TryGetString(payload("text"))
-        If Not String.IsNullOrWhiteSpace(textValue) Then Return textValue
+        If Not String.IsNullOrWhiteSpace(textValue) Then
+            markdown = textValue
+            Return True
+        End If
 
-        Throw New InvalidOperationException("Docmee 返回内容中没有可用的 Markdown result。")
+        Return False
     End Function
 
     Private Shared Function ExtractTemplateArray(payload As JObject) As JArray

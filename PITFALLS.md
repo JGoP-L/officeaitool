@@ -49,3 +49,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** `Slides.InsertFromFile` imports slides directly from a file but gives no control over source formatting preservation. Template-heavy generated slides can lose or flatten visual details when merged into an existing deck this way.
 
 **Solution:** Open the downloaded PPTX hidden and read-only, copy each generated slide, paste it into the active presentation, then apply readability normalization only to the pasted slide objects.
+
+## 2026-05-29 Docmee Markdown Stream Final Event May Contain JSON
+
+**Problem:** The task pane failed with `Docmee 返回内容中没有可用的 Markdown result` after requesting a Markdown outline.
+
+**Root Cause:** The live Docmee stream sends Markdown through incremental `text` chunks, but the final `status=4` event can contain a JSON outline object in `result` instead of a Markdown string. Treating that final event as required Markdown discards the already streamed Markdown and raises a false error.
+
+**Solution:** Accumulate Markdown from all streamed `text` chunks and only use the final event when it actually contains a Markdown string; if the final event contains JSON, keep the accumulated Markdown.

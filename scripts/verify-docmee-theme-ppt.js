@@ -41,6 +41,8 @@ assert(client.includes('Optional progressHandler As Action(Of String) = Nothing'
 assert(client.includes('ReadAsStreamAsync'), 'GenerateContentAsync must read the SSE response stream');
 assert(client.includes('ReadLineAsync'), 'GenerateContentAsync must parse SSE lines incrementally');
 assert(client.includes('progressHandler.Invoke(chunkText)'), 'GenerateContentAsync must publish streaming outline text chunks');
+assert(client.includes('TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdown)'), 'markdown streaming must ignore final JSON result envelopes and keep streamed markdown chunks');
+assert(!client.includes('finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)'), 'markdown streaming must not throw when the final event result is a JSON outline object');
 assert(client.includes('/api/ppt/templates'), 'Docmee client must include the template list endpoint for later template selection');
 assert(client.includes('/api/ppt/v2/generatePptx'), 'Docmee client must generate PPTX after outline');
 assert(client.includes('/api/ppt/downloadPptx'), 'Docmee client must request a downloadable PPT file URL');
