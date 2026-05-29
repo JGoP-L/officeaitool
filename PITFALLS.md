@@ -33,3 +33,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** `Slides.InsertFromFile` appends slides from the generated file and returns only the inserted count; it does not provide a source-formatting or contrast option. Generated templates can contain low-contrast text after insertion into the active deck.
 
 **Solution:** Track the newly inserted slide range from the `InsertFromFile` return value and normalize only those slides by darkening low-contrast text on light backgrounds, leaving the user's original slides untouched.
+
+## 2026-05-29 Docmee Task Pane Should Stream Markdown, Not JSON
+
+**Problem:** The PowerPoint task pane displayed raw JSON fragments while generating the outline, but the user-facing outline area should show Markdown.
+
+**Root Cause:** The task pane requested `outlineType=JSON` from Docmee and appended each streamed `text` chunk directly to the UI. For JSON outlines, those chunks are JSON fragments, not readable Markdown.
+
+**Solution:** Use Docmee `outlineType=MD` for the task-pane generation flow, stream those Markdown chunks directly into the output box, and pass the same completed Markdown to `generatePptx`.

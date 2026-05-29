@@ -14,6 +14,7 @@ Public Class ThemePptTaskPane
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
     Private _outline As JObject
+    Private _outlineMarkdown As String
     Private _taskId As String
 
     Private ReadOnly _topicBox As New TextBox()
@@ -154,6 +155,8 @@ Public Class ThemePptTaskPane
         _generateButton.Enabled = False
         _insertButton.Enabled = False
         _outputBox.Clear()
+        _outline = Nothing
+        _outlineMarkdown = ""
 
         Try
             Dim requestContent = BuildRequestContent(topic)
@@ -162,9 +165,9 @@ Public Class ThemePptTaskPane
 
             SetStatus("正在生成 PPT 大纲...")
             _outputBox.Clear()
-            _outline = Await _client.GenerateContentAsync(_taskId, AddressOf AppendOutlineStreamText)
+            _outlineMarkdown = Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)
 
-            _outputBox.Text = RenderOutlineText(_outline)
+            _outputBox.Text = _outlineMarkdown.Trim()
             Await LoadTemplatesAsync()
             _insertButton.Enabled = True
             SetStatus("大纲已生成，请选择模板后生成并导入。")
@@ -225,7 +228,7 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Async Function GenerateAndImportPptxAsync() As Task
-        If String.IsNullOrWhiteSpace(_taskId) OrElse _outline Is Nothing Then
+        If String.IsNullOrWhiteSpace(_taskId) OrElse String.IsNullOrWhiteSpace(_outlineMarkdown) Then
             MessageBox.Show("请先生成大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
@@ -241,7 +244,7 @@ Public Class ThemePptTaskPane
         _refreshTemplatesButton.Enabled = False
 
         Try
-            Dim markdown = ConvertOutlineToMarkdown(_outline)
+            Dim markdown = _outlineMarkdown.Trim()
 
             SetStatus("正在按所选模板生成 PPTX...")
             Dim pptId = Await _client.GeneratePptxAsync(_taskId, selectedTemplate.Id, markdown)

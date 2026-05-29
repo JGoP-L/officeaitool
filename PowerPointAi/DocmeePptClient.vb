@@ -94,6 +94,41 @@ Public Class DocmeePptClient
         End Using
     End Function
 
+    Public Async Function GenerateMarkdownContentAsync(taskId As String, Optional progressHandler As Action(Of String) = Nothing) As Task(Of String)
+        If String.IsNullOrWhiteSpace(taskId) Then
+            Throw New ArgumentException("缺少 Docmee 任务 ID。", NameOf(taskId))
+        End If
+
+        Dim payload As New JObject From {
+            {"id", taskId.Trim()},
+            {"stream", True},
+            {"outlineType", "MD"},
+            {"questionMode", False},
+            {"isNeedAsk", False},
+            {"length", "medium"},
+            {"scene", "产品介绍"},
+            {"audience", "客户"},
+            {"lang", "zh"},
+            {"prompt", "语气专业，适合演示"},
+            {"aiSearch", False},
+            {"isGenImg", False}
+        }
+
+        Using client = CreateHttpClient()
+            Using request As New HttpRequestMessage(HttpMethod.Post, GenerateContentEndpoint)
+                request.Headers.Add("token", DemoToken)
+                request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
+
+                Using response = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
+                    EnsureSuccess(response, "")
+                    Using responseStream = Await response.Content.ReadAsStreamAsync()
+                        Return Await ReadGeneratedMarkdownStreamAsync(responseStream, progressHandler)
+                    End Using
+                End Using
+            End Using
+        End Using
+    End Function
+
     Public Async Function ListTemplatesAsync(Optional page As Integer = 1, Optional size As Integer = 10) As Task(Of List(Of DocmeeTemplateInfo))
         Dim payload As New JObject From {
             {"page", Math.Max(page, 1)},
@@ -293,6 +328,48 @@ Public Class DocmeePptClient
         Return ExtractGeneratedOutline(rawResponse.ToString())
     End Function
 
+    Private Shared Async Function ReadGeneratedMarkdownStreamAsync(responseStream As Stream, progressHandler As Action(Of String)) As Task(Of String)
+        Dim rawResponse As New StringBuilder()
+        Dim markdownBuilder As New StringBuilder()
+        Dim finalMarkdown As String = ""
+
+        Using reader As New StreamReader(responseStream, Encoding.UTF8)
+            Do
+                Dim line = Await reader.ReadLineAsync()
+                If line Is Nothing Then Exit Do
+
+                rawResponse.AppendLine(line)
+
+                Dim trimmed = line.Trim()
+                If Not trimmed.StartsWith("data:") Then Continue Do
+
+                Dim dataText = trimmed.Substring(5).Trim()
+                If String.IsNullOrWhiteSpace(dataText) OrElse dataText = "[DONE]" Then Continue Do
+
+                Dim eventPayload = TryParseObject(dataText)
+                If eventPayload Is Nothing Then Continue Do
+
+                Dim chunkText = TryGetString(eventPayload("text"))
+                If Not String.IsNullOrEmpty(chunkText) Then
+                    markdownBuilder.Append(chunkText)
+                    If progressHandler IsNot Nothing Then progressHandler.Invoke(chunkText)
+                End If
+
+                Dim statusValue As Integer = 0
+                Dim statusToken = eventPayload("status")
+                If statusToken IsNot Nothing Then Integer.TryParse(statusToken.ToString(), statusValue)
+
+                If statusValue = 4 Then
+                    finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)
+                End If
+            Loop
+        End Using
+
+        If Not String.IsNullOrWhiteSpace(finalMarkdown) Then Return finalMarkdown.Trim()
+        If markdownBuilder.Length > 0 Then Return markdownBuilder.ToString().Trim()
+        Return ExtractGeneratedMarkdown(rawResponse.ToString())
+    End Function
+
     Private Shared Function ExtractGeneratedOutline(responseText As String) As JObject
         Dim directJson = TryParseObject(responseText)
         If directJson IsNot Nothing Then
@@ -325,6 +402,43 @@ Public Class DocmeePptClient
         Throw New InvalidOperationException("Docmee 未返回完整大纲内容。")
     End Function
 
+    Private Shared Function ExtractGeneratedMarkdown(responseText As String) As String
+        Dim directJson = TryParseObject(responseText)
+        If directJson IsNot Nothing Then
+            EnsureDocmeeSuccess(directJson)
+            Return ExtractMarkdownFromEnvelope(directJson).Trim()
+        End If
+
+        Dim finalMarkdown As String = ""
+        Dim markdownBuilder As New StringBuilder()
+        Dim lines = responseText.Replace(vbCrLf, vbLf).Split({vbLf}, StringSplitOptions.None)
+        For Each rawLine In lines
+            Dim line = rawLine.Trim()
+            If Not line.StartsWith("data:") Then Continue For
+
+            Dim dataText = line.Substring(5).Trim()
+            If String.IsNullOrWhiteSpace(dataText) OrElse dataText = "[DONE]" Then Continue For
+
+            Dim eventPayload = TryParseObject(dataText)
+            If eventPayload Is Nothing Then Continue For
+
+            Dim chunkText = TryGetString(eventPayload("text"))
+            If Not String.IsNullOrEmpty(chunkText) Then markdownBuilder.Append(chunkText)
+
+            Dim statusValue As Integer = 0
+            Dim statusToken = eventPayload("status")
+            If statusToken IsNot Nothing Then Integer.TryParse(statusToken.ToString(), statusValue)
+
+            If statusValue = 4 Then
+                finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)
+            End If
+        Next
+
+        If Not String.IsNullOrWhiteSpace(finalMarkdown) Then Return finalMarkdown.Trim()
+        If markdownBuilder.Length > 0 Then Return markdownBuilder.ToString().Trim()
+        Throw New InvalidOperationException("Docmee 未返回完整 Markdown 大纲内容。")
+    End Function
+
     Private Shared Function ExtractOutlineFromEnvelope(payload As JObject) As JObject
         Dim resultToken As JToken = payload("result")
         If resultToken Is Nothing AndAlso TypeOf payload("data") Is JObject Then
@@ -341,6 +455,22 @@ Public Class DocmeePptClient
         End If
 
         Throw New InvalidOperationException("Docmee 返回内容中没有可用的大纲 result。")
+    End Function
+
+    Private Shared Function ExtractMarkdownFromEnvelope(payload As JObject) As String
+        Dim resultToken As JToken = payload("result")
+        If resultToken Is Nothing AndAlso TypeOf payload("data") Is JObject Then
+            resultToken = DirectCast(payload("data"), JObject)("result")
+        End If
+
+        If resultToken IsNot Nothing AndAlso resultToken.Type = JTokenType.String Then
+            Return resultToken.ToString()
+        End If
+
+        Dim textValue = TryGetString(payload("text"))
+        If Not String.IsNullOrWhiteSpace(textValue) Then Return textValue
+
+        Throw New InvalidOperationException("Docmee 返回内容中没有可用的 Markdown result。")
     End Function
 
     Private Shared Function ExtractTemplateArray(payload As JObject) As JArray

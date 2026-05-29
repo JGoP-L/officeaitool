@@ -33,7 +33,8 @@ assert(client.includes('Private Const DemoToken As String = "ak_demo"'), 'Docmee
 assert(client.includes('/api/ppt/v2/createTask'), 'Docmee client must call createTask');
 assert(client.includes('MultipartFormDataContent'), 'createTask must use multipart/form-data');
 assert(client.includes('/api/ppt/v2/generateContent'), 'Docmee client must call generateContent');
-assert(client.includes('"outlineType", "JSON"'), 'generateContent must request JSON outline');
+assert(client.includes('GenerateMarkdownContentAsync'), 'Docmee client must expose markdown outline generation');
+assert(client.includes('"outlineType", "MD"'), 'generateContent must request markdown outline for the task pane');
 assert(client.includes('"questionMode", False'), 'generateContent must disable questionMode');
 assert(client.includes('"isNeedAsk", False'), 'generateContent must disable isNeedAsk');
 assert(client.includes('Optional progressHandler As Action(Of String) = Nothing'), 'GenerateContentAsync must accept a streaming progress callback');
@@ -49,13 +50,16 @@ assert(client.includes('DownloadPptxFileAsync'), 'Docmee client must download th
 
 assert(pane.includes('Class ThemePptTaskPane'), 'ThemePptTaskPane class must exist');
 assert(pane.includes('CreateTaskAsync'), 'ThemePptTaskPane must create a Docmee task');
-assert(pane.includes('GenerateContentAsync'), 'ThemePptTaskPane must generate Docmee outline content');
+assert(pane.includes('_outlineMarkdown'), 'ThemePptTaskPane must keep the markdown outline returned by Docmee');
+assert(pane.includes('GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)'), 'ThemePptTaskPane must generate markdown outline content');
 assert(pane.includes('AddressOf AppendOutlineStreamText'), 'ThemePptTaskPane must wire streaming outline text into the UI');
 assert(pane.includes('AppendOutlineStreamText'), 'ThemePptTaskPane must append streamed outline text');
 assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display outline chunks while they stream');
 assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
+assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
 assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template selector');
+assert(pane.includes('Dim markdown = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must send the same markdown outline into generatePptx');
 assert(pane.includes('GeneratePptxAsync'), 'ThemePptTaskPane must generate PPT with the selected template');
 assert(pane.includes('DownloadPptxAsync'), 'ThemePptTaskPane must request a PPT download URL');
 assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
@@ -70,7 +74,6 @@ assert(pane.includes('InsertOutlineIntoPresentation'), 'ThemePptTaskPane must in
 assert(pane.includes('children'), 'ThemePptTaskPane must consume outline children');
 assert(pane.includes('pages'), 'ThemePptTaskPane must consume Docmee pages responses');
 assert(pane.includes('overall_theme'), 'ThemePptTaskPane must use Docmee overall_theme as a title candidate');
-assert(pane.includes('ConvertOutlineToMarkdown'), 'ThemePptTaskPane must convert generated JSON outline to markdown for generatePptx');
 assert(pane.includes('ppLayoutTitleOnly'), 'ThemePptTaskPane must create title/content slides');
 
 console.log('docmee theme ppt checks passed');
