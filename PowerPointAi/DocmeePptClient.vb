@@ -20,6 +20,13 @@ Public Class DocmeeTemplateInfo
     End Function
 End Class
 
+Public Class DocmeePptInfo
+    Public Property Id As String
+    Public Property TemplateId As String
+    Public Property Subject As String
+    Public Property CoverUrl As String
+End Class
+
 Public Class DocmeePptClient
     Private Const ApiBaseUrl As String = "https://test.docmee.cn"
     Private Const DemoToken As String = "ak_demo"
@@ -31,14 +38,25 @@ Public Class DocmeePptClient
     Private Shared ReadOnly DownloadPptxEndpoint As String = ApiBaseUrl & "/api/ppt/downloadPptx"
 
     Public Async Function CreateTaskAsync(content As String) As Task(Of String)
+        Return Await CreateTaskAsync(content, "1")
+    End Function
+
+    Public Async Function CreateMarkdownTaskAsync(markdown As String) As Task(Of String)
+        Return Await CreateTaskAsync(markdown, "7")
+    End Function
+
+    Private Async Function CreateTaskAsync(content As String, taskType As String) As Task(Of String)
         If String.IsNullOrWhiteSpace(content) Then
             Throw New ArgumentException("请输入主题或生成要求。", NameOf(content))
+        End If
+        If String.IsNullOrWhiteSpace(taskType) Then
+            Throw New ArgumentException("缺少 Docmee 任务类型。", NameOf(taskType))
         End If
 
         Using client = CreateHttpClient()
             client.DefaultRequestHeaders.Add("token", DemoToken)
             Using form As New MultipartFormDataContent()
-                form.Add(New StringContent("1", Encoding.UTF8), "type")
+                form.Add(New StringContent(taskType, Encoding.UTF8), "type")
                 form.Add(New StringContent(content.Trim(), Encoding.UTF8), "content")
 
                 Using response = Await client.PostAsync(CreateTaskEndpoint, form)
@@ -177,7 +195,7 @@ Public Class DocmeePptClient
         End Using
     End Function
 
-    Public Async Function GeneratePptxAsync(taskId As String, templateId As String, markdown As String) As Task(Of String)
+    Public Async Function GeneratePptxAsync(taskId As String, templateId As String, markdown As String) As Task(Of DocmeePptInfo)
         If String.IsNullOrWhiteSpace(taskId) Then
             Throw New ArgumentException("缺少 Docmee 任务 ID。", NameOf(taskId))
         End If
@@ -206,25 +224,36 @@ Public Class DocmeePptClient
                     Dim result = JObject.Parse(responseText)
                     EnsureDocmeeSuccess(result)
 
-                    Dim pptId = TryGetString(result.SelectToken("data.pptInfo.id"))
-                    If String.IsNullOrWhiteSpace(pptId) Then
+                    Dim pptInfo = TryCast(result.SelectToken("data.pptInfo"), JObject)
+                    If pptInfo Is Nothing Then
+                        Throw New InvalidOperationException("Docmee 已生成 PPT，但未返回 PPT 信息。")
+                    End If
+
+                    Dim generatedInfo As New DocmeePptInfo With {
+                        .Id = TryGetString(pptInfo("id")),
+                        .TemplateId = TryGetString(pptInfo("templateId")),
+                        .Subject = TryGetString(pptInfo("subject")),
+                        .CoverUrl = TryGetString(pptInfo("coverUrl"))
+                    }
+
+                    If String.IsNullOrWhiteSpace(generatedInfo.Id) Then
                         Throw New InvalidOperationException("Docmee 已生成 PPT，但未返回 PPT ID。")
                     End If
 
-                    Return pptId
+                    Return generatedInfo
                 End Using
             End Using
         End Using
     End Function
 
-    Public Async Function DownloadPptxAsync(pptId As String) As Task(Of String)
+    Public Async Function DownloadPptxAsync(pptId As String, Optional refresh As Boolean = False) As Task(Of String)
         If String.IsNullOrWhiteSpace(pptId) Then
             Throw New ArgumentException("缺少 PPT ID。", NameOf(pptId))
         End If
 
         Dim payload As New JObject From {
             {"id", pptId.Trim()},
-            {"refresh", False}
+            {"refresh", refresh}
         }
 
         Using client = CreateHttpClient()

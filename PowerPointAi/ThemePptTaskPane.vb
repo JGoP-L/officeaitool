@@ -246,17 +246,29 @@ Public Class ThemePptTaskPane
         Try
             Dim markdown = _outlineMarkdown.Trim()
 
-            SetStatus("正在按所选模板生成 PPTX...")
+            SetStatus("正在创建模板生成任务...")
             AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)
-            Dim pptId = Await _client.GeneratePptxAsync(_taskId, selectedTemplate.Id, markdown)
-            AppendTaskPaneLine("PPT ID: " & pptId)
+            Dim pptTaskId = Await _client.CreateMarkdownTaskAsync(markdown)
+            AppendTaskPaneLine("生成任务ID: " & pptTaskId)
+
+            SetStatus("正在按所选模板生成 PPTX...")
+            Dim pptInfo = Await _client.GeneratePptxAsync(pptTaskId, selectedTemplate.Id, markdown)
+            AppendTaskPaneLine("PPT ID: " & pptInfo.Id)
+            AppendTaskPaneLine("返回模板ID: " & pptInfo.TemplateId)
+            If Not String.IsNullOrWhiteSpace(pptInfo.CoverUrl) Then
+                AppendTaskPaneLine("PPT 封面预览: " & pptInfo.CoverUrl)
+            End If
+
+            If Not String.Equals(pptInfo.TemplateId, selectedTemplate.Id, StringComparison.Ordinal) Then
+                Throw New InvalidOperationException($"Docmee 返回的模板ID与所选模板不一致。所选: {selectedTemplate.Id}，返回: {pptInfo.TemplateId}")
+            End If
 
             SetStatus("正在获取 PPTX 下载地址...")
-            Dim fileUrl = Await _client.DownloadPptxAsync(pptId)
+            Dim fileUrl = Await _client.DownloadPptxAsync(pptInfo.Id, True)
             AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)
 
             SetStatus("正在下载 PPTX...")
-            Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_{pptId}.pptx")
+            Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_{pptInfo.Id}.pptx")
             AppendTaskPaneLine("本地保存路径: " & localPath)
             Await _client.DownloadPptxFileAsync(fileUrl, localPath)
 

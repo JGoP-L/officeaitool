@@ -67,3 +67,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** `ImportPptxIntoPresentation` did not return the number of pasted slides, and the caller could report success even if no generated slides were imported.
 
 **Solution:** Return the imported slide count, print the selected template ID, PPT ID, download URL, local path, and imported slide count in the task pane, and throw a clear error if the downloaded PPTX imports zero slides.
+
+## 2026-05-29 Docmee V2 Tasks Lock The First PPT Template
+
+**Problem:** Selecting a different template and clicking generate/import could still produce a PPT using the previous/default template.
+
+**Root Cause:** The same Docmee V2 task ID was reused for final PPT generation. Live API testing showed that after one task generated PPT with template A, a second `generatePptx` call on the same task with template B returned `pptInfo.templateId` as template A and downloaded the original template file.
+
+**Solution:** For each final generate/import action, create a fresh `type=7` Markdown task from the current outline, call `generatePptx` with the selected template ID, verify Docmee's returned `pptInfo.templateId` matches the selected template, and download with `refresh=true`.
