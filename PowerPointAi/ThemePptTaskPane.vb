@@ -339,6 +339,7 @@ Public Class ThemePptTaskPane
         End If
 
         Dim target = GetOrCreatePresentation()
+        Dim originalSlideIndex = CaptureActiveSlideIndex(target)
         Dim sourcePresentation As PowerPoint.Presentation = Nothing
         Dim importedSlides As New List(Of PowerPoint.Slide)()
 
@@ -356,6 +357,8 @@ Public Class ThemePptTaskPane
             If sourcePresentation IsNot Nothing Then
                 sourcePresentation.Close()
             End If
+
+            RestoreActiveSlide(target, originalSlideIndex)
         End Try
 
         If importedSlides.Count = 0 Then
@@ -365,6 +368,37 @@ Public Class ThemePptTaskPane
         FixInsertedSlideReadability(importedSlides)
         Return importedSlides.Count
     End Function
+
+    Private Function CaptureActiveSlideIndex(target As PowerPoint.Presentation) As Integer
+        Try
+            If target Is Nothing OrElse target.Slides.Count = 0 OrElse
+               _pptApp.ActiveWindow Is Nothing OrElse _pptApp.ActiveWindow.Selection Is Nothing Then
+                Return 0
+            End If
+
+            Dim selection = _pptApp.ActiveWindow.Selection
+            If selection.SlideRange IsNot Nothing AndAlso selection.SlideRange.Count > 0 Then
+                Return selection.SlideRange(1).SlideIndex
+            End If
+        Catch
+        End Try
+
+        Return 0
+    End Function
+
+    Private Sub RestoreActiveSlide(target As PowerPoint.Presentation, slideIndex As Integer)
+        If target Is Nothing OrElse slideIndex <= 0 OrElse slideIndex > target.Slides.Count Then Return
+
+        Try
+            If target.Windows.Count <= 0 Then Return
+
+            target.Windows(1).Activate()
+            target.Windows(1).View.GotoSlide(slideIndex)
+            target.Slides(slideIndex).Select()
+        Catch
+            ' 恢复用户原来的编辑页失败不应阻断 PPT 导入。
+        End Try
+    End Sub
 
     Private Function TryPasteSlideWithSourceFormatting(target As PowerPoint.Presentation, sourceSlide As PowerPoint.Slide) As PowerPoint.Slide
         Dim beforeCount = target.Slides.Count

@@ -75,3 +75,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** The same Docmee V2 task ID was reused for final PPT generation. Live API testing showed that after one task generated PPT with template A, a second `generatePptx` call on the same task with template B returned `pptInfo.templateId` as template A and downloaded the original template file.
 
 **Solution:** For each final generate/import action, create a fresh `type=7` Markdown task from the current outline, call `generatePptx` with the selected template ID, verify Docmee's returned `pptInfo.templateId` matches the selected template, and download with `refresh=true`.
+
+## 2026-05-29 Docmee Import Can Leave PowerPoint On Generated Template Colors
+
+**Problem:** Customers reported that after importing generated template slides, other PowerPoint color-related features appeared to use the generated template colors.
+
+**Root Cause:** The import flow navigated to the end of the destination deck and used PowerPoint's keep-source-formatting paste command. After import, PowerPoint could remain on a newly pasted generated-template slide, so native color palettes and new-slide defaults were based on that slide's theme.
+
+**Solution:** Capture the user's active slide before importing, then restore and reselect that original slide after the generated slides are pasted.

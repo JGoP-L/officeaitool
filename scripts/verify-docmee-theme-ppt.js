@@ -84,6 +84,8 @@ assert(pane.includes('AppendTaskPaneLine("本地保存路径: " & localPath)'), 
 assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
 assert(pane.includes('ImportPptxIntoPresentation'), 'ThemePptTaskPane must import the downloaded PPT into the active presentation');
 assert(pane.includes('Dim importedCount = ImportPptxIntoPresentation(localPath)'), 'ThemePptTaskPane must know how many slides were imported');
+assert(pane.includes('Dim originalSlideIndex = CaptureActiveSlideIndex(target)'), 'ThemePptTaskPane must capture the user active slide before importing generated template slides');
+assert(pane.includes('RestoreActiveSlide(target, originalSlideIndex)'), 'ThemePptTaskPane must restore the original active slide after import so PowerPoint color palettes do not stay on the generated template');
 assert(pane.includes('AppendTaskPaneLine("已导入页数: " & importedCount.ToString())'), 'ThemePptTaskPane must print the imported slide count');
 assert(pane.includes('Throw New InvalidOperationException("PPTX 已下载，但没有成功导入任何幻灯片。")'), 'ThemePptTaskPane must fail loudly if PowerPoint imports zero slides');
 assert(pane.includes('AppendTaskPaneLine("生成并导入失败: " & ex.Message)'), 'ThemePptTaskPane must print import errors in the task pane');
@@ -93,6 +95,8 @@ assert(pane.includes('TryPasteSlideWithSourceFormatting(target, sourcePresentati
 assert(pane.includes('target.Windows(1).Activate()'), 'ThemePptTaskPane must activate the destination window before source-formatting paste');
 assert(pane.includes('target.Windows(1).View.GotoSlide(target.Slides.Count)'), 'ThemePptTaskPane must move the destination view to the end before source-formatting paste');
 assert(pane.includes('_pptApp.CommandBars.ExecuteMso("PasteSourceFormatting")'), 'ThemePptTaskPane must request PowerPoint keep-source-formatting paste');
+assert(pane.includes('target.Windows(1).View.GotoSlide(slideIndex)'), 'ThemePptTaskPane must navigate back to the original slide after import');
+assert(pane.includes('target.Slides(slideIndex).Select()'), 'ThemePptTaskPane must reselect the original slide after import');
 assert(pane.includes('target.Slides.Paste(target.Slides.Count + 1)'), 'ThemePptTaskPane must keep a normal paste fallback');
 assert(!pane.includes('InsertFromFile'), 'ThemePptTaskPane must not rely on InsertFromFile for Docmee imports');
 assert(pane.includes('FixInsertedSlideReadability'), 'ThemePptTaskPane must improve readability only on newly inserted slides');
