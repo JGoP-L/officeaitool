@@ -64,9 +64,12 @@ assert(pane.includes('GeneratePptxAsync'), 'ThemePptTaskPane must generate PPT w
 assert(pane.includes('DownloadPptxAsync'), 'ThemePptTaskPane must request a PPT download URL');
 assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
 assert(pane.includes('ImportPptxIntoPresentation'), 'ThemePptTaskPane must import the downloaded PPT into the active presentation');
-assert(pane.includes('InsertFromFile'), 'ThemePptTaskPane must insert downloaded slides into the current PPT');
+assert(pane.includes('Presentations.Open(downloadPath'), 'ThemePptTaskPane must open the generated PPTX before importing slides');
+assert(pane.includes('sourcePresentation.Slides(slideIndex).Copy()'), 'ThemePptTaskPane must copy full generated slides to preserve template elements');
+assert(pane.includes('target.Slides.Paste(target.Slides.Count + 1)'), 'ThemePptTaskPane must paste generated slides into the current PPT');
+assert(!pane.includes('InsertFromFile'), 'ThemePptTaskPane must not rely on InsertFromFile for Docmee imports');
 assert(pane.includes('FixInsertedSlideReadability'), 'ThemePptTaskPane must improve readability only on newly inserted slides');
-assert(pane.includes('insertedCount = target.Slides.InsertFromFile'), 'ThemePptTaskPane must track how many slides were inserted');
+assert(pane.includes('importedSlides.Add'), 'ThemePptTaskPane must track exactly pasted slides for readability adjustments');
 assert(pane.includes('FixShapeTextReadability'), 'ThemePptTaskPane must adjust low-contrast text on inserted slides');
 assert(pane.includes('GetSlideBackgroundLuminance'), 'ThemePptTaskPane must consider slide background luminance before adjusting text');
 assert(pane.includes('RGB(45, 52, 64)'), 'ThemePptTaskPane must darken faint text on light generated slides');

@@ -41,3 +41,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** The task pane requested `outlineType=JSON` from Docmee and appended each streamed `text` chunk directly to the UI. For JSON outlines, those chunks are JSON fragments, not readable Markdown.
 
 **Solution:** Use Docmee `outlineType=MD` for the task-pane generation flow, stream those Markdown chunks directly into the output box, and pass the same completed Markdown to `generatePptx`.
+
+## 2026-05-29 Docmee Imported Slides Should Be Copied, Not Inserted From File
+
+**Problem:** Users reported missing visual elements after the generated Docmee PPTX was imported into the current presentation.
+
+**Root Cause:** `Slides.InsertFromFile` imports slides directly from a file but gives no control over source formatting preservation. Template-heavy generated slides can lose or flatten visual details when merged into an existing deck this way.
+
+**Solution:** Open the downloaded PPTX hidden and read-only, copy each generated slide, paste it into the active presentation, then apply readability normalization only to the pasted slide objects.

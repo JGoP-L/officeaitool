@@ -306,20 +306,33 @@ Public Class ThemePptTaskPane
         End If
 
         Dim target = GetOrCreatePresentation()
-        Dim insertAfter = target.Slides.Count
-        Dim insertedCount = target.Slides.InsertFromFile(downloadPath, insertAfter)
+        Dim sourcePresentation As PowerPoint.Presentation = Nothing
+        Dim importedSlides As New List(Of PowerPoint.Slide)()
 
-        If insertedCount > 0 Then
-            FixInsertedSlideReadability(target, insertAfter + 1, insertAfter + insertedCount)
-        End If
+        Try
+            sourcePresentation = _pptApp.Presentations.Open(downloadPath,
+                ReadOnly:=MsoTriState.msoTrue,
+                Untitled:=MsoTriState.msoFalse,
+                WithWindow:=MsoTriState.msoFalse)
+
+            For slideIndex As Integer = 1 To sourcePresentation.Slides.Count
+                sourcePresentation.Slides(slideIndex).Copy()
+                Dim pastedSlides = target.Slides.Paste(target.Slides.Count + 1)
+                If pastedSlides IsNot Nothing AndAlso pastedSlides.Count > 0 Then
+                    importedSlides.Add(pastedSlides(1))
+                End If
+            Next
+        Finally
+            If sourcePresentation IsNot Nothing Then
+                sourcePresentation.Close()
+            End If
+        End Try
+
+        If importedSlides.Count > 0 Then FixInsertedSlideReadability(importedSlides)
     End Sub
 
-    Private Sub FixInsertedSlideReadability(presentation As PowerPoint.Presentation, startIndex As Integer, endIndex As Integer)
-        Dim safeStart = Math.Max(1, startIndex)
-        Dim safeEnd = Math.Min(endIndex, presentation.Slides.Count)
-
-        For slideIndex As Integer = safeStart To safeEnd
-            Dim slide = presentation.Slides(slideIndex)
+    Private Sub FixInsertedSlideReadability(importedSlides As List(Of PowerPoint.Slide))
+        For Each slide As PowerPoint.Slide In importedSlides
             Dim slideBackgroundLuminance = GetSlideBackgroundLuminance(slide)
 
             For Each shape As PowerPoint.Shape In slide.Shapes
