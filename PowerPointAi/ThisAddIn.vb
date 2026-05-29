@@ -8,6 +8,8 @@ Imports ShareRibbon
 Public Class ThisAddIn
 
     Private chatTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    Private themePptTaskPane As Microsoft.Office.Tools.CustomTaskPane
+    Private themePptControl As ThemePptTaskPane
     Public Shared chatControl As ChatControl
     ' 翻译服务：延迟初始化，首次使用时创建
     Private _translateService As PowerPointTranslateService
@@ -66,6 +68,8 @@ Public Class ThisAddIn
             widthTimer.Dispose()
             widthTimer = Nothing
         End If
+        themePptTaskPane = Nothing
+        themePptControl = Nothing
     End Sub
 
     ' 创建聊天任务窗格
@@ -110,6 +114,17 @@ Public Class ThisAddIn
             loadChatHtml = False
             Await chatControl.LoadLocalHtmlFile()
         End If
+    End Sub
+
+    Public Sub ShowThemePptTaskPane()
+        If themePptTaskPane Is Nothing Then
+            themePptControl = New ThemePptTaskPane(Me.Application)
+            themePptTaskPane = Me.CustomTaskPanes.Add(themePptControl, "主题生成PPT")
+            themePptTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
+            themePptTaskPane.Width = 420
+        End If
+
+        themePptTaskPane.Visible = True
     End Sub
 
 End Class

@@ -605,65 +605,12 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 模板排版功能 - PowerPoint实现（使用JSON格式完整提取模板结构）
+    ' 主题生成PPT - 打开 Docmee V2 演示任务窗格
     Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            ' 1. 打开文件对话框选择模板文件
-            Using openDialog As New OpenFileDialog()
-                openDialog.Title = "选择PowerPoint模板文件"
-                openDialog.Filter = "PowerPoint文件|*.pptx;*.ppt|所有文件|*.*"
-                openDialog.FilterIndex = 1
-
-                If openDialog.ShowDialog() <> DialogResult.OK Then Return
-
-                Dim templatePath = openDialog.FileName
-                Dim templateName = System.IO.Path.GetFileName(templatePath)
-
-                ' 2. 读取模板文件内容 - 使用JSON格式完整提取
-                Dim pptApp = Globals.ThisAddIn.Application
-                Dim templateJson As JObject = Nothing
-
-                ' 打开模板演示文稿（只读）
-                Dim templatePres As Microsoft.Office.Interop.PowerPoint.Presentation = Nothing
-                Try
-                    templatePres = pptApp.Presentations.Open(templatePath, ReadOnly:=Microsoft.Office.Core.MsoTriState.msoTrue, WithWindow:=Microsoft.Office.Core.MsoTriState.msoFalse)
-
-                    ' 构建JSON结构
-                    templateJson = ExtractPresentationStructure(templatePres, templateName)
-                Finally
-                    If templatePres IsNot Nothing Then
-                        templatePres.Close()
-                    End If
-                End Try
-
-                If templateJson Is Nothing Then
-                    MessageBox.Show("无法解析模板文件内容。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-                    Return
-                End If
-
-                ' 3. 打开Chat面板并进入模板渲染模式
-                Globals.ThisAddIn.ShowChatTaskPane()
-                Dim chatCtrl = ThisAddIn.chatControl
-                If chatCtrl IsNot Nothing Then
-                    ' 将JSON转为字符串传递给JS
-                    Dim templateContent = templateJson.ToString(Formatting.Indented)
-
-                    ' 调用JS进入模板渲染模式
-                    Task.Run(Async Function()
-                                 Await Task.Delay(500)
-                                 Dim jsCall = $"enterTemplateMode(`{EscapeForJs(templateContent)}`, `{EscapeForJs(templateName)}`);"
-                                 Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCall)
-                             End Function)
-
-                    MessageBox.Show("已进入模板渲染模式！" & vbCrLf & vbCrLf &
-                                    "模板结构已解析完成（包含幻灯片、文本、样式、图片等信息）。" & vbCrLf &
-                                    "现在您可以在Chat中输入内容需求，AI将按照模板格式生成内容。" & vbCrLf &
-                                    "生成完成后可选择插入位置将内容插入到演示文稿中。",
-                                    "模板模式已激活", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                End If
-            End Using
+            Globals.ThisAddIn.ShowThemePptTaskPane()
         Catch ex As Exception
-            MessageBox.Show("加载模板时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("打开主题生成PPT面板出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 

@@ -85,7 +85,11 @@ Partial Class Ribbon1
         Me.ReformatButton.ScreenTip = "PPT单页美化"
         Me.ReformatButton.SuperTip = "对当前页应用演示版排版美化，统一字体、颜色、标题和文本框适配"
         Me.DataAnalysisButton.Visible = False
-        Me.TemplateFormatButton.Visible = False
+        Me.TemplateFormatButton.Visible = True
+        Me.TemplateFormatButton.Image = ShareRibbon.SharedResources.Aiwrite
+        Me.TemplateFormatButton.Label = "主题生成PPT"
+        Me.TemplateFormatButton.ScreenTip = "主题生成PPT"
+        Me.TemplateFormatButton.SuperTip = "输入主题，调用 Docmee V2 测试接口生成大纲，并插入为简单 PPT"
     End Sub
 
 End Class

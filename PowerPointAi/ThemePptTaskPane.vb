@@ -1,0 +1,408 @@
+Imports System.Collections.Generic
+Imports System.Drawing
+Imports System.Text
+Imports System.Threading.Tasks
+Imports System.Windows.Forms
+Imports Microsoft.Office.Core
+Imports Newtonsoft.Json.Linq
+Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
+
+Public Class ThemePptTaskPane
+    Inherits UserControl
+
+    Private ReadOnly _pptApp As PowerPoint.Application
+    Private ReadOnly _client As New DocmeePptClient()
+    Private _outline As JObject
+
+    Private ReadOnly _topicBox As New TextBox()
+    Private ReadOnly _generateButton As New Button()
+    Private ReadOnly _insertButton As New Button()
+    Private ReadOnly _outputBox As New TextBox()
+    Private ReadOnly _statusLabel As New Label()
+
+    Public Sub New(pptApp As PowerPoint.Application)
+        _pptApp = pptApp
+        BuildLayout()
+    End Sub
+
+    Private Sub BuildLayout()
+        Me.BackColor = Color.White
+        Me.Padding = New Padding(14)
+
+        Dim layout As New TableLayoutPanel()
+        layout.Dock = DockStyle.Fill
+        layout.ColumnCount = 1
+        layout.RowCount = 6
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 96.0F))
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+
+        Dim titleLabel As New Label()
+        titleLabel.AutoSize = True
+        titleLabel.Font = New Font(Me.Font.FontFamily, 12.0F, FontStyle.Bold)
+        titleLabel.Text = "主题生成PPT"
+        titleLabel.Margin = New Padding(0, 0, 0, 8)
+
+        _topicBox.Dock = DockStyle.Fill
+        _topicBox.Multiline = True
+        _topicBox.ScrollBars = ScrollBars.Vertical
+        _topicBox.Text = "AI 办公趋势"
+        _topicBox.Margin = New Padding(0, 0, 0, 10)
+
+        Dim buttonPanel As New FlowLayoutPanel()
+        buttonPanel.AutoSize = True
+        buttonPanel.Dock = DockStyle.Fill
+        buttonPanel.FlowDirection = FlowDirection.LeftToRight
+        buttonPanel.WrapContents = False
+        buttonPanel.Margin = New Padding(0, 0, 0, 10)
+
+        _generateButton.Text = "生成大纲"
+        _generateButton.Width = 104
+        _generateButton.Height = 32
+        AddHandler _generateButton.Click, AddressOf GenerateButton_Click
+
+        _insertButton.Text = "插入PPT"
+        _insertButton.Width = 104
+        _insertButton.Height = 32
+        _insertButton.Enabled = False
+        AddHandler _insertButton.Click, AddressOf InsertButton_Click
+
+        buttonPanel.Controls.Add(_generateButton)
+        buttonPanel.Controls.Add(_insertButton)
+
+        _statusLabel.AutoSize = True
+        _statusLabel.ForeColor = Color.FromArgb(86, 94, 108)
+        _statusLabel.Text = "输入主题后生成大纲。"
+        _statusLabel.Margin = New Padding(0, 0, 0, 8)
+
+        _outputBox.Dock = DockStyle.Fill
+        _outputBox.Multiline = True
+        _outputBox.ReadOnly = True
+        _outputBox.ScrollBars = ScrollBars.Vertical
+        _outputBox.BackColor = Color.FromArgb(248, 250, 252)
+        _outputBox.BorderStyle = BorderStyle.FixedSingle
+        _outputBox.Margin = New Padding(0, 0, 0, 10)
+
+        Dim hintLabel As New Label()
+        hintLabel.AutoSize = False
+        hintLabel.Dock = DockStyle.Fill
+        hintLabel.Height = 42
+        hintLabel.ForeColor = Color.FromArgb(86, 94, 108)
+        hintLabel.Text = "演示版使用 test.docmee.cn 和 ak_demo，生成后会按大纲插入标题页与内容页。"
+
+        layout.Controls.Add(titleLabel, 0, 0)
+        layout.Controls.Add(_topicBox, 0, 1)
+        layout.Controls.Add(buttonPanel, 0, 2)
+        layout.Controls.Add(_statusLabel, 0, 3)
+        layout.Controls.Add(_outputBox, 0, 4)
+        layout.Controls.Add(hintLabel, 0, 5)
+
+        Me.Controls.Add(layout)
+    End Sub
+
+    Private Async Sub GenerateButton_Click(sender As Object, e As EventArgs)
+        Await GenerateOutlineAsync()
+    End Sub
+
+    Private Async Function GenerateOutlineAsync() As Task
+        Dim topic = _topicBox.Text.Trim()
+        If String.IsNullOrWhiteSpace(topic) Then
+            MessageBox.Show("请输入 PPT 主题。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        _generateButton.Enabled = False
+        _insertButton.Enabled = False
+        _outputBox.Clear()
+
+        Try
+            Dim requestContent = BuildRequestContent(topic)
+            SetStatus("正在创建 Docmee 任务...")
+            Dim taskId = Await _client.CreateTaskAsync(requestContent)
+
+            SetStatus("正在生成 PPT 大纲...")
+            _outline = Await _client.GenerateContentAsync(taskId)
+
+            _outputBox.Text = RenderOutlineText(_outline)
+            _insertButton.Enabled = True
+            SetStatus("大纲已生成，可以插入当前 PPT。")
+        Catch ex As Exception
+            SetStatus("生成失败。")
+            MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            _generateButton.Enabled = True
+        End Try
+    End Function
+
+    Private Sub InsertButton_Click(sender As Object, e As EventArgs)
+        Try
+            InsertOutlineIntoPresentation(_outline)
+            SetStatus("已插入到当前演示文稿。")
+        Catch ex As Exception
+            MessageBox.Show("插入 PPT 失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Public Sub InsertOutlineIntoPresentation(outline As JObject)
+        If outline Is Nothing Then
+            Throw New InvalidOperationException("请先生成大纲。")
+        End If
+
+        Dim presentation = GetOrCreatePresentation()
+        Dim root = GetContentRoot(outline)
+        Dim presentationTitle = GetNodeText(root, "主题生成PPT")
+        Dim sections = GetChildren(root)
+
+        CreateCoverSlide(presentation, presentationTitle)
+
+        If sections.Count = 0 Then
+            Dim fallbackLines = CollectBodyLines(root, 0)
+            If fallbackLines.Count = 0 Then fallbackLines.Add("- " & presentationTitle)
+            CreateContentSlide(presentation, "内容大纲", fallbackLines)
+            Return
+        End If
+
+        For Each child In sections
+            Dim childObj = TryCast(child, JObject)
+            If childObj Is Nothing Then Continue For
+            If IsDocmeeCoverPage(childObj) AndAlso sections.Count > 1 Then Continue For
+
+            Dim slideTitle = GetNodeText(childObj, "内容页")
+            Dim bodyLines = CollectBodyLines(childObj, 0)
+            If bodyLines.Count = 0 Then bodyLines.Add("- " & slideTitle)
+            CreateContentSlide(presentation, slideTitle, bodyLines)
+        Next
+    End Sub
+
+    Private Function GetOrCreatePresentation() As PowerPoint.Presentation
+        Try
+            If _pptApp.Presentations.Count > 0 Then
+                Return _pptApp.ActivePresentation
+            End If
+        Catch
+        End Try
+
+        Return _pptApp.Presentations.Add(MsoTriState.msoTrue)
+    End Function
+
+    Private Sub CreateCoverSlide(presentation As PowerPoint.Presentation, titleText As String)
+        Dim slide = presentation.Slides.Add(presentation.Slides.Count + 1, PowerPoint.PpSlideLayout.ppLayoutTitleOnly)
+        ApplySlideTheme(slide, presentation, True)
+        SetTitleText(slide, titleText, 34.0F, True)
+    End Sub
+
+    Private Sub CreateContentSlide(presentation As PowerPoint.Presentation, titleText As String, bodyLines As List(Of String))
+        Dim slide = presentation.Slides.Add(presentation.Slides.Count + 1, PowerPoint.PpSlideLayout.ppLayoutTitleOnly)
+        ApplySlideTheme(slide, presentation, False)
+        SetTitleText(slide, titleText, 24.0F, False)
+
+        Dim left = 54.0F
+        Dim top = 108.0F
+        Dim width = CSng(presentation.PageSetup.SlideWidth - left * 2)
+        Dim height = CSng(presentation.PageSetup.SlideHeight - top - 46.0F)
+        Dim bodyShape = slide.Shapes.AddTextbox(MsoTextOrientation.msoTextOrientationHorizontal, left, top, width, height)
+        Dim bodyRange = bodyShape.TextFrame.TextRange
+        bodyRange.Text = String.Join(vbCrLf, bodyLines)
+        bodyRange.Font.Name = "微软雅黑"
+        bodyRange.Font.Size = 17
+        bodyRange.Font.Color.RGB = RGB(45, 52, 64)
+        bodyShape.TextFrame.MarginLeft = 12
+        bodyShape.TextFrame.MarginRight = 12
+        bodyShape.TextFrame.MarginTop = 8
+        bodyShape.TextFrame.AutoSize = PowerPoint.PpAutoSize.ppAutoSizeShapeToFitText
+    End Sub
+
+    Private Sub ApplySlideTheme(slide As PowerPoint.Slide, presentation As PowerPoint.Presentation, isCover As Boolean)
+        slide.FollowMasterBackground = MsoTriState.msoFalse
+        slide.Background.Fill.Solid()
+        slide.Background.Fill.ForeColor.RGB = If(isCover, RGB(242, 247, 255), RGB(248, 250, 252))
+
+        Dim accent = slide.Shapes.AddShape(MsoAutoShapeType.msoShapeRectangle, 0, 0, 10, CSng(presentation.PageSetup.SlideHeight))
+        accent.Fill.ForeColor.RGB = RGB(26, 115, 232)
+        accent.Line.Visible = MsoTriState.msoFalse
+    End Sub
+
+    Private Sub SetTitleText(slide As PowerPoint.Slide, titleText As String, fontSize As Single, center As Boolean)
+        Dim titleShape As PowerPoint.Shape = Nothing
+        Try
+            If slide.Shapes.HasTitle = MsoTriState.msoTrue Then
+                titleShape = slide.Shapes.Title
+            End If
+        Catch
+        End Try
+
+        If titleShape Is Nothing Then
+            titleShape = slide.Shapes.AddTextbox(MsoTextOrientation.msoTextOrientationHorizontal, 54, 38, 620, 54)
+        End If
+
+        Dim titleRange = titleShape.TextFrame.TextRange
+        titleRange.Text = titleText
+        titleRange.Font.Name = "微软雅黑"
+        titleRange.Font.Size = fontSize
+        titleRange.Font.Bold = MsoTriState.msoTrue
+        titleRange.Font.Color.RGB = RGB(22, 32, 48)
+        titleRange.ParagraphFormat.Alignment = If(center, PowerPoint.PpParagraphAlignment.ppAlignCenter, PowerPoint.PpParagraphAlignment.ppAlignLeft)
+
+        If center Then
+            titleShape.Left = 64
+            titleShape.Top = 170
+            titleShape.Width = 600
+            titleShape.Height = 110
+        Else
+            titleShape.Left = 54
+            titleShape.Top = 40
+            titleShape.Width = 620
+            titleShape.Height = 54
+        End If
+    End Sub
+
+    Private Function BuildRequestContent(topic As String) As String
+        If topic.Contains("PPT") OrElse topic.Contains("ppt") OrElse topic.StartsWith("请生成") Then
+            Return topic
+        End If
+
+        Return $"请生成一份关于 {topic} 的产品介绍 PPT"
+    End Function
+
+    Private Function RenderOutlineText(outline As JObject) As String
+        Dim root = GetContentRoot(outline)
+        Dim builder As New StringBuilder()
+        AppendOutlineLine(builder, root, 0)
+        Return builder.ToString().Trim()
+    End Function
+
+    Private Sub AppendOutlineLine(builder As StringBuilder, node As JObject, level As Integer)
+        Dim text = GetNodeText(node, "")
+        If Not String.IsNullOrWhiteSpace(text) Then
+            builder.Append(New String(" "c, level * 2))
+            builder.AppendLine("- " & text)
+        End If
+
+        For Each line In GetDirectContentLines(node, level + 1)
+            builder.AppendLine(line)
+        Next
+
+        For Each child In GetChildren(node)
+            Dim childObj = TryCast(child, JObject)
+            If childObj IsNot Nothing Then AppendOutlineLine(builder, childObj, level + 1)
+        Next
+    End Sub
+
+    Private Function CollectBodyLines(node As JObject, level As Integer) As List(Of String)
+        Dim lines As New List(Of String)()
+        lines.AddRange(GetDirectContentLines(node, level))
+
+        For Each child In GetChildren(node)
+            Dim childObj = TryCast(child, JObject)
+            If childObj Is Nothing Then Continue For
+
+            Dim text = GetNodeText(childObj, "")
+            If Not String.IsNullOrWhiteSpace(text) Then
+                lines.Add(New String(" "c, level * 2) & "- " & text)
+            End If
+
+            lines.AddRange(CollectBodyLines(childObj, level + 1))
+        Next
+        Return lines
+    End Function
+
+    Private Function GetContentRoot(outline As JObject) As JObject
+        Dim children = GetChildren(outline)
+        If Not HasNodeText(outline) AndAlso children.Count = 1 Then
+            Dim onlyChild = TryCast(children(0), JObject)
+            If onlyChild IsNot Nothing Then Return onlyChild
+        End If
+
+        Return outline
+    End Function
+
+    Private Function GetChildren(node As JObject) As JArray
+        If node Is Nothing Then Return New JArray()
+
+        Dim children = TryCast(node("children"), JArray)
+        If children IsNot Nothing Then Return children
+
+        children = TryCast(node("items"), JArray)
+        If children IsNot Nothing Then Return children
+
+        children = TryCast(node("subTitle"), JArray)
+        If children IsNot Nothing Then Return children
+
+        children = TryCast(node("pages"), JArray)
+        If children IsNot Nothing Then Return children
+
+        Return New JArray()
+    End Function
+
+    Private Function GetNodeText(node As JObject, fallback As String) As String
+        If node Is Nothing Then Return fallback
+
+        Dim candidates = {"overall_theme", "name", "title", "subtitle", "text"}
+        For Each key In candidates
+            Dim token = node(key)
+            If token IsNot Nothing AndAlso token.Type = JTokenType.String Then
+                Dim value = token.ToString().Trim()
+                If Not String.IsNullOrWhiteSpace(value) Then Return value
+            End If
+        Next
+
+        Return fallback
+    End Function
+
+    Private Function IsDocmeeCoverPage(node As JObject) As Boolean
+        Dim pageType = If(node("page_type"), node("pageType"))
+        If pageType Is Nothing OrElse pageType.Type <> JTokenType.String Then Return False
+        Return String.Equals(pageType.ToString(), "cover", StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    Private Function GetDirectContentLines(node As JObject, level As Integer) As List(Of String)
+        Dim lines As New List(Of String)()
+        If node Is Nothing Then Return lines
+
+        AddTextLines(lines, node("subtitle"), level)
+        AddTextLines(lines, node("text"), level)
+
+        Dim content = node("content")
+        If TypeOf content Is JObject Then
+            Dim contentObj = DirectCast(content, JObject)
+            AddTextLines(lines, contentObj("subtitle"), level)
+            AddTextLines(lines, contentObj("text"), level)
+
+            For Each prop As JProperty In contentObj.Properties()
+                If prop.Name = "subtitle" OrElse prop.Name = "text" Then Continue For
+                If prop.Value.Type = JTokenType.String Then
+                    AddTextLines(lines, prop.Value, level)
+                End If
+            Next
+        Else
+            AddTextLines(lines, content, level)
+        End If
+
+        Return lines
+    End Function
+
+    Private Sub AddTextLines(lines As List(Of String), token As JToken, level As Integer)
+        If token Is Nothing OrElse token.Type <> JTokenType.String Then Return
+
+        Dim rawText = token.ToString().Trim()
+        If String.IsNullOrWhiteSpace(rawText) Then Return
+
+        Dim parts = rawText.Replace(vbCrLf, vbLf).Split({vbLf}, StringSplitOptions.None)
+        For Each part In parts
+            Dim value = part.Trim()
+            If String.IsNullOrWhiteSpace(value) Then Continue For
+            lines.Add(New String(" "c, level * 2) & "- " & value)
+        Next
+    End Sub
+
+    Private Function HasNodeText(node As JObject) As Boolean
+        Return Not String.IsNullOrWhiteSpace(GetNodeText(node, ""))
+    End Function
+
+    Private Sub SetStatus(text As String)
+        _statusLabel.Text = text
+    End Sub
+End Class
