@@ -50,6 +50,8 @@ Lessons learned from errors encountered in this project. Updated automatically b
 
 **Solution:** Open the downloaded PPTX hidden and read-only, copy each generated slide, paste it into the active presentation, then apply readability normalization only to the pasted slide objects.
 
+**Recurring:** Hit again on 2026-05-29 with master/theme background images missing after ordinary `Slides.Paste`. The fix needs PowerPoint's keep-source-formatting paste command (`PasteSourceFormatting`) before falling back to ordinary paste.
+
 ## 2026-05-29 Docmee Markdown Stream Final Event May Contain JSON
 
 **Problem:** The task pane failed with `Docmee 返回内容中没有可用的 Markdown result` after requesting a Markdown outline.

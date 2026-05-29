@@ -69,8 +69,12 @@ assert(pane.includes('AppendTaskPaneLine("本地保存路径: " & localPath)'), 
 assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
 assert(pane.includes('ImportPptxIntoPresentation'), 'ThemePptTaskPane must import the downloaded PPT into the active presentation');
 assert(pane.includes('Presentations.Open(downloadPath'), 'ThemePptTaskPane must open the generated PPTX before importing slides');
-assert(pane.includes('sourcePresentation.Slides(slideIndex).Copy()'), 'ThemePptTaskPane must copy full generated slides to preserve template elements');
-assert(pane.includes('target.Slides.Paste(target.Slides.Count + 1)'), 'ThemePptTaskPane must paste generated slides into the current PPT');
+assert(pane.includes('sourceSlide.Copy()'), 'ThemePptTaskPane must copy full generated slides to preserve template elements');
+assert(pane.includes('TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex))'), 'ThemePptTaskPane must use source-formatting paste for generated slides');
+assert(pane.includes('target.Windows(1).Activate()'), 'ThemePptTaskPane must activate the destination window before source-formatting paste');
+assert(pane.includes('target.Windows(1).View.GotoSlide(target.Slides.Count)'), 'ThemePptTaskPane must move the destination view to the end before source-formatting paste');
+assert(pane.includes('_pptApp.CommandBars.ExecuteMso("PasteSourceFormatting")'), 'ThemePptTaskPane must request PowerPoint keep-source-formatting paste');
+assert(pane.includes('target.Slides.Paste(target.Slides.Count + 1)'), 'ThemePptTaskPane must keep a normal paste fallback');
 assert(!pane.includes('InsertFromFile'), 'ThemePptTaskPane must not rely on InsertFromFile for Docmee imports');
 assert(pane.includes('FixInsertedSlideReadability'), 'ThemePptTaskPane must improve readability only on newly inserted slides');
 assert(pane.includes('importedSlides.Add'), 'ThemePptTaskPane must track exactly pasted slides for readability adjustments');

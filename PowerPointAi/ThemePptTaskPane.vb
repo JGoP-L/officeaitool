@@ -333,11 +333,8 @@ Public Class ThemePptTaskPane
                 WithWindow:=MsoTriState.msoFalse)
 
             For slideIndex As Integer = 1 To sourcePresentation.Slides.Count
-                sourcePresentation.Slides(slideIndex).Copy()
-                Dim pastedSlides = target.Slides.Paste(target.Slides.Count + 1)
-                If pastedSlides IsNot Nothing AndAlso pastedSlides.Count > 0 Then
-                    importedSlides.Add(pastedSlides(1))
-                End If
+                Dim pastedSlide = TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex))
+                If pastedSlide IsNot Nothing Then importedSlides.Add(pastedSlide)
             Next
         Finally
             If sourcePresentation IsNot Nothing Then
@@ -347,6 +344,65 @@ Public Class ThemePptTaskPane
 
         If importedSlides.Count > 0 Then FixInsertedSlideReadability(importedSlides)
     End Sub
+
+    Private Function TryPasteSlideWithSourceFormatting(target As PowerPoint.Presentation, sourceSlide As PowerPoint.Slide) As PowerPoint.Slide
+        Dim beforeCount = target.Slides.Count
+
+        Try
+            sourceSlide.Copy()
+            ActivateDestinationAtEnd(target)
+            _pptApp.CommandBars.ExecuteMso("PasteSourceFormatting")
+
+            If WaitForPastedSlide(target, beforeCount) Then
+                Dim pastedSlide = GetSelectedSlide(target)
+                If pastedSlide IsNot Nothing Then
+                    pastedSlide.MoveTo(target.Slides.Count)
+                    Return target.Slides(target.Slides.Count)
+                End If
+
+                Return target.Slides(target.Slides.Count)
+            End If
+        Catch
+        End Try
+
+        sourceSlide.Copy()
+        Dim pastedSlides = target.Slides.Paste(target.Slides.Count + 1)
+        If pastedSlides IsNot Nothing AndAlso pastedSlides.Count > 0 Then Return pastedSlides(1)
+        Return Nothing
+    End Function
+
+    Private Sub ActivateDestinationAtEnd(target As PowerPoint.Presentation)
+        If target.Windows.Count <= 0 Then Return
+
+        target.Windows(1).Activate()
+        If target.Slides.Count > 0 Then
+            target.Windows(1).View.GotoSlide(target.Slides.Count)
+        End If
+    End Sub
+
+    Private Function WaitForPastedSlide(target As PowerPoint.Presentation, beforeCount As Integer) As Boolean
+        For attempt As Integer = 1 To 10
+            If target.Slides.Count > beforeCount Then Return True
+            System.Windows.Forms.Application.DoEvents()
+            System.Threading.Thread.Sleep(50)
+        Next
+
+        Return target.Slides.Count > beforeCount
+    End Function
+
+    Private Function GetSelectedSlide(target As PowerPoint.Presentation) As PowerPoint.Slide
+        Try
+            Dim selection = _pptApp.ActiveWindow.Selection
+            If selection IsNot Nothing AndAlso
+               selection.SlideRange IsNot Nothing AndAlso
+               selection.SlideRange.Count > 0 Then
+                Return selection.SlideRange(1)
+            End If
+        Catch
+        End Try
+
+        Return Nothing
+    End Function
 
     Private Sub FixInsertedSlideReadability(importedSlides As List(Of PowerPoint.Slide))
         For Each slide As PowerPoint.Slide In importedSlides
