@@ -251,9 +251,11 @@ Public Class ThemePptTaskPane
 
             SetStatus("正在获取 PPTX 下载地址...")
             Dim fileUrl = Await _client.DownloadPptxAsync(pptId)
+            AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)
 
             SetStatus("正在下载 PPTX...")
             Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_{pptId}.pptx")
+            AppendTaskPaneLine("本地保存路径: " & localPath)
             Await _client.DownloadPptxFileAsync(fileUrl, localPath)
 
             SetStatus("正在导入当前演示文稿...")
@@ -268,6 +270,21 @@ Public Class ThemePptTaskPane
             _refreshTemplatesButton.Enabled = True
         End Try
     End Function
+
+    Private Sub AppendTaskPaneLine(text As String)
+        If _outputBox.InvokeRequired Then
+            _outputBox.BeginInvoke(CType(Sub() AppendTaskPaneLine(text), MethodInvoker))
+            Return
+        End If
+
+        If _outputBox.TextLength > 0 AndAlso Not _outputBox.Text.EndsWith(vbCrLf) Then
+            _outputBox.AppendText(vbCrLf)
+        End If
+
+        _outputBox.AppendText(vbCrLf & text & vbCrLf)
+        _outputBox.SelectionStart = _outputBox.TextLength
+        _outputBox.ScrollToCaret()
+    End Sub
 
     Public Sub InsertOutlineIntoPresentation(outline As JObject)
         If outline Is Nothing Then

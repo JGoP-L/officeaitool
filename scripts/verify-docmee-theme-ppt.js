@@ -62,6 +62,8 @@ assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template sele
 assert(pane.includes('Dim markdown = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must send the same markdown outline into generatePptx');
 assert(pane.includes('GeneratePptxAsync'), 'ThemePptTaskPane must generate PPT with the selected template');
 assert(pane.includes('DownloadPptxAsync'), 'ThemePptTaskPane must request a PPT download URL');
+assert(pane.includes('AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)'), 'ThemePptTaskPane must print the returned PPTX download URL for manual comparison');
+assert(pane.includes('AppendTaskPaneLine("本地保存路径: " & localPath)'), 'ThemePptTaskPane must print the local downloaded PPTX path for manual comparison');
 assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
 assert(pane.includes('ImportPptxIntoPresentation'), 'ThemePptTaskPane must import the downloaded PPT into the active presentation');
 assert(pane.includes('Presentations.Open(downloadPath'), 'ThemePptTaskPane must open the generated PPTX before importing slides');
