@@ -1,5 +1,6 @@
 Imports System.Collections.Generic
 Imports System.Drawing
+Imports System.IO
 Imports System.Text
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
@@ -13,10 +14,13 @@ Public Class ThemePptTaskPane
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
     Private _outline As JObject
+    Private _taskId As String
 
     Private ReadOnly _topicBox As New TextBox()
     Private ReadOnly _generateButton As New Button()
     Private ReadOnly _insertButton As New Button()
+    Private ReadOnly _templateCombo As New ComboBox()
+    Private ReadOnly _refreshTemplatesButton As New Button()
     Private ReadOnly _outputBox As New TextBox()
     Private ReadOnly _statusLabel As New Label()
 
@@ -32,9 +36,11 @@ Public Class ThemePptTaskPane
         Dim layout As New TableLayoutPanel()
         layout.Dock = DockStyle.Fill
         layout.ColumnCount = 1
-        layout.RowCount = 6
+        layout.RowCount = 8
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 96.0F))
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
@@ -64,8 +70,8 @@ Public Class ThemePptTaskPane
         _generateButton.Height = 32
         AddHandler _generateButton.Click, AddressOf GenerateButton_Click
 
-        _insertButton.Text = "插入PPT"
-        _insertButton.Width = 104
+        _insertButton.Text = "生成并导入"
+        _insertButton.Width = 118
         _insertButton.Height = 32
         _insertButton.Enabled = False
         AddHandler _insertButton.Click, AddressOf InsertButton_Click
@@ -73,9 +79,34 @@ Public Class ThemePptTaskPane
         buttonPanel.Controls.Add(_generateButton)
         buttonPanel.Controls.Add(_insertButton)
 
+        Dim templateLabel As New Label()
+        templateLabel.AutoSize = True
+        templateLabel.Text = "模板"
+        templateLabel.Margin = New Padding(0, 0, 0, 4)
+
+        Dim templatePanel As New TableLayoutPanel()
+        templatePanel.Dock = DockStyle.Fill
+        templatePanel.ColumnCount = 2
+        templatePanel.RowCount = 1
+        templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        templatePanel.Margin = New Padding(0, 0, 0, 10)
+
+        _templateCombo.Dock = DockStyle.Fill
+        _templateCombo.DropDownStyle = ComboBoxStyle.DropDownList
+        _templateCombo.Enabled = False
+
+        _refreshTemplatesButton.Text = "刷新"
+        _refreshTemplatesButton.Width = 66
+        _refreshTemplatesButton.Height = 28
+        AddHandler _refreshTemplatesButton.Click, AddressOf RefreshTemplatesButton_Click
+
+        templatePanel.Controls.Add(_templateCombo, 0, 0)
+        templatePanel.Controls.Add(_refreshTemplatesButton, 1, 0)
+
         _statusLabel.AutoSize = True
         _statusLabel.ForeColor = Color.FromArgb(86, 94, 108)
-        _statusLabel.Text = "输入主题后生成大纲。"
+        _statusLabel.Text = "输入主题，生成大纲后选择模板，再生成并导入 PPT。"
         _statusLabel.Margin = New Padding(0, 0, 0, 8)
 
         _outputBox.Dock = DockStyle.Fill
@@ -91,20 +122,26 @@ Public Class ThemePptTaskPane
         hintLabel.Dock = DockStyle.Fill
         hintLabel.Height = 42
         hintLabel.ForeColor = Color.FromArgb(86, 94, 108)
-        hintLabel.Text = "演示版使用 test.docmee.cn 和 ak_demo，生成后会按大纲插入标题页与内容页。"
+        hintLabel.Text = "演示版使用 test.docmee.cn 和 ak_demo，生成的 PPTX 会下载到临时目录并导入当前演示文稿。"
 
         layout.Controls.Add(titleLabel, 0, 0)
         layout.Controls.Add(_topicBox, 0, 1)
         layout.Controls.Add(buttonPanel, 0, 2)
-        layout.Controls.Add(_statusLabel, 0, 3)
-        layout.Controls.Add(_outputBox, 0, 4)
-        layout.Controls.Add(hintLabel, 0, 5)
+        layout.Controls.Add(templateLabel, 0, 3)
+        layout.Controls.Add(templatePanel, 0, 4)
+        layout.Controls.Add(_statusLabel, 0, 5)
+        layout.Controls.Add(_outputBox, 0, 6)
+        layout.Controls.Add(hintLabel, 0, 7)
 
         Me.Controls.Add(layout)
     End Sub
 
     Private Async Sub GenerateButton_Click(sender As Object, e As EventArgs)
         Await GenerateOutlineAsync()
+    End Sub
+
+    Private Async Sub RefreshTemplatesButton_Click(sender As Object, e As EventArgs)
+        Await LoadTemplatesAsync()
     End Sub
 
     Private Async Function GenerateOutlineAsync() As Task
@@ -121,14 +158,15 @@ Public Class ThemePptTaskPane
         Try
             Dim requestContent = BuildRequestContent(topic)
             SetStatus("正在创建 Docmee 任务...")
-            Dim taskId = Await _client.CreateTaskAsync(requestContent)
+            _taskId = Await _client.CreateTaskAsync(requestContent)
 
             SetStatus("正在生成 PPT 大纲...")
-            _outline = Await _client.GenerateContentAsync(taskId)
+            _outline = Await _client.GenerateContentAsync(_taskId)
 
             _outputBox.Text = RenderOutlineText(_outline)
+            Await LoadTemplatesAsync()
             _insertButton.Enabled = True
-            SetStatus("大纲已生成，可以插入当前 PPT。")
+            SetStatus("大纲已生成，请选择模板后生成并导入。")
         Catch ex As Exception
             SetStatus("生成失败。")
             MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -137,14 +175,82 @@ Public Class ThemePptTaskPane
         End Try
     End Function
 
-    Private Sub InsertButton_Click(sender As Object, e As EventArgs)
-        Try
-            InsertOutlineIntoPresentation(_outline)
-            SetStatus("已插入到当前演示文稿。")
-        Catch ex As Exception
-            MessageBox.Show("插入 PPT 失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
+    Private Async Sub InsertButton_Click(sender As Object, e As EventArgs)
+        Await GenerateAndImportPptxAsync()
     End Sub
+
+    Private Async Function LoadTemplatesAsync() As Task
+        _refreshTemplatesButton.Enabled = False
+
+        Try
+            SetStatus("正在加载 Docmee 模板...")
+            Dim templates = Await _client.ListTemplatesAsync(1, 20)
+            _templateCombo.Items.Clear()
+
+            For Each template In templates
+                _templateCombo.Items.Add(template)
+            Next
+
+            _templateCombo.Enabled = _templateCombo.Items.Count > 0
+            If _templateCombo.Items.Count > 0 AndAlso _templateCombo.SelectedIndex < 0 Then
+                _templateCombo.SelectedIndex = 0
+            End If
+
+            If _templateCombo.Items.Count = 0 Then
+                SetStatus("未获取到可用模板。")
+            Else
+                SetStatus($"已加载 {_templateCombo.Items.Count} 个模板。")
+            End If
+        Catch ex As Exception
+            _templateCombo.Enabled = False
+            SetStatus("模板加载失败。")
+            MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        Finally
+            _refreshTemplatesButton.Enabled = True
+        End Try
+    End Function
+
+    Private Async Function GenerateAndImportPptxAsync() As Task
+        If String.IsNullOrWhiteSpace(_taskId) OrElse _outline Is Nothing Then
+            MessageBox.Show("请先生成大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
+        If selectedTemplate Is Nothing OrElse String.IsNullOrWhiteSpace(selectedTemplate.Id) Then
+            MessageBox.Show("请先选择模板。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        _generateButton.Enabled = False
+        _insertButton.Enabled = False
+        _refreshTemplatesButton.Enabled = False
+
+        Try
+            Dim markdown = ConvertOutlineToMarkdown(_outline)
+
+            SetStatus("正在按所选模板生成 PPTX...")
+            Dim pptId = Await _client.GeneratePptxAsync(_taskId, selectedTemplate.Id, markdown)
+
+            SetStatus("正在获取 PPTX 下载地址...")
+            Dim fileUrl = Await _client.DownloadPptxAsync(pptId)
+
+            SetStatus("正在下载 PPTX...")
+            Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_{pptId}.pptx")
+            Await _client.DownloadPptxFileAsync(fileUrl, localPath)
+
+            SetStatus("正在导入当前演示文稿...")
+            ImportPptxIntoPresentation(localPath)
+            SetStatus("已生成并导入当前演示文稿。")
+        Catch ex As Exception
+            SetStatus("生成或导入失败。")
+            MessageBox.Show("生成并导入 PPT 失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            _generateButton.Enabled = True
+            _insertButton.Enabled = True
+            _refreshTemplatesButton.Enabled = True
+        End Try
+    End Function
 
     Public Sub InsertOutlineIntoPresentation(outline As JObject)
         If outline Is Nothing Then
@@ -175,6 +281,16 @@ Public Class ThemePptTaskPane
             If bodyLines.Count = 0 Then bodyLines.Add("- " & slideTitle)
             CreateContentSlide(presentation, slideTitle, bodyLines)
         Next
+    End Sub
+
+    Private Sub ImportPptxIntoPresentation(downloadPath As String)
+        If String.IsNullOrWhiteSpace(downloadPath) OrElse Not File.Exists(downloadPath) Then
+            Throw New FileNotFoundException("未找到下载后的 PPTX 文件。", downloadPath)
+        End If
+
+        Dim target = GetOrCreatePresentation()
+        Dim insertAfter = target.Slides.Count
+        target.Slides.InsertFromFile(downloadPath, insertAfter)
     End Sub
 
     Private Function GetOrCreatePresentation() As PowerPoint.Presentation
@@ -271,6 +387,36 @@ Public Class ThemePptTaskPane
         Dim root = GetContentRoot(outline)
         Dim builder As New StringBuilder()
         AppendOutlineLine(builder, root, 0)
+        Return builder.ToString().Trim()
+    End Function
+
+    Private Function ConvertOutlineToMarkdown(outline As JObject) As String
+        Dim root = GetContentRoot(outline)
+        Dim title = CleanMarkdown(GetNodeText(root, "主题生成PPT"))
+        Dim builder As New StringBuilder()
+        builder.AppendLine("# " & title)
+        builder.AppendLine()
+
+        Dim sections = GetChildren(root)
+        If sections.Count = 0 Then
+            For Each line In CollectBodyLines(root, 0)
+                builder.AppendLine(NormalizeMarkdownBullet(line))
+            Next
+            Return builder.ToString().Trim()
+        End If
+
+        For Each child In sections
+            Dim childObj = TryCast(child, JObject)
+            If childObj Is Nothing Then Continue For
+            If IsDocmeeCoverPage(childObj) AndAlso sections.Count > 1 Then Continue For
+
+            builder.AppendLine("## " & CleanMarkdown(GetNodeText(childObj, "内容页")))
+            For Each line In CollectBodyLines(childObj, 0)
+                builder.AppendLine(NormalizeMarkdownBullet(line))
+            Next
+            builder.AppendLine()
+        Next
+
         Return builder.ToString().Trim()
     End Function
 
@@ -397,6 +543,22 @@ Public Class ThemePptTaskPane
             lines.Add(New String(" "c, level * 2) & "- " & value)
         Next
     End Sub
+
+    Private Function NormalizeMarkdownBullet(line As String) As String
+        If String.IsNullOrWhiteSpace(line) Then Return "- "
+
+        Dim value = line.Trim()
+        While value.StartsWith("-")
+            value = value.Substring(1).Trim()
+        End While
+
+        Return "- " & CleanMarkdown(value)
+    End Function
+
+    Private Function CleanMarkdown(text As String) As String
+        If String.IsNullOrWhiteSpace(text) Then Return ""
+        Return text.Replace(vbCr, " ").Replace(vbLf, " ").Trim()
+    End Function
 
     Private Function HasNodeText(node As JObject) As Boolean
         Return Not String.IsNullOrWhiteSpace(GetNodeText(node, ""))

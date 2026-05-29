@@ -9,3 +9,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** The official flow documents JSON outline generation, but live test responses can use different JSON envelope shapes for the same generated outline content.
 
 **Solution:** Support both `children`/`items` outline trees and Docmee `pages` responses, and use `overall_theme` as a title candidate when inserting generated content into PowerPoint.
+
+## 2026-05-29 Docmee V2 Flow Must Continue After Outline
+
+**Problem:** The first implementation stopped after generating an outline and locally inserted simple slides, so it did not produce the actual templated Docmee PPTX.
+
+**Root Cause:** The V2 flow was implemented only through `createTask` and `generateContent`; it missed template selection, `generatePptx`, `downloadPptx`, and importing the downloaded file into the active presentation.
+
+**Solution:** Add template loading from `/api/ppt/templates`, generate the PPTX through `/api/ppt/v2/generatePptx`, request a downloadable file URL from `/api/ppt/downloadPptx`, download the PPTX, and insert it into the current PowerPoint with `Slides.InsertFromFile`.
