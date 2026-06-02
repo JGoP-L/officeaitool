@@ -28,7 +28,7 @@ assert(addIn.includes('New ThemePptTaskPane(Me.Application)'), 'ThisAddIn must c
 
 assert(project.includes('Compile Include="DocmeePptClient.vb"'), 'PowerPoint project must compile DocmeePptClient');
 assert(project.includes('Compile Include="ThemePptTaskPane.vb"'), 'PowerPoint project must compile ThemePptTaskPane');
-assert(installer.includes('"ProductVersion" = "8:2.9.0"'), 'installer version must be bumped so testers install the new template-card build');
+assert(installer.includes('"ProductVersion" = "8:2.10.0"'), 'installer version must be bumped so testers install the new template fallback build');
 assert(installer.includes('"RemovePreviousVersions" = "11:TRUE"'), 'installer must remove previous versions during upgrade');
 
 assert(client.includes('https://test.docmee.cn'), 'Docmee client must use the test API base URL');
@@ -51,6 +51,8 @@ assert(client.includes('progressHandler.Invoke(chunkText)'), 'GenerateContentAsy
 assert(client.includes('TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdown)'), 'markdown streaming must ignore final JSON result envelopes and keep streamed markdown chunks');
 assert(!client.includes('finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)'), 'markdown streaming must not throw when the final event result is a JSON outline object');
 assert(client.includes('/api/ppt/templates'), 'Docmee client must include the template list endpoint for later template selection');
+assert(client.includes('Public Shared Function GetFallbackTemplates() As List(Of DocmeeTemplateInfo)'), 'Docmee client must provide built-in demo templates when the live template list endpoint fails');
+assert(client.includes('.Id = "1940698099655794688"'), 'fallback templates must include a known Docmee demo template id');
 assert(client.includes('/api/ppt/v2/generatePptx'), 'Docmee client must generate PPTX after outline');
 assert(client.includes('/api/ppt/downloadPptx'), 'Docmee client must request a downloadable PPT file URL');
 assert(client.includes('Public Class DocmeePptInfo'), 'Docmee client must expose generated PPT metadata');
@@ -70,7 +72,7 @@ assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display ou
 assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
 assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
 assert(pane.includes('Private ReadOnly _templateCardPanel As New FlowLayoutPanel()'), 'ThemePptTaskPane must provide an OfficePLUS-like template card panel');
-assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.3"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
+assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.4"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
 assert(pane.includes('"版本 " & ThemePptPaneBuild'), 'ThemePptTaskPane hint text must include the visible build marker');
 assert(pane.includes('_templateCardPanel.AutoScroll = True'), 'template card panel must support scrolling through template covers');
 assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel must be hidden until templates are ready');
@@ -102,6 +104,12 @@ assert(pane.includes('SelectTemplate(template)'), 'clicking a template card must
 assert(pane.includes('RefreshTemplateSelectionStyles()'), 'template card selection must have a visual selected state');
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
 assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template selector');
+assert(pane.includes('Private _lastTemplateLoadUsedFallback As Boolean'), 'ThemePptTaskPane must remember whether template loading fell back');
+assert(pane.includes('PopulateTemplates(templates)'), 'ThemePptTaskPane must centralize template population so fallback templates render the same way');
+assert(pane.includes('DocmeePptClient.GetFallbackTemplates()'), 'ThemePptTaskPane must fall back to built-in demo templates if live template loading fails');
+assert(pane.includes('模板接口失败，已使用内置模板'), 'ThemePptTaskPane must tell the user when it is using fallback templates');
+assert(pane.includes('If _lastTemplateLoadUsedFallback Then'), 'ThemePptTaskPane must preserve fallback status after switching to the template gallery');
+assert(pane.includes('AppendTemplateLoadFailure(ex)'), 'ThemePptTaskPane must print the real template loading error for debugging');
 assert(pane.includes('Dim markdown = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must send the same markdown outline into generatePptx');
 assert(pane.includes('AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)'), 'ThemePptTaskPane must print the selected template id before generation');
 assert(pane.includes('Dim pptTaskId = Await _client.CreateMarkdownTaskAsync(markdown)'), 'ThemePptTaskPane must create a fresh markdown task for the selected template');

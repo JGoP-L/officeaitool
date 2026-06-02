@@ -12,13 +12,14 @@ Public Class ThemePptTaskPane
     Inherits UserControl
 
     Private Const TemplateCoverToken As String = "ak_demo"
-    Private Const ThemePptPaneBuild As String = "2026.06.02.3"
+    Private Const ThemePptPaneBuild As String = "2026.06.02.4"
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
     Private _outline As JObject
     Private _outlineMarkdown As String
     Private _taskId As String
+    Private _lastTemplateLoadUsedFallback As Boolean
 
     Private ReadOnly _topicBox As New TextBox()
     Private ReadOnly _generateButton As New Button()
@@ -211,7 +212,11 @@ Public Class ThemePptTaskPane
             If _templateCombo.Items.Count > 0 Then
                 ShowTemplateGallery()
                 _insertButton.Enabled = True
-                SetStatus("大纲已生成，请选择模板后生成并导入。")
+                If _lastTemplateLoadUsedFallback Then
+                    SetStatus($"大纲已生成，模板接口失败，已使用内置模板 {_templateCombo.Items.Count} 个。")
+                Else
+                    SetStatus("大纲已生成，请选择模板后生成并导入。")
+                End If
             Else
                 ShowOutlineOutput()
                 _insertButton.Enabled = False
@@ -244,26 +249,12 @@ Public Class ThemePptTaskPane
 
     Private Async Function LoadTemplatesAsync() As Task
         _refreshTemplatesButton.Enabled = False
+        _lastTemplateLoadUsedFallback = False
 
         Try
             SetStatus("正在加载 Docmee 模板...")
             Dim templates = Await _client.ListTemplatesAsync(1, 20)
-            _templateCombo.Items.Clear()
-            _templateCardPanel.Controls.Clear()
-            _templateCards.Clear()
-            _templateSelectLabels.Clear()
-
-            For Each template In templates
-                _templateCombo.Items.Add(template)
-                _templateCardPanel.Controls.Add(CreateTemplateCard(template))
-            Next
-
-            _templateCombo.Enabled = _templateCombo.Items.Count > 0
-            If _templateCombo.Items.Count > 0 AndAlso _templateCombo.SelectedIndex < 0 Then
-                _templateCombo.SelectedIndex = 0
-            End If
-            RefreshTemplateSelectionStyles()
-            ResizeTemplateCards()
+            PopulateTemplates(templates)
 
             If _templateCombo.Items.Count = 0 Then
                 SetStatus("未获取到可用模板。")
@@ -271,14 +262,45 @@ Public Class ThemePptTaskPane
                 SetStatus($"已加载 {_templateCombo.Items.Count} 个模板。")
             End If
         Catch ex As Exception
-            _templateCombo.Enabled = False
-            SetStatus("模板加载失败。")
-            ShowOutlineOutput()
-            MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            AppendTemplateLoadFailure(ex)
+
+            Dim fallbackTemplates = DocmeePptClient.GetFallbackTemplates()
+            If fallbackTemplates.Count > 0 Then
+                _lastTemplateLoadUsedFallback = True
+                PopulateTemplates(fallbackTemplates)
+                SetStatus($"模板接口失败，已使用内置模板 {fallbackTemplates.Count} 个。")
+            Else
+                _templateCombo.Enabled = False
+                SetStatus("模板加载失败。")
+                ShowOutlineOutput()
+                MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End If
         Finally
             _refreshTemplatesButton.Enabled = True
         End Try
     End Function
+
+    Private Sub PopulateTemplates(templates As IEnumerable(Of DocmeeTemplateInfo))
+        _templateCombo.Items.Clear()
+        _templateCardPanel.Controls.Clear()
+        _templateCards.Clear()
+        _templateSelectLabels.Clear()
+
+        If templates IsNot Nothing Then
+            For Each template In templates
+                If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Continue For
+                _templateCombo.Items.Add(template)
+                _templateCardPanel.Controls.Add(CreateTemplateCard(template))
+            Next
+        End If
+
+        _templateCombo.Enabled = _templateCombo.Items.Count > 0
+        If _templateCombo.Items.Count > 0 AndAlso _templateCombo.SelectedIndex < 0 Then
+            _templateCombo.SelectedIndex = 0
+        End If
+        RefreshTemplateSelectionStyles()
+        ResizeTemplateCards()
+    End Sub
 
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
         Dim card As New Panel()
@@ -620,6 +642,33 @@ Public Class ThemePptTaskPane
             End If
         End Try
     End Function
+
+    Private Sub AppendTemplateLoadFailure(ex As Exception)
+        If _outputBox.InvokeRequired Then
+            _outputBox.BeginInvoke(CType(Sub() AppendTemplateLoadFailure(ex), MethodInvoker))
+            Return
+        End If
+
+        Dim builder As New StringBuilder()
+        builder.AppendLine()
+        builder.AppendLine("模板接口加载失败，已尝试使用内置演示模板。")
+
+        Dim current = ex
+        Dim depth = 1
+        Do While current IsNot Nothing
+            builder.AppendLine($"错误 {depth}: {current.GetType().Name}: {current.Message}")
+            current = current.InnerException
+            depth += 1
+        Loop
+
+        If _outputBox.TextLength > 0 AndAlso Not _outputBox.Text.EndsWith(vbCrLf) Then
+            _outputBox.AppendText(vbCrLf)
+        End If
+
+        _outputBox.AppendText(builder.ToString())
+        _outputBox.SelectionStart = _outputBox.TextLength
+        _outputBox.ScrollToCaret()
+    End Sub
 
     Private Sub AppendTaskPaneLine(text As String)
         If _outputBox.InvokeRequired Then

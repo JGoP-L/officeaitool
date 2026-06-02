@@ -37,6 +37,46 @@ Public Class DocmeePptClient
     Private Shared ReadOnly TemplateListEndpoint As String = ApiBaseUrl & "/api/ppt/templates?lang=zh-CN"
     Private Shared ReadOnly DownloadPptxEndpoint As String = ApiBaseUrl & "/api/ppt/downloadPptx"
 
+    Public Shared Function GetFallbackTemplates() As List(Of DocmeeTemplateInfo)
+        Return New List(Of DocmeeTemplateInfo) From {
+            New DocmeeTemplateInfo With {
+                .Id = "1940698099655794688",
+                .Name = "橙蓝商务办公通用模板",
+                .Category = "办公报告",
+                .Style = "扁平简约",
+                .CoverUrl = "https://test.chatmee.cn/api/common/oss/meta-doc/ppt_template/1940698099655794688.png"
+            },
+            New DocmeeTemplateInfo With {
+                .Id = "1940697631068151808",
+                .Name = "办公简约灰色文职年度工作总结",
+                .Category = "办公报告",
+                .Style = "扁平简约",
+                .CoverUrl = "https://test.chatmee.cn/api/common/oss/meta-doc/ppt_template/1940697631068151808.png"
+            },
+            New DocmeeTemplateInfo With {
+                .Id = "1940698176554164224",
+                .Name = "橙色简约风工作总结模板",
+                .Category = "教育培训",
+                .Style = "扁平简约",
+                .CoverUrl = "https://test.chatmee.cn/api/common/oss/meta-doc/ppt_template/1940698176554164224.png"
+            },
+            New DocmeeTemplateInfo With {
+                .Id = "1940698140785139712",
+                .Name = "橙色餐饮行业工作报告演示模板",
+                .Category = "办公报告",
+                .Style = "商务科技",
+                .CoverUrl = "https://test.chatmee.cn/api/common/oss/meta-doc/ppt_template/1940698140785139712.png"
+            },
+            New DocmeeTemplateInfo With {
+                .Id = "1940698053686222848",
+                .Name = "扁平蓝色员工年终总结模板",
+                .Category = "办公报告",
+                .Style = "创意趣味",
+                .CoverUrl = "https://test.chatmee.cn/api/common/oss/meta-doc/ppt_template/1940698053686222848.png"
+            }
+        }
+    End Function
+
     Public Async Function CreateTaskAsync(content As String) As Task(Of String)
         Return Await CreateTaskAsync(content, "1")
     End Function

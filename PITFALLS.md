@@ -103,3 +103,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Recurring:** Hit again on 2026-06-02 with the live template cover path requiring the `token=ak_demo` query parameter; `ak_admin` returned JSON authentication failure instead of image bytes. Build cover image URLs through a helper that appends the demo token before assigning `PictureBox.ImageLocation`, while keeping the metadata fallback for authentication failures.
 
 **Recurring:** Hit again on 2026-06-02 with screenshots still showing the old blank-card UI after code had been pushed. For installer-delivered VSTO changes, bump `OfficeAgent` `ProductVersion`/`ProductCode`/`PackageCode` and show a visible task-pane build marker so testers can confirm they installed the new package.
+
+## 2026-06-02 Docmee Template List Needs Fallback And Diagnostics
+
+**Problem:** After outline generation, the task pane could show `模板加载失败。` with an empty disabled template selector while the generated outline text remained visible.
+
+**Root Cause:** `LoadTemplatesAsync` treated any template-list exception as a terminal UI failure. It disabled the selector, hid the actual exception behind a short message box, and had no built-in demo templates, so users could not continue to generate/import PPT even when outline generation had succeeded.
+
+**Solution:** Add known Docmee demo templates as a fallback list, centralize template population so live and fallback templates render identically, show `模板接口失败，已使用内置模板 N 个。`, and append the real exception chain into the output box for diagnosis.
