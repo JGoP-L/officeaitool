@@ -111,3 +111,5 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** `LoadTemplatesAsync` treated any template-list exception as a terminal UI failure. It disabled the selector, hid the actual exception behind a short message box, and had no built-in demo templates, so users could not continue to generate/import PPT even when outline generation had succeeded.
 
 **Solution:** Add known Docmee demo templates as a fallback list, centralize template population so live and fallback templates render identically, show `模板接口失败，已使用内置模板 N 个。`, and append the real exception chain into the output box for diagnosis.
+
+**Recurring:** Hit again on 2026-06-02 with users reporting the task pane could still feel stuck and template covers still did not appear. `ListTemplatesAsync` still used the default 5-minute client timeout before falling back, and template cards still used `PictureBox.LoadAsync`/remote `ImageLocation`, which is opaque and unreliable inside Office task panes. Use a short timeout for the template-list call, render selectable cards before any image request, and load covers through a controlled 5-second `HttpClient` download path.

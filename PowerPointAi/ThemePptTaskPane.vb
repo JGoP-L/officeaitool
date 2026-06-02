@@ -12,7 +12,7 @@ Public Class ThemePptTaskPane
     Inherits UserControl
 
     Private Const TemplateCoverToken As String = "ak_demo"
-    Private Const ThemePptPaneBuild As String = "2026.06.02.4"
+    Private Const ThemePptPaneBuild As String = "2026.06.02.5"
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -31,7 +31,9 @@ Public Class ThemePptTaskPane
     Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
     Private ReadOnly _templateCards As New Dictionary(Of String, Panel)()
     Private ReadOnly _templateSelectLabels As New Dictionary(Of String, Label)()
+    Private ReadOnly _templateCoverBoxes As New Dictionary(Of String, PictureBox)()
     Private ReadOnly _statusLabel As New Label()
+    Private _templateCoverLoadGeneration As Integer
 
     Public Sub New(pptApp As PowerPoint.Application)
         _pptApp = pptApp
@@ -281,18 +283,26 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub PopulateTemplates(templates As IEnumerable(Of DocmeeTemplateInfo))
+        _templateCoverLoadGeneration += 1
+        ClearTemplateCoverImages()
         _templateCombo.Items.Clear()
-        _templateCardPanel.Controls.Clear()
         _templateCards.Clear()
         _templateSelectLabels.Clear()
 
-        If templates IsNot Nothing Then
-            For Each template In templates
-                If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Continue For
-                _templateCombo.Items.Add(template)
-                _templateCardPanel.Controls.Add(CreateTemplateCard(template))
-            Next
-        End If
+        _templateCardPanel.SuspendLayout()
+        Try
+            ClearTemplateCardPanel()
+
+            If templates IsNot Nothing Then
+                For Each template In templates
+                    If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Continue For
+                    _templateCombo.Items.Add(template)
+                    _templateCardPanel.Controls.Add(CreateTemplateCard(template))
+                Next
+            End If
+        Finally
+            _templateCardPanel.ResumeLayout(True)
+        End Try
 
         _templateCombo.Enabled = _templateCombo.Items.Count > 0
         If _templateCombo.Items.Count > 0 AndAlso _templateCombo.SelectedIndex < 0 Then
@@ -300,6 +310,98 @@ Public Class ThemePptTaskPane
         End If
         RefreshTemplateSelectionStyles()
         ResizeTemplateCards()
+        BeginLoadTemplateCovers()
+    End Sub
+
+    Private Sub ClearTemplateCardPanel()
+        Do While _templateCardPanel.Controls.Count > 0
+            Dim card = _templateCardPanel.Controls(0)
+            _templateCardPanel.Controls.RemoveAt(0)
+            card.Dispose()
+        Loop
+    End Sub
+
+    Private Sub ClearTemplateCoverImages()
+        For Each pair In _templateCoverBoxes
+            If pair.Value IsNot Nothing AndAlso pair.Value.Image IsNot Nothing Then
+                Dim image = pair.Value.Image
+                pair.Value.Image = Nothing
+                image.Dispose()
+            End If
+        Next
+
+        _templateCoverBoxes.Clear()
+    End Sub
+
+    Private Async Sub BeginLoadTemplateCovers()
+        Dim loadGeneration = _templateCoverLoadGeneration
+        Dim templates = GetCurrentTemplatesSnapshot()
+
+        For Each template In templates
+            If loadGeneration <> _templateCoverLoadGeneration Then Return
+            If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.CoverUrl) Then Continue For
+
+            Try
+                Dim bytes = Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))
+                If loadGeneration <> _templateCoverLoadGeneration Then Return
+
+                Dim image = Await Task.Run(Function()
+                                               Using stream As New MemoryStream(bytes)
+                                                   Using loaded = Image.FromStream(stream)
+                                                       Return CType(New Bitmap(loaded), Image)
+                                                   End Using
+                                               End Using
+                                           End Function)
+
+                SetTemplateCoverImage(template.Id, image, loadGeneration)
+            Catch
+                MarkTemplateCoverUnavailable(template.Id, loadGeneration)
+            End Try
+        Next
+    End Sub
+
+    Private Function GetCurrentTemplatesSnapshot() As List(Of DocmeeTemplateInfo)
+        Dim templates As New List(Of DocmeeTemplateInfo)()
+        For Each item In _templateCombo.Items
+            Dim template = TryCast(item, DocmeeTemplateInfo)
+            If template IsNot Nothing Then templates.Add(template)
+        Next
+        Return templates
+    End Function
+
+    Private Sub SetTemplateCoverImage(templateId As String, image As Image, loadGeneration As Integer)
+        If Me.InvokeRequired Then
+            Me.BeginInvoke(CType(Sub() SetTemplateCoverImage(templateId, image, loadGeneration), MethodInvoker))
+            Return
+        End If
+
+        If loadGeneration <> _templateCoverLoadGeneration OrElse
+           String.IsNullOrWhiteSpace(templateId) OrElse
+           Not _templateCoverBoxes.ContainsKey(templateId) Then
+            If image IsNot Nothing Then image.Dispose()
+            Return
+        End If
+
+        Dim cover = _templateCoverBoxes(templateId)
+        Dim oldImage = cover.Image
+        cover.Image = image
+        cover.Visible = True
+        cover.BringToFront()
+
+        If oldImage IsNot Nothing Then oldImage.Dispose()
+    End Sub
+
+    Private Sub MarkTemplateCoverUnavailable(templateId As String, loadGeneration As Integer)
+        If Me.InvokeRequired Then
+            Me.BeginInvoke(CType(Sub() MarkTemplateCoverUnavailable(templateId, loadGeneration), MethodInvoker))
+            Return
+        End If
+
+        If loadGeneration <> _templateCoverLoadGeneration OrElse
+           String.IsNullOrWhiteSpace(templateId) OrElse
+           Not _templateCoverBoxes.ContainsKey(templateId) Then Return
+
+        _templateCoverBoxes(templateId).Visible = False
     End Sub
 
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
@@ -360,24 +462,6 @@ Public Class ThemePptTaskPane
         cover.Cursor = Cursors.Hand
         cover.Visible = False
 
-        AddHandler cover.LoadCompleted, Sub(loadSender As Object, loadArgs As System.ComponentModel.AsyncCompletedEventArgs)
-                                            If loadArgs.Error Is Nothing AndAlso cover.Image IsNot Nothing Then
-                                                cover.Visible = True
-                                                cover.BringToFront()
-                                            Else
-                                                cover.Visible = False
-                                            End If
-                                        End Sub
-
-        If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then
-            Try
-                cover.ImageLocation = BuildTemplateCoverUrl(template.CoverUrl)
-                cover.LoadAsync()
-            Catch
-                cover.Visible = False
-            End Try
-        End If
-
         previewPanel.Controls.Add(previewBadge)
         previewPanel.Controls.Add(previewTitle)
         previewPanel.Controls.Add(previewMeta)
@@ -427,6 +511,7 @@ Public Class ThemePptTaskPane
         If Not String.IsNullOrWhiteSpace(template.Id) Then
             _templateCards(template.Id) = card
             _templateSelectLabels(template.Id) = selectLabel
+            _templateCoverBoxes(template.Id) = cover
         End If
 
         Return card

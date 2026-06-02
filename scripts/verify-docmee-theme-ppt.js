@@ -28,7 +28,7 @@ assert(addIn.includes('New ThemePptTaskPane(Me.Application)'), 'ThisAddIn must c
 
 assert(project.includes('Compile Include="DocmeePptClient.vb"'), 'PowerPoint project must compile DocmeePptClient');
 assert(project.includes('Compile Include="ThemePptTaskPane.vb"'), 'PowerPoint project must compile ThemePptTaskPane');
-assert(installer.includes('"ProductVersion" = "8:2.10.0"'), 'installer version must be bumped so testers install the new template fallback build');
+assert(installer.includes('"ProductVersion" = "8:2.11.0"'), 'installer version must be bumped so testers install the nonblocking template cover build');
 assert(installer.includes('"RemovePreviousVersions" = "11:TRUE"'), 'installer must remove previous versions during upgrade');
 
 assert(client.includes('https://test.docmee.cn'), 'Docmee client must use the test API base URL');
@@ -51,8 +51,11 @@ assert(client.includes('progressHandler.Invoke(chunkText)'), 'GenerateContentAsy
 assert(client.includes('TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdown)'), 'markdown streaming must ignore final JSON result envelopes and keep streamed markdown chunks');
 assert(!client.includes('finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)'), 'markdown streaming must not throw when the final event result is a JSON outline object');
 assert(client.includes('/api/ppt/templates'), 'Docmee client must include the template list endpoint for later template selection');
+assert(client.includes('Using client = CreateHttpClient(TimeSpan.FromSeconds(12))'), 'template list calls must use a short timeout so the task pane falls back quickly');
 assert(client.includes('Public Shared Function GetFallbackTemplates() As List(Of DocmeeTemplateInfo)'), 'Docmee client must provide built-in demo templates when the live template list endpoint fails');
 assert(client.includes('.Id = "1940698099655794688"'), 'fallback templates must include a known Docmee demo template id');
+assert(client.includes('Public Async Function DownloadTemplateCoverAsync(coverUrl As String) As Task(Of Byte())'), 'Docmee client must download template covers through a controlled HTTP path');
+assert(client.includes('TimeSpan.FromSeconds(5)'), 'template cover downloads must use a short timeout so the task pane cannot hang');
 assert(client.includes('/api/ppt/v2/generatePptx'), 'Docmee client must generate PPTX after outline');
 assert(client.includes('/api/ppt/downloadPptx'), 'Docmee client must request a downloadable PPT file URL');
 assert(client.includes('Public Class DocmeePptInfo'), 'Docmee client must expose generated PPT metadata');
@@ -72,7 +75,7 @@ assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display ou
 assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
 assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
 assert(pane.includes('Private ReadOnly _templateCardPanel As New FlowLayoutPanel()'), 'ThemePptTaskPane must provide an OfficePLUS-like template card panel');
-assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.4"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
+assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.5"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
 assert(pane.includes('"版本 " & ThemePptPaneBuild'), 'ThemePptTaskPane hint text must include the visible build marker');
 assert(pane.includes('_templateCardPanel.AutoScroll = True'), 'template card panel must support scrolling through template covers');
 assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel must be hidden until templates are ready');
@@ -88,11 +91,16 @@ assert(pane.includes('ShowTemplateGallery()') && pane.includes('AppendTaskPaneLi
 assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPane must show template cards only when templates were loaded');
 assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
 assert(pane.includes('PictureBoxSizeMode.Zoom'), 'template cards must display template cover images');
+assert(pane.includes('Private ReadOnly _templateCoverBoxes As New Dictionary(Of String, PictureBox)()'), 'template cover image boxes must be tracked for controlled async loading');
+assert(pane.includes('_templateCardPanel.SuspendLayout()'), 'template cards must be added with layout suspended to avoid UI stalls');
 assert(pane.includes('AddHandler card.Resize, Sub() LayoutTemplateCard(card)'), 'template cards must use a deterministic resize layout instead of relying on nested docking');
 assert(pane.includes('Private Sub LayoutTemplateCard(card As Panel)'), 'template card layout must keep cover, name, metadata, and select button visible');
-assert(pane.includes('If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then'), 'template cards must load template cover URLs when available');
+assert(pane.includes('String.IsNullOrWhiteSpace(template.CoverUrl) Then Continue For'), 'template cover loader must skip empty cover URLs and load non-empty URLs');
 assert(pane.includes('Private Const TemplateCoverToken As String = "ak_demo"'), 'template cover URLs must use the provided ak_demo token');
-assert(pane.includes('BuildTemplateCoverUrl(template.CoverUrl)'), 'template cover loading must append the Docmee cover token before ImageLocation');
+assert(pane.includes('BeginLoadTemplateCovers()'), 'template cover loading must start after cards are visible');
+assert(pane.includes('Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))'), 'template cover loading must use the controlled Docmee client downloader');
+assert(!pane.includes('cover.LoadAsync()'), 'template cards must not use PictureBox.LoadAsync because it can hang inside Office task panes');
+assert(!pane.includes('cover.ImageLocation'), 'template cards must not assign remote ImageLocation directly');
 assert(!pane.includes('cover.ImageLocation = template.CoverUrl'), 'template cards must not load raw cover URLs because Docmee returns 403 without a token');
 assert(pane.includes('Private ReadOnly _templateSelectLabels As New Dictionary(Of String, Label)()'), 'template cards must keep explicit select labels for visible selected state');
 assert(pane.includes('BuildTemplateMetaText(template)'), 'template cards must show template metadata even when cover URLs cannot be loaded');

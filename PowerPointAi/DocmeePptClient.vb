@@ -199,7 +199,7 @@ Public Class DocmeePptClient
             }}
         }
 
-        Using client = CreateHttpClient()
+        Using client = CreateHttpClient(TimeSpan.FromSeconds(12))
             Using request As New HttpRequestMessage(HttpMethod.Post, TemplateListEndpoint)
                 request.Headers.Add("token", DemoToken)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
@@ -231,6 +231,22 @@ Public Class DocmeePptClient
 
                     Return items
                 End Using
+            End Using
+        End Using
+    End Function
+
+    Public Async Function DownloadTemplateCoverAsync(coverUrl As String) As Task(Of Byte())
+        If String.IsNullOrWhiteSpace(coverUrl) Then
+            Throw New ArgumentException("缺少模板封面地址。", NameOf(coverUrl))
+        End If
+
+        Using client = CreateHttpClient(TimeSpan.FromSeconds(5))
+            Using response = Await client.GetAsync(coverUrl)
+                If Not response.IsSuccessStatusCode Then
+                    Throw New HttpRequestException($"Docmee 模板封面请求失败: {(CInt(response.StatusCode))} {response.ReasonPhrase}")
+                End If
+
+                Return Await response.Content.ReadAsByteArrayAsync()
             End Using
         End Using
     End Function
@@ -334,8 +350,12 @@ Public Class DocmeePptClient
     End Function
 
     Private Shared Function CreateHttpClient() As HttpClient
+        Return CreateHttpClient(TimeSpan.FromMinutes(5))
+    End Function
+
+    Private Shared Function CreateHttpClient(timeout As TimeSpan) As HttpClient
         Dim client As New HttpClient()
-        client.Timeout = TimeSpan.FromMinutes(5)
+        client.Timeout = timeout
         Return client
     End Function
 
