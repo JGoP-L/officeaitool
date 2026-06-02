@@ -82,7 +82,7 @@ assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPan
 assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
 assert(pane.includes('PictureBoxSizeMode.Zoom'), 'template cards must display template cover images');
 assert(pane.includes('If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then'), 'template cards must load template cover URLs when available');
-assert(pane.includes('Private Const TemplateCoverToken As String = "ak_admin"'), 'template cover URLs must use the provided ak_admin token');
+assert(pane.includes('Private Const TemplateCoverToken As String = "ak_demo"'), 'template cover URLs must use the provided ak_demo token');
 assert(pane.includes('BuildTemplateCoverUrl(template.CoverUrl)'), 'template cover loading must append the Docmee cover token before ImageLocation');
 assert(!pane.includes('cover.ImageLocation = template.CoverUrl'), 'template cards must not load raw cover URLs because Docmee returns 403 without a token');
 assert(pane.includes('Private ReadOnly _templateSelectLabels As New Dictionary(Of String, Label)()'), 'template cards must keep explicit select labels for visible selected state');

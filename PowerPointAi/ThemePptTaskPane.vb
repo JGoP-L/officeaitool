@@ -11,7 +11,7 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class ThemePptTaskPane
     Inherits UserControl
 
-    Private Const TemplateCoverToken As String = "ak_admin"
+    Private Const TemplateCoverToken As String = "ak_demo"
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
