@@ -52,6 +52,8 @@ Lessons learned from errors encountered in this project. Updated automatically b
 
 **Recurring:** Hit again on 2026-05-29 with master/theme background images missing after ordinary `Slides.Paste`. The fix needs PowerPoint's keep-source-formatting paste command (`PasteSourceFormatting`) before falling back to ordinary paste.
 
+**Recurring:** Hit again on 2026-06-02 with generated slides appearing white/blank after the copy/paste path. PowerPoint `Slide.Copy` is clipboard-based and can be unreliable when the source deck is hidden and the destination view is being controlled programmatically. Use `Slides.InsertFromFile` as the primary import path for downloaded Docmee PPTX files, print the import method/download URL for comparison, and keep copy/paste only as a fallback.
+
 ## 2026-05-29 Docmee Markdown Stream Final Event May Contain JSON
 
 **Problem:** The task pane failed with `Docmee 返回内容中没有可用的 Markdown result` after requesting a Markdown outline.

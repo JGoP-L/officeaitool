@@ -28,7 +28,7 @@ assert(addIn.includes('New ThemePptTaskPane(Me.Application)'), 'ThisAddIn must c
 
 assert(project.includes('Compile Include="DocmeePptClient.vb"'), 'PowerPoint project must compile DocmeePptClient');
 assert(project.includes('Compile Include="ThemePptTaskPane.vb"'), 'PowerPoint project must compile ThemePptTaskPane');
-assert(installer.includes('"ProductVersion" = "8:2.12.0"'), 'installer version must be bumped so testers install the refresh freeze fix build');
+assert(installer.includes('"ProductVersion" = "8:2.13.0"'), 'installer version must be bumped so testers install the blank-slide import fix build');
 assert(installer.includes('"RemovePreviousVersions" = "11:TRUE"'), 'installer must remove previous versions during upgrade');
 
 assert(client.includes('https://test.docmee.cn'), 'Docmee client must use the test API base URL');
@@ -78,7 +78,7 @@ assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display ou
 assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
 assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
 assert(pane.includes('Private ReadOnly _templateCardPanel As New FlowLayoutPanel()'), 'ThemePptTaskPane must provide an OfficePLUS-like template card panel');
-assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.6"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
+assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.7"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
 assert(pane.includes('"版本 " & ThemePptPaneBuild'), 'ThemePptTaskPane hint text must include the visible build marker');
 assert(pane.includes('_templateCardPanel.AutoScroll = True'), 'template card panel must support scrolling through template covers');
 assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel must be hidden until templates are ready');
@@ -89,7 +89,7 @@ assert(pane.includes('Private Sub ShowOutlineOutput()'), 'ThemePptTaskPane must 
 assert(pane.includes('Private Sub ShowTemplateGallery()'), 'ThemePptTaskPane must centralize showing the template gallery');
 assert(pane.includes('ShowOutlineOutput()'), 'ThemePptTaskPane must explicitly show outline output during generation');
 assert(pane.includes('ShowTemplateGallery()'), 'ThemePptTaskPane must explicitly switch to template gallery after outline generation');
-assert(pane.includes('If _templateCardPanel.Visible Then'), 'task pane diagnostics must not bring the large outline/log box back after gallery mode');
+assert(pane.includes('_outputBox.AppendText(vbCrLf & text & vbCrLf)'), 'task pane diagnostics must be recorded without forcing the large outline/log box back after gallery mode');
 assert(pane.includes('ShowTemplateGallery()') && pane.includes('AppendTaskPaneLine("已导入页数: " & importedCount.ToString())'), 'generate/import flow must return to gallery mode after import diagnostics');
 assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPane must show template cards only when templates were loaded');
 assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
@@ -152,16 +152,20 @@ assert(pane.includes('RestoreActiveSlide(target, originalSlideIndex)'), 'ThemePp
 assert(pane.includes('AppendTaskPaneLine("已导入页数: " & importedCount.ToString())'), 'ThemePptTaskPane must print the imported slide count');
 assert(pane.includes('Throw New InvalidOperationException("PPTX 已下载，但没有成功导入任何幻灯片。")'), 'ThemePptTaskPane must fail loudly if PowerPoint imports zero slides');
 assert(pane.includes('AppendTaskPaneLine("生成并导入失败: " & ex.Message)'), 'ThemePptTaskPane must print import errors in the task pane');
-assert(pane.includes('Presentations.Open(downloadPath'), 'ThemePptTaskPane must open the generated PPTX before importing slides');
-assert(pane.includes('sourceSlide.Copy()'), 'ThemePptTaskPane must copy full generated slides to preserve template elements');
-assert(pane.includes('TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex))'), 'ThemePptTaskPane must use source-formatting paste for generated slides');
+assert(pane.includes('ImportPptxFileIntoPresentation(target, downloadPath)'), 'ThemePptTaskPane must prefer file-level import for generated PPTX files to avoid blank clipboard pastes');
+assert(pane.includes('target.Slides.InsertFromFile(downloadPath, beforeCount)'), 'ThemePptTaskPane must call PowerPoint Slides.InsertFromFile for the primary import path');
+assert(pane.includes('AppendTaskPaneLine("导入方式: InsertFromFile")'), 'ThemePptTaskPane must print the primary import method for diagnosis');
+assert(pane.includes('AppendTaskPaneLine("InsertFromFile 导入失败，尝试复制粘贴: " & ex.Message)'), 'ThemePptTaskPane must report fallback from file import to copy/paste');
+assert(pane.includes('CopyPptxSlidesIntoPresentation(target, downloadPath)'), 'ThemePptTaskPane must keep copy/paste as a fallback if file import fails');
+assert(pane.includes('Presentations.Open(downloadPath'), 'ThemePptTaskPane fallback must open the generated PPTX before importing slides');
+assert(pane.includes('sourceSlide.Copy()'), 'ThemePptTaskPane fallback must copy full generated slides to preserve template elements');
+assert(pane.includes('TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex))'), 'ThemePptTaskPane fallback must use source-formatting paste for generated slides');
 assert(pane.includes('target.Windows(1).Activate()'), 'ThemePptTaskPane must activate the destination window before source-formatting paste');
 assert(pane.includes('target.Windows(1).View.GotoSlide(target.Slides.Count)'), 'ThemePptTaskPane must move the destination view to the end before source-formatting paste');
 assert(pane.includes('_pptApp.CommandBars.ExecuteMso("PasteSourceFormatting")'), 'ThemePptTaskPane must request PowerPoint keep-source-formatting paste');
 assert(pane.includes('target.Windows(1).View.GotoSlide(slideIndex)'), 'ThemePptTaskPane must navigate back to the original slide after import');
 assert(pane.includes('target.Slides(slideIndex).Select()'), 'ThemePptTaskPane must reselect the original slide after import');
 assert(pane.includes('target.Slides.Paste(target.Slides.Count + 1)'), 'ThemePptTaskPane must keep a normal paste fallback');
-assert(!pane.includes('InsertFromFile'), 'ThemePptTaskPane must not rely on InsertFromFile for Docmee imports');
 assert(pane.includes('FixInsertedSlideReadability'), 'ThemePptTaskPane must improve readability only on newly inserted slides');
 assert(pane.includes('importedSlides.Add'), 'ThemePptTaskPane must track exactly pasted slides for readability adjustments');
 assert(pane.includes('FixShapeTextReadability'), 'ThemePptTaskPane must adjust low-contrast text on inserted slides');

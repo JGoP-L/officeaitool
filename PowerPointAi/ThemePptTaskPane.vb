@@ -12,7 +12,7 @@ Public Class ThemePptTaskPane
     Inherits UserControl
 
     Private Const TemplateCoverToken As String = "ak_demo"
-    Private Const ThemePptPaneBuild As String = "2026.06.02.6"
+    Private Const ThemePptPaneBuild As String = "2026.06.02.7"
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -780,10 +780,6 @@ Public Class ThemePptTaskPane
             Return
         End If
 
-        If _templateCardPanel.Visible Then
-            Return
-        End If
-
         If _outputBox.TextLength > 0 AndAlso Not _outputBox.Text.EndsWith(vbCrLf) Then
             _outputBox.AppendText(vbCrLf)
         End If
@@ -831,6 +827,48 @@ Public Class ThemePptTaskPane
 
         Dim target = GetOrCreatePresentation()
         Dim originalSlideIndex = CaptureActiveSlideIndex(target)
+        Dim importedSlides As New List(Of PowerPoint.Slide)()
+
+        Try
+            importedSlides = ImportPptxFileIntoPresentation(target, downloadPath)
+            If importedSlides.Count > 0 Then
+                AppendTaskPaneLine("导入方式: InsertFromFile")
+            Else
+                AppendTaskPaneLine("InsertFromFile 未导入幻灯片，尝试复制粘贴。")
+                importedSlides = CopyPptxSlidesIntoPresentation(target, downloadPath)
+            End If
+        Catch ex As Exception
+            AppendTaskPaneLine("InsertFromFile 导入失败，尝试复制粘贴: " & ex.Message)
+            importedSlides = CopyPptxSlidesIntoPresentation(target, downloadPath)
+        Finally
+            RestoreActiveSlide(target, originalSlideIndex)
+        End Try
+
+        If importedSlides.Count = 0 Then
+            Throw New InvalidOperationException("PPTX 已下载，但没有成功导入任何幻灯片。")
+        End If
+
+        FixInsertedSlideReadability(importedSlides)
+        Return importedSlides.Count
+    End Function
+
+    Private Function ImportPptxFileIntoPresentation(target As PowerPoint.Presentation, downloadPath As String) As List(Of PowerPoint.Slide)
+        Dim beforeCount = target.Slides.Count
+        Dim insertedCount = target.Slides.InsertFromFile(downloadPath, beforeCount)
+        Dim importedSlides As New List(Of PowerPoint.Slide)()
+
+        If insertedCount <= 0 Then Return importedSlides
+
+        For slideIndex As Integer = beforeCount + 1 To beforeCount + insertedCount
+            If slideIndex > 0 AndAlso slideIndex <= target.Slides.Count Then
+                importedSlides.Add(target.Slides(slideIndex))
+            End If
+        Next
+
+        Return importedSlides
+    End Function
+
+    Private Function CopyPptxSlidesIntoPresentation(target As PowerPoint.Presentation, downloadPath As String) As List(Of PowerPoint.Slide)
         Dim sourcePresentation As PowerPoint.Presentation = Nothing
         Dim importedSlides As New List(Of PowerPoint.Slide)()
 
@@ -848,16 +886,9 @@ Public Class ThemePptTaskPane
             If sourcePresentation IsNot Nothing Then
                 sourcePresentation.Close()
             End If
-
-            RestoreActiveSlide(target, originalSlideIndex)
         End Try
 
-        If importedSlides.Count = 0 Then
-            Throw New InvalidOperationException("PPTX 已下载，但没有成功导入任何幻灯片。")
-        End If
-
-        FixInsertedSlideReadability(importedSlides)
-        Return importedSlides.Count
+        Return importedSlides
     End Function
 
     Private Function CaptureActiveSlideIndex(target As PowerPoint.Presentation) As Integer
