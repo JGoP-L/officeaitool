@@ -11,6 +11,8 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class ThemePptTaskPane
     Inherits UserControl
 
+    Private Const TemplateCoverToken As String = "ak_admin"
+
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
     Private _outline As JObject
@@ -371,7 +373,7 @@ Public Class ThemePptTaskPane
 
         If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then
             Try
-                cover.ImageLocation = template.CoverUrl
+                cover.ImageLocation = BuildTemplateCoverUrl(template.CoverUrl)
                 cover.LoadAsync()
             Catch
                 cover.Visible = False
@@ -435,6 +437,14 @@ Public Class ThemePptTaskPane
         End If
 
         Return card
+    End Function
+
+    Private Function BuildTemplateCoverUrl(coverUrl As String) As String
+        If String.IsNullOrWhiteSpace(coverUrl) Then Return coverUrl
+
+        Dim trimmedUrl = coverUrl.Trim()
+        Dim separator = If(trimmedUrl.Contains("?"), "&", "?")
+        Return trimmedUrl & separator & "token=" & TemplateCoverToken
     End Function
 
     Private Function BuildTemplateMetaText(template As DocmeeTemplateInfo) As String

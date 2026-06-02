@@ -99,3 +99,5 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** The template list API returned real template metadata, but direct access to `coverUrl` resources such as `test.chatmee.cn/api/common/oss/meta-doc/ppt_template/*.png` returned HTTP 403. The UI relied too heavily on the image preview and only indicated selection with a subtle card background change.
 
 **Solution:** Keep loading `coverUrl` when available, but render a metadata fallback preview with template name, category, style, and ID when the image cannot load. Add an explicit `选择模板` / `已选择` label so selection is visible even when remote covers are blocked.
+
+**Recurring:** Hit again on 2026-06-02 with the live template cover path requiring the `token=ak_admin` query parameter. Build cover image URLs through a helper that appends the token before assigning `PictureBox.ImageLocation`, while keeping the metadata fallback for authentication failures.
