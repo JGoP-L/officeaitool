@@ -82,6 +82,11 @@ assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPan
 assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
 assert(pane.includes('PictureBoxSizeMode.Zoom'), 'template cards must display template cover images');
 assert(pane.includes('If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then'), 'template cards must load template cover URLs when available');
+assert(pane.includes('Private ReadOnly _templateSelectLabels As New Dictionary(Of String, Label)()'), 'template cards must keep explicit select labels for visible selected state');
+assert(pane.includes('BuildTemplateMetaText(template)'), 'template cards must show template metadata even when cover URLs cannot be loaded');
+assert(pane.includes('Text = "模板预览"'), 'template cards must show a metadata fallback preview instead of an empty cover area');
+assert(pane.includes('selectLabel.Text = If(isSelected, "已选择", "选择模板")'), 'template card selection must update explicit select button text');
+assert(pane.includes('Color.FromArgb(234, 88, 12)'), 'selected template button must use a strong selected color');
 assert(pane.includes('SelectTemplate(template)'), 'clicking a template card must select that template');
 assert(pane.includes('RefreshTemplateSelectionStyles()'), 'template card selection must have a visual selected state');
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');

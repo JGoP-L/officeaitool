@@ -91,3 +91,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** The first gallery implementation only hid the outline box once after template loading, while later diagnostics still targeted the same large output box and the import flow did not explicitly restore gallery mode.
 
 **Solution:** Centralize task-pane view switching with `ShowOutlineOutput` and `ShowTemplateGallery`, keep the gallery visible during and after generate/import, and prevent diagnostics from bringing the large outline/log box back while gallery mode is active.
+
+## 2026-06-02 Docmee Template Covers May Return 403
+
+**Problem:** The task pane loaded Docmee template choices, but the template gallery appeared as blank placeholder cards and users could not tell whether a card was selectable.
+
+**Root Cause:** The template list API returned real template metadata, but direct access to `coverUrl` resources such as `test.chatmee.cn/api/common/oss/meta-doc/ppt_template/*.png` returned HTTP 403. The UI relied too heavily on the image preview and only indicated selection with a subtle card background change.
+
+**Solution:** Keep loading `coverUrl` when available, but render a metadata fallback preview with template name, category, style, and ID when the image cannot load. Add an explicit `选择模板` / `已选择` label so selection is visible even when remote covers are blocked.

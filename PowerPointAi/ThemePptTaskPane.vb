@@ -26,6 +26,7 @@ Public Class ThemePptTaskPane
     Private ReadOnly _contentPanel As New Panel()
     Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
     Private ReadOnly _templateCards As New Dictionary(Of String, Panel)()
+    Private ReadOnly _templateSelectLabels As New Dictionary(Of String, Label)()
     Private ReadOnly _statusLabel As New Label()
 
     Public Sub New(pptApp As PowerPoint.Application)
@@ -247,6 +248,7 @@ Public Class ThemePptTaskPane
             _templateCombo.Items.Clear()
             _templateCardPanel.Controls.Clear()
             _templateCards.Clear()
+            _templateSelectLabels.Clear()
 
             For Each template In templates
                 _templateCombo.Items.Add(template)
@@ -278,47 +280,172 @@ Public Class ThemePptTaskPane
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
         Dim card As New Panel()
         card.Width = Math.Max(220, _templateCardPanel.ClientSize.Width - 24)
-        card.Height = 164
+        card.Height = 218
         card.Padding = New Padding(6)
         card.Margin = New Padding(0, 0, 0, 10)
         card.BackColor = Color.White
         card.BorderStyle = BorderStyle.FixedSingle
         card.Tag = template
+        card.Cursor = Cursors.Hand
+
+        Dim cardLayout As New TableLayoutPanel()
+        cardLayout.Dock = DockStyle.Fill
+        cardLayout.ColumnCount = 1
+        cardLayout.RowCount = 3
+        cardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 118.0F))
+        cardLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        cardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 30.0F))
+        cardLayout.Margin = New Padding(0)
+        cardLayout.Padding = New Padding(0)
+        cardLayout.Tag = template
+        cardLayout.Cursor = Cursors.Hand
+
+        Dim previewPanel As New Panel()
+        previewPanel.Dock = DockStyle.Fill
+        previewPanel.Margin = New Padding(0, 0, 0, 6)
+        previewPanel.BackColor = Color.FromArgb(255, 248, 241)
+        previewPanel.Tag = template
+        previewPanel.Cursor = Cursors.Hand
+
+        Dim previewLayout As New TableLayoutPanel()
+        previewLayout.Dock = DockStyle.Fill
+        previewLayout.ColumnCount = 1
+        previewLayout.RowCount = 3
+        previewLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 24.0F))
+        previewLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        previewLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 22.0F))
+        previewLayout.Padding = New Padding(12, 8, 12, 8)
+        previewLayout.Tag = template
+        previewLayout.Cursor = Cursors.Hand
+
+        Dim previewBadge As New Label()
+        previewBadge.Dock = DockStyle.Fill
+        previewBadge.Text = "模板预览"
+        previewBadge.TextAlign = ContentAlignment.MiddleLeft
+        previewBadge.ForeColor = Color.FromArgb(234, 88, 12)
+        previewBadge.Font = New Font(Me.Font.FontFamily, 8.5F, FontStyle.Bold)
+        previewBadge.Tag = template
+        previewBadge.Cursor = Cursors.Hand
+
+        Dim previewTitle As New Label()
+        previewTitle.Dock = DockStyle.Fill
+        previewTitle.Text = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
+        previewTitle.TextAlign = ContentAlignment.MiddleLeft
+        previewTitle.AutoEllipsis = True
+        previewTitle.ForeColor = Color.FromArgb(39, 45, 55)
+        previewTitle.Font = New Font(Me.Font.FontFamily, 10.5F, FontStyle.Bold)
+        previewTitle.Tag = template
+        previewTitle.Cursor = Cursors.Hand
+
+        Dim previewMeta As New Label()
+        previewMeta.Dock = DockStyle.Fill
+        previewMeta.Text = BuildTemplateMetaText(template)
+        previewMeta.TextAlign = ContentAlignment.MiddleLeft
+        previewMeta.AutoEllipsis = True
+        previewMeta.ForeColor = Color.FromArgb(86, 94, 108)
+        previewMeta.Font = New Font(Me.Font.FontFamily, 8.5F, FontStyle.Regular)
+        previewMeta.Tag = template
+        previewMeta.Cursor = Cursors.Hand
+
+        previewLayout.Controls.Add(previewBadge, 0, 0)
+        previewLayout.Controls.Add(previewTitle, 0, 1)
+        previewLayout.Controls.Add(previewMeta, 0, 2)
+        previewPanel.Controls.Add(previewLayout)
 
         Dim cover As New PictureBox()
-        cover.Dock = DockStyle.Top
-        cover.Height = 118
+        cover.Dock = DockStyle.Fill
         cover.BackColor = Color.FromArgb(248, 250, 252)
         cover.SizeMode = PictureBoxSizeMode.Zoom
         cover.Tag = template
+        cover.Cursor = Cursors.Hand
+        cover.Visible = False
+
+        AddHandler cover.LoadCompleted, Sub(loadSender As Object, loadArgs As System.ComponentModel.AsyncCompletedEventArgs)
+                                            If loadArgs.Error Is Nothing AndAlso cover.Image IsNot Nothing Then
+                                                cover.Visible = True
+                                                cover.BringToFront()
+                                            Else
+                                                cover.Visible = False
+                                            End If
+                                        End Sub
 
         If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then
             Try
                 cover.ImageLocation = template.CoverUrl
                 cover.LoadAsync()
             Catch
+                cover.Visible = False
             End Try
         End If
 
+        previewPanel.Controls.Add(cover)
+
+        Dim infoLayout As New TableLayoutPanel()
+        infoLayout.Dock = DockStyle.Fill
+        infoLayout.ColumnCount = 1
+        infoLayout.RowCount = 2
+        infoLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 24.0F))
+        infoLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        infoLayout.Margin = New Padding(0, 0, 0, 6)
+        infoLayout.Tag = template
+        infoLayout.Cursor = Cursors.Hand
+
         Dim nameLabel As New Label()
-        nameLabel.Dock = DockStyle.Bottom
-        nameLabel.Height = 34
+        nameLabel.Dock = DockStyle.Fill
         nameLabel.TextAlign = ContentAlignment.MiddleLeft
         nameLabel.AutoEllipsis = True
         nameLabel.ForeColor = Color.FromArgb(39, 45, 55)
-        nameLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Regular)
+        nameLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
         nameLabel.Text = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
         nameLabel.Tag = template
+        nameLabel.Cursor = Cursors.Hand
 
-        card.Controls.Add(nameLabel)
-        card.Controls.Add(cover)
+        Dim detailLabel As New Label()
+        detailLabel.Dock = DockStyle.Fill
+        detailLabel.TextAlign = ContentAlignment.MiddleLeft
+        detailLabel.AutoEllipsis = True
+        detailLabel.ForeColor = Color.FromArgb(86, 94, 108)
+        detailLabel.Font = New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular)
+        detailLabel.Text = BuildTemplateMetaText(template) & If(String.IsNullOrWhiteSpace(template.Id), "", " | ID " & template.Id)
+        detailLabel.Tag = template
+        detailLabel.Cursor = Cursors.Hand
+
+        infoLayout.Controls.Add(nameLabel, 0, 0)
+        infoLayout.Controls.Add(detailLabel, 0, 1)
+
+        Dim selectLabel As New Label()
+        selectLabel.Dock = DockStyle.Fill
+        selectLabel.Text = "选择模板"
+        selectLabel.TextAlign = ContentAlignment.MiddleCenter
+        selectLabel.ForeColor = Color.FromArgb(39, 45, 55)
+        selectLabel.BackColor = Color.FromArgb(241, 245, 249)
+        selectLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
+        selectLabel.Tag = template
+        selectLabel.Cursor = Cursors.Hand
+
+        cardLayout.Controls.Add(previewPanel, 0, 0)
+        cardLayout.Controls.Add(infoLayout, 0, 1)
+        cardLayout.Controls.Add(selectLabel, 0, 2)
+        card.Controls.Add(cardLayout)
         AddTemplateCardClickHandlers(card, template)
 
         If Not String.IsNullOrWhiteSpace(template.Id) Then
             _templateCards(template.Id) = card
+            _templateSelectLabels(template.Id) = selectLabel
         End If
 
         Return card
+    End Function
+
+    Private Function BuildTemplateMetaText(template As DocmeeTemplateInfo) As String
+        Dim parts As New List(Of String)()
+        If template IsNot Nothing Then
+            If Not String.IsNullOrWhiteSpace(template.Category) Then parts.Add(template.Category.Trim())
+            If Not String.IsNullOrWhiteSpace(template.Style) Then parts.Add(template.Style.Trim())
+        End If
+
+        If parts.Count = 0 Then Return "Docmee 模板"
+        Return String.Join(" / ", parts)
     End Function
 
     Private Sub AddTemplateCardClickHandlers(control As Control, template As DocmeeTemplateInfo)
@@ -357,6 +484,13 @@ Public Class ThemePptTaskPane
             Dim isSelected = String.Equals(pair.Key, selectedId, StringComparison.Ordinal)
             pair.Value.BackColor = If(isSelected, Color.FromArgb(255, 245, 235), Color.White)
             pair.Value.Padding = If(isSelected, New Padding(5), New Padding(6))
+
+            If _templateSelectLabels.ContainsKey(pair.Key) Then
+                Dim selectLabel = _templateSelectLabels(pair.Key)
+                selectLabel.Text = If(isSelected, "已选择", "选择模板")
+                selectLabel.BackColor = If(isSelected, Color.FromArgb(234, 88, 12), Color.FromArgb(241, 245, 249))
+                selectLabel.ForeColor = If(isSelected, Color.White, Color.FromArgb(39, 45, 55))
+            End If
         Next
     End Sub
 
