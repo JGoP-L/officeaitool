@@ -28,7 +28,7 @@ assert(addIn.includes('New ThemePptTaskPane(Me.Application)'), 'ThisAddIn must c
 
 assert(project.includes('Compile Include="DocmeePptClient.vb"'), 'PowerPoint project must compile DocmeePptClient');
 assert(project.includes('Compile Include="ThemePptTaskPane.vb"'), 'PowerPoint project must compile ThemePptTaskPane');
-assert(installer.includes('"ProductVersion" = "8:2.11.0"'), 'installer version must be bumped so testers install the nonblocking template cover build');
+assert(installer.includes('"ProductVersion" = "8:2.12.0"'), 'installer version must be bumped so testers install the refresh freeze fix build');
 assert(installer.includes('"RemovePreviousVersions" = "11:TRUE"'), 'installer must remove previous versions during upgrade');
 
 assert(client.includes('https://test.docmee.cn'), 'Docmee client must use the test API base URL');
@@ -52,10 +52,13 @@ assert(client.includes('TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdo
 assert(!client.includes('finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)'), 'markdown streaming must not throw when the final event result is a JSON outline object');
 assert(client.includes('/api/ppt/templates'), 'Docmee client must include the template list endpoint for later template selection');
 assert(client.includes('Using client = CreateHttpClient(TimeSpan.FromSeconds(12))'), 'template list calls must use a short timeout so the task pane falls back quickly');
+assert(client.includes('client.SendAsync(request).ConfigureAwait(False)'), 'template list HTTP calls must not capture the Office UI synchronization context');
+assert(client.includes('response.Content.ReadAsStringAsync().ConfigureAwait(False)'), 'template list response reads must not resume on the Office UI thread');
 assert(client.includes('Public Shared Function GetFallbackTemplates() As List(Of DocmeeTemplateInfo)'), 'Docmee client must provide built-in demo templates when the live template list endpoint fails');
 assert(client.includes('.Id = "1940698099655794688"'), 'fallback templates must include a known Docmee demo template id');
 assert(client.includes('Public Async Function DownloadTemplateCoverAsync(coverUrl As String) As Task(Of Byte())'), 'Docmee client must download template covers through a controlled HTTP path');
 assert(client.includes('TimeSpan.FromSeconds(5)'), 'template cover downloads must use a short timeout so the task pane cannot hang');
+assert(client.includes('client.GetAsync(coverUrl).ConfigureAwait(False)'), 'template cover downloads must not capture the Office UI synchronization context');
 assert(client.includes('/api/ppt/v2/generatePptx'), 'Docmee client must generate PPTX after outline');
 assert(client.includes('/api/ppt/downloadPptx'), 'Docmee client must request a downloadable PPT file URL');
 assert(client.includes('Public Class DocmeePptInfo'), 'Docmee client must expose generated PPT metadata');
@@ -75,7 +78,7 @@ assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display ou
 assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
 assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
 assert(pane.includes('Private ReadOnly _templateCardPanel As New FlowLayoutPanel()'), 'ThemePptTaskPane must provide an OfficePLUS-like template card panel');
-assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.5"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
+assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.6"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
 assert(pane.includes('"版本 " & ThemePptPaneBuild'), 'ThemePptTaskPane hint text must include the visible build marker');
 assert(pane.includes('_templateCardPanel.AutoScroll = True'), 'template card panel must support scrolling through template covers');
 assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel must be hidden until templates are ready');
@@ -98,7 +101,10 @@ assert(pane.includes('Private Sub LayoutTemplateCard(card As Panel)'), 'template
 assert(pane.includes('String.IsNullOrWhiteSpace(template.CoverUrl) Then Continue For'), 'template cover loader must skip empty cover URLs and load non-empty URLs');
 assert(pane.includes('Private Const TemplateCoverToken As String = "ak_demo"'), 'template cover URLs must use the provided ak_demo token');
 assert(pane.includes('BeginLoadTemplateCovers()'), 'template cover loading must start after cards are visible');
-assert(pane.includes('Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))'), 'template cover loading must use the controlled Docmee client downloader');
+assert(pane.includes('Await Task.Delay(200)'), 'template cover loading must wait briefly so the visible cards render before image network work starts');
+assert(pane.includes('Private Function DownloadTemplateCoverInBackgroundAsync(coverUrl As String) As Task(Of Byte())'), 'template cover downloads must start from a background task');
+assert(pane.includes('Await DownloadTemplateCoverInBackgroundAsync(BuildTemplateCoverUrl(template.CoverUrl))'), 'template cover loading must not start HTTP work directly on the Office UI thread');
+assert(!pane.includes('Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))'), 'template cover loading must not call the Docmee client directly from the UI async method');
 assert(!pane.includes('Dim image = Await Task.Run'), 'template cover loader must not declare a local variable named image because VB resolves Image case-insensitively');
 assert(pane.includes('System.Drawing.Image.FromStream(stream)'), 'template cover loader must fully qualify System.Drawing.Image to avoid VB name inference errors');
 assert(!pane.includes('cover.LoadAsync()'), 'template cards must not use PictureBox.LoadAsync because it can hang inside Office task panes');
@@ -115,6 +121,11 @@ assert(pane.includes('RefreshTemplateSelectionStyles()'), 'template card selecti
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
 assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template selector');
 assert(pane.includes('Private _lastTemplateLoadUsedFallback As Boolean'), 'ThemePptTaskPane must remember whether template loading fell back');
+assert(pane.includes('Private _isTemplateLoading As Boolean'), 'ThemePptTaskPane must guard refresh against overlapping template loads');
+assert(pane.includes('If _isTemplateLoading Then Return'), 'refresh must ignore repeated clicks while template loading is already running');
+assert(pane.includes('Await Task.Yield()'), 'refresh must yield once after setting status so PowerPoint repaints before network work starts');
+assert(pane.includes('Private Function LoadTemplatesInBackgroundAsync() As Task(Of List(Of DocmeeTemplateInfo))'), 'template list requests must start from a background task');
+assert(pane.includes('Dim templates = Await LoadTemplatesInBackgroundAsync()'), 'LoadTemplatesAsync must not start template HTTP work directly on the Office UI thread');
 assert(pane.includes('PopulateTemplates(templates)'), 'ThemePptTaskPane must centralize template population so fallback templates render the same way');
 assert(pane.includes('DocmeePptClient.GetFallbackTemplates()'), 'ThemePptTaskPane must fall back to built-in demo templates if live template loading fails');
 assert(pane.includes('模板接口失败，已使用内置模板'), 'ThemePptTaskPane must tell the user when it is using fallback templates');

@@ -204,8 +204,8 @@ Public Class DocmeePptClient
                 request.Headers.Add("token", DemoToken)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using response = Await client.SendAsync(request)
-                    Dim responseText = Await response.Content.ReadAsStringAsync()
+                Using response = Await client.SendAsync(request).ConfigureAwait(False)
+                    Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     EnsureSuccess(response, responseText)
 
                     Dim result = JObject.Parse(responseText)
@@ -241,12 +241,12 @@ Public Class DocmeePptClient
         End If
 
         Using client = CreateHttpClient(TimeSpan.FromSeconds(5))
-            Using response = Await client.GetAsync(coverUrl)
+            Using response = Await client.GetAsync(coverUrl).ConfigureAwait(False)
                 If Not response.IsSuccessStatusCode Then
                     Throw New HttpRequestException($"Docmee 模板封面请求失败: {(CInt(response.StatusCode))} {response.ReasonPhrase}")
                 End If
 
-                Return Await response.Content.ReadAsByteArrayAsync()
+                Return Await response.Content.ReadAsByteArrayAsync().ConfigureAwait(False)
             End Using
         End Using
     End Function

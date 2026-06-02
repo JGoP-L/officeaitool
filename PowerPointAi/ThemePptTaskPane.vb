@@ -12,7 +12,7 @@ Public Class ThemePptTaskPane
     Inherits UserControl
 
     Private Const TemplateCoverToken As String = "ak_demo"
-    Private Const ThemePptPaneBuild As String = "2026.06.02.5"
+    Private Const ThemePptPaneBuild As String = "2026.06.02.6"
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -20,6 +20,7 @@ Public Class ThemePptTaskPane
     Private _outlineMarkdown As String
     Private _taskId As String
     Private _lastTemplateLoadUsedFallback As Boolean
+    Private _isTemplateLoading As Boolean
 
     Private ReadOnly _topicBox As New TextBox()
     Private ReadOnly _generateButton As New Button()
@@ -250,12 +251,16 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Async Function LoadTemplatesAsync() As Task
+        If _isTemplateLoading Then Return
+
+        _isTemplateLoading = True
         _refreshTemplatesButton.Enabled = False
         _lastTemplateLoadUsedFallback = False
 
         Try
             SetStatus("正在加载 Docmee 模板...")
-            Dim templates = Await _client.ListTemplatesAsync(1, 20)
+            Await Task.Yield()
+            Dim templates = Await LoadTemplatesInBackgroundAsync()
             PopulateTemplates(templates)
 
             If _templateCombo.Items.Count = 0 Then
@@ -278,8 +283,15 @@ Public Class ThemePptTaskPane
                 MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             End If
         Finally
+            _isTemplateLoading = False
             _refreshTemplatesButton.Enabled = True
         End Try
+    End Function
+
+    Private Function LoadTemplatesInBackgroundAsync() As Task(Of List(Of DocmeeTemplateInfo))
+        Return Task.Run(Function() As List(Of DocmeeTemplateInfo)
+                            Return _client.ListTemplatesAsync(1, 20).GetAwaiter().GetResult()
+                        End Function)
     End Function
 
     Private Sub PopulateTemplates(templates As IEnumerable(Of DocmeeTemplateInfo))
@@ -336,13 +348,14 @@ Public Class ThemePptTaskPane
     Private Async Sub BeginLoadTemplateCovers()
         Dim loadGeneration = _templateCoverLoadGeneration
         Dim templates = GetCurrentTemplatesSnapshot()
+        Await Task.Delay(200)
 
         For Each template In templates
             If loadGeneration <> _templateCoverLoadGeneration Then Return
             If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.CoverUrl) Then Continue For
 
             Try
-                Dim bytes = Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))
+                Dim bytes = Await DownloadTemplateCoverInBackgroundAsync(BuildTemplateCoverUrl(template.CoverUrl))
                 If loadGeneration <> _templateCoverLoadGeneration Then Return
 
                 Dim coverImage As System.Drawing.Image = Await Task.Run(Function() As System.Drawing.Image
@@ -359,6 +372,12 @@ Public Class ThemePptTaskPane
             End Try
         Next
     End Sub
+
+    Private Function DownloadTemplateCoverInBackgroundAsync(coverUrl As String) As Task(Of Byte())
+        Return Task.Run(Function() As Byte()
+                            Return _client.DownloadTemplateCoverAsync(coverUrl).GetAwaiter().GetResult()
+                        End Function)
+    End Function
 
     Private Function GetCurrentTemplatesSnapshot() As List(Of DocmeeTemplateInfo)
         Dim templates As New List(Of DocmeeTemplateInfo)()

@@ -114,6 +114,8 @@ Lessons learned from errors encountered in this project. Updated automatically b
 
 **Recurring:** Hit again on 2026-06-02 with users reporting the task pane could still feel stuck and template covers still did not appear. `ListTemplatesAsync` still used the default 5-minute client timeout before falling back, and template cards still used `PictureBox.LoadAsync`/remote `ImageLocation`, which is opaque and unreliable inside Office task panes. Use a short timeout for the template-list call, render selectable cards before any image request, and load covers through a controlled 5-second `HttpClient` download path.
 
+**Recurring:** Hit again on 2026-06-02 when clicking refresh made PowerPoint appear frozen. Even after lowering timeouts, `LoadTemplatesAsync` and `BeginLoadTemplateCovers` still initiated HTTP work from the task-pane async methods, and the shared client awaits could capture the Office UI synchronization context. Guard refresh against overlapping loads, yield once so the UI repaints, start template-list and cover HTTP work from `Task.Run`, and use `ConfigureAwait(False)` inside the Docmee client methods.
+
 ## 2026-06-02 VB Local Variables Can Shadow Type Names
 
 **Problem:** GitHub Actions failed compiling `PowerPointAi/ThemePptTaskPane.vb` with `BC30980: Type of 'image' cannot be inferred from an expression containing 'image'` and `BC42104`.
