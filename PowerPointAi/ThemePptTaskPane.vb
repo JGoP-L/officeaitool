@@ -345,15 +345,15 @@ Public Class ThemePptTaskPane
                 Dim bytes = Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))
                 If loadGeneration <> _templateCoverLoadGeneration Then Return
 
-                Dim image = Await Task.Run(Function()
-                                               Using stream As New MemoryStream(bytes)
-                                                   Using loaded = Image.FromStream(stream)
-                                                       Return CType(New Bitmap(loaded), Image)
-                                                   End Using
-                                               End Using
-                                           End Function)
+                Dim coverImage As System.Drawing.Image = Await Task.Run(Function() As System.Drawing.Image
+                                                                            Using stream As New MemoryStream(bytes)
+                                                                                Using loaded As System.Drawing.Image = System.Drawing.Image.FromStream(stream)
+                                                                                    Return CType(New Bitmap(loaded), System.Drawing.Image)
+                                                                                End Using
+                                                                            End Using
+                                                                        End Function)
 
-                SetTemplateCoverImage(template.Id, image, loadGeneration)
+                SetTemplateCoverImage(template.Id, coverImage, loadGeneration)
             Catch
                 MarkTemplateCoverUnavailable(template.Id, loadGeneration)
             End Try

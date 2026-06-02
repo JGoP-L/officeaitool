@@ -99,6 +99,8 @@ assert(pane.includes('String.IsNullOrWhiteSpace(template.CoverUrl) Then Continue
 assert(pane.includes('Private Const TemplateCoverToken As String = "ak_demo"'), 'template cover URLs must use the provided ak_demo token');
 assert(pane.includes('BeginLoadTemplateCovers()'), 'template cover loading must start after cards are visible');
 assert(pane.includes('Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))'), 'template cover loading must use the controlled Docmee client downloader');
+assert(!pane.includes('Dim image = Await Task.Run'), 'template cover loader must not declare a local variable named image because VB resolves Image case-insensitively');
+assert(pane.includes('System.Drawing.Image.FromStream(stream)'), 'template cover loader must fully qualify System.Drawing.Image to avoid VB name inference errors');
 assert(!pane.includes('cover.LoadAsync()'), 'template cards must not use PictureBox.LoadAsync because it can hang inside Office task panes');
 assert(!pane.includes('cover.ImageLocation'), 'template cards must not assign remote ImageLocation directly');
 assert(!pane.includes('cover.ImageLocation = template.CoverUrl'), 'template cards must not load raw cover URLs because Docmee returns 403 without a token');

@@ -113,3 +113,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Solution:** Add known Docmee demo templates as a fallback list, centralize template population so live and fallback templates render identically, show `模板接口失败，已使用内置模板 N 个。`, and append the real exception chain into the output box for diagnosis.
 
 **Recurring:** Hit again on 2026-06-02 with users reporting the task pane could still feel stuck and template covers still did not appear. `ListTemplatesAsync` still used the default 5-minute client timeout before falling back, and template cards still used `PictureBox.LoadAsync`/remote `ImageLocation`, which is opaque and unreliable inside Office task panes. Use a short timeout for the template-list call, render selectable cards before any image request, and load covers through a controlled 5-second `HttpClient` download path.
+
+## 2026-06-02 VB Local Variables Can Shadow Type Names
+
+**Problem:** GitHub Actions failed compiling `PowerPointAi/ThemePptTaskPane.vb` with `BC30980: Type of 'image' cannot be inferred from an expression containing 'image'` and `BC42104`.
+
+**Root Cause:** VB is case-insensitive. A local variable named `image` in `Dim image = Await Task.Run(...)` shadowed the imported `System.Drawing.Image` type used inside the same initializer (`Image.FromStream`, `CType(..., Image)`), so the compiler tried to infer the variable from an expression that referenced itself.
+
+**Solution:** Rename the local variable to `coverImage`, explicitly type it as `System.Drawing.Image`, and fully qualify `System.Drawing.Image.FromStream`/`CType(..., System.Drawing.Image)`. Add a static verification check preventing `Dim image = Await Task.Run` from returning.
