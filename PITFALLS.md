@@ -83,3 +83,11 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** The import flow navigated to the end of the destination deck and used PowerPoint's keep-source-formatting paste command. After import, PowerPoint could remain on a newly pasted generated-template slide, so native color palettes and new-slide defaults were based on that slide's theme.
 
 **Solution:** Capture the user's active slide before importing, then restore and reselect that original slide after the generated slides are pasted.
+
+## 2026-06-02 Docmee Template Gallery Must Not Reuse The Outline Log Box
+
+**Problem:** After outline generation and even after PPT import, the task pane could still show a large text/log box instead of the OfficePLUS-like template card gallery the user expected.
+
+**Root Cause:** The first gallery implementation only hid the outline box once after template loading, while later diagnostics still targeted the same large output box and the import flow did not explicitly restore gallery mode.
+
+**Solution:** Centralize task-pane view switching with `ShowOutlineOutput` and `ShowTemplateGallery`, keep the gallery visible during and after generate/import, and prevent diagnostics from bringing the large outline/log box back while gallery mode is active.

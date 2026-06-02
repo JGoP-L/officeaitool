@@ -156,6 +156,21 @@ Public Class ThemePptTaskPane
         Me.Controls.Add(layout)
     End Sub
 
+    Private Sub ShowOutlineOutput()
+        _templateCardPanel.Visible = False
+        _outputBox.Visible = True
+        _outputBox.BringToFront()
+    End Sub
+
+    Private Sub ShowTemplateGallery()
+        If _templateCardPanel.Controls.Count = 0 Then Return
+
+        _outputBox.Visible = False
+        _templateCardPanel.Visible = True
+        _templateCardPanel.BringToFront()
+        ResizeTemplateCards()
+    End Sub
+
     Private Async Sub GenerateButton_Click(sender As Object, e As EventArgs)
         Await GenerateOutlineAsync()
     End Sub
@@ -173,8 +188,7 @@ Public Class ThemePptTaskPane
 
         _generateButton.Enabled = False
         _insertButton.Enabled = False
-        _outputBox.Visible = True
-        _templateCardPanel.Visible = False
+        ShowOutlineOutput()
         _outputBox.Clear()
         _outline = Nothing
         _outlineMarkdown = ""
@@ -191,19 +205,16 @@ Public Class ThemePptTaskPane
             _outputBox.Text = _outlineMarkdown.Trim()
             Await LoadTemplatesAsync()
             If _templateCombo.Items.Count > 0 Then
-                _outputBox.Visible = False
-                _templateCardPanel.Visible = True
+                ShowTemplateGallery()
                 _insertButton.Enabled = True
                 SetStatus("大纲已生成，请选择模板后生成并导入。")
             Else
-                _outputBox.Visible = True
-                _templateCardPanel.Visible = False
+                ShowOutlineOutput()
                 _insertButton.Enabled = False
             End If
         Catch ex As Exception
             SetStatus("生成失败。")
-            _outputBox.Visible = True
-            _templateCardPanel.Visible = False
+            ShowOutlineOutput()
             MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             _generateButton.Enabled = True
@@ -257,8 +268,7 @@ Public Class ThemePptTaskPane
         Catch ex As Exception
             _templateCombo.Enabled = False
             SetStatus("模板加载失败。")
-            _outputBox.Visible = True
-            _templateCardPanel.Visible = False
+            ShowOutlineOutput()
             MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
         Finally
             _refreshTemplatesButton.Enabled = True
@@ -376,6 +386,7 @@ Public Class ThemePptTaskPane
         _generateButton.Enabled = False
         _insertButton.Enabled = False
         _refreshTemplatesButton.Enabled = False
+        ShowTemplateGallery()
 
         Try
             Dim markdown = _outlineMarkdown.Trim()
@@ -409,6 +420,7 @@ Public Class ThemePptTaskPane
             SetStatus("正在导入当前演示文稿...")
             Dim importedCount = ImportPptxIntoPresentation(localPath)
             AppendTaskPaneLine("已导入页数: " & importedCount.ToString())
+            ShowTemplateGallery()
             SetStatus($"已生成并导入当前演示文稿，共 {importedCount} 页。")
         Catch ex As Exception
             SetStatus("生成或导入失败。")
@@ -418,12 +430,19 @@ Public Class ThemePptTaskPane
             _generateButton.Enabled = True
             _insertButton.Enabled = True
             _refreshTemplatesButton.Enabled = True
+            If _templateCombo.Items.Count > 0 Then
+                ShowTemplateGallery()
+            End If
         End Try
     End Function
 
     Private Sub AppendTaskPaneLine(text As String)
         If _outputBox.InvokeRequired Then
             _outputBox.BeginInvoke(CType(Sub() AppendTaskPaneLine(text), MethodInvoker))
+            Return
+        End If
+
+        If _templateCardPanel.Visible Then
             Return
         End If
 

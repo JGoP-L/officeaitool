@@ -72,6 +72,12 @@ assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel
 assert(pane.includes('_outputBox.Visible = True'), 'outline output box must be visible while content is streaming');
 assert(pane.includes('_outputBox.Visible = False'), 'outline output box must be hidden after content generation completes');
 assert(pane.includes('_templateCardPanel.Visible = True'), 'template card panel must replace the outline box after content generation completes');
+assert(pane.includes('Private Sub ShowOutlineOutput()'), 'ThemePptTaskPane must centralize showing the streaming outline output');
+assert(pane.includes('Private Sub ShowTemplateGallery()'), 'ThemePptTaskPane must centralize showing the template gallery');
+assert(pane.includes('ShowOutlineOutput()'), 'ThemePptTaskPane must explicitly show outline output during generation');
+assert(pane.includes('ShowTemplateGallery()'), 'ThemePptTaskPane must explicitly switch to template gallery after outline generation');
+assert(pane.includes('If _templateCardPanel.Visible Then'), 'task pane diagnostics must not bring the large outline/log box back after gallery mode');
+assert(pane.includes('ShowTemplateGallery()') && pane.includes('AppendTaskPaneLine("已导入页数: " & importedCount.ToString())'), 'generate/import flow must return to gallery mode after import diagnostics');
 assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPane must show template cards only when templates were loaded');
 assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
 assert(pane.includes('PictureBoxSizeMode.Zoom'), 'template cards must display template cover images');
