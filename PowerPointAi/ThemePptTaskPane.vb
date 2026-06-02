@@ -12,6 +12,7 @@ Public Class ThemePptTaskPane
     Inherits UserControl
 
     Private Const TemplateCoverToken As String = "ak_demo"
+    Private Const ThemePptPaneBuild As String = "2026.06.02.3"
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -145,7 +146,7 @@ Public Class ThemePptTaskPane
         hintLabel.Dock = DockStyle.Fill
         hintLabel.Height = 42
         hintLabel.ForeColor = Color.FromArgb(86, 94, 108)
-        hintLabel.Text = "演示版使用 test.docmee.cn 和 ak_demo，生成的 PPTX 会下载到临时目录并导入当前演示文稿。"
+        hintLabel.Text = "版本 " & ThemePptPaneBuild & " | 演示版使用 test.docmee.cn 和 ak_demo，生成的 PPTX 会下载到临时目录并导入当前演示文稿。"
 
         layout.Controls.Add(titleLabel, 0, 0)
         layout.Controls.Add(_topicBox, 0, 1)
@@ -282,46 +283,24 @@ Public Class ThemePptTaskPane
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
         Dim card As New Panel()
         card.Width = Math.Max(220, _templateCardPanel.ClientSize.Width - 24)
-        card.Height = 218
-        card.Padding = New Padding(6)
+        card.Height = 244
+        card.Padding = New Padding(8)
         card.Margin = New Padding(0, 0, 0, 10)
         card.BackColor = Color.White
         card.BorderStyle = BorderStyle.FixedSingle
         card.Tag = template
         card.Cursor = Cursors.Hand
 
-        Dim cardLayout As New TableLayoutPanel()
-        cardLayout.Dock = DockStyle.Fill
-        cardLayout.ColumnCount = 1
-        cardLayout.RowCount = 3
-        cardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 118.0F))
-        cardLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        cardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 30.0F))
-        cardLayout.Margin = New Padding(0)
-        cardLayout.Padding = New Padding(0)
-        cardLayout.Tag = template
-        cardLayout.Cursor = Cursors.Hand
-
         Dim previewPanel As New Panel()
-        previewPanel.Dock = DockStyle.Fill
-        previewPanel.Margin = New Padding(0, 0, 0, 6)
+        previewPanel.Name = "TemplateCoverHost"
         previewPanel.BackColor = Color.FromArgb(255, 248, 241)
+        previewPanel.BorderStyle = BorderStyle.FixedSingle
         previewPanel.Tag = template
         previewPanel.Cursor = Cursors.Hand
 
-        Dim previewLayout As New TableLayoutPanel()
-        previewLayout.Dock = DockStyle.Fill
-        previewLayout.ColumnCount = 1
-        previewLayout.RowCount = 3
-        previewLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 24.0F))
-        previewLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        previewLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 22.0F))
-        previewLayout.Padding = New Padding(12, 8, 12, 8)
-        previewLayout.Tag = template
-        previewLayout.Cursor = Cursors.Hand
-
         Dim previewBadge As New Label()
-        previewBadge.Dock = DockStyle.Fill
+        previewBadge.Name = "TemplatePreviewBadge"
+        previewBadge.AutoSize = False
         previewBadge.Text = "模板预览"
         previewBadge.TextAlign = ContentAlignment.MiddleLeft
         previewBadge.ForeColor = Color.FromArgb(234, 88, 12)
@@ -330,17 +309,19 @@ Public Class ThemePptTaskPane
         previewBadge.Cursor = Cursors.Hand
 
         Dim previewTitle As New Label()
-        previewTitle.Dock = DockStyle.Fill
+        previewTitle.Name = "TemplatePreviewTitle"
+        previewTitle.AutoSize = False
         previewTitle.Text = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
         previewTitle.TextAlign = ContentAlignment.MiddleLeft
         previewTitle.AutoEllipsis = True
         previewTitle.ForeColor = Color.FromArgb(39, 45, 55)
-        previewTitle.Font = New Font(Me.Font.FontFamily, 10.5F, FontStyle.Bold)
+        previewTitle.Font = New Font(Me.Font.FontFamily, 10.0F, FontStyle.Bold)
         previewTitle.Tag = template
         previewTitle.Cursor = Cursors.Hand
 
         Dim previewMeta As New Label()
-        previewMeta.Dock = DockStyle.Fill
+        previewMeta.Name = "TemplatePreviewMeta"
+        previewMeta.AutoSize = False
         previewMeta.Text = BuildTemplateMetaText(template)
         previewMeta.TextAlign = ContentAlignment.MiddleLeft
         previewMeta.AutoEllipsis = True
@@ -349,13 +330,8 @@ Public Class ThemePptTaskPane
         previewMeta.Tag = template
         previewMeta.Cursor = Cursors.Hand
 
-        previewLayout.Controls.Add(previewBadge, 0, 0)
-        previewLayout.Controls.Add(previewTitle, 0, 1)
-        previewLayout.Controls.Add(previewMeta, 0, 2)
-        previewPanel.Controls.Add(previewLayout)
-
         Dim cover As New PictureBox()
-        cover.Dock = DockStyle.Fill
+        cover.Name = "TemplateCoverImage"
         cover.BackColor = Color.FromArgb(248, 250, 252)
         cover.SizeMode = PictureBoxSizeMode.Zoom
         cover.Tag = template
@@ -380,20 +356,14 @@ Public Class ThemePptTaskPane
             End Try
         End If
 
+        previewPanel.Controls.Add(previewBadge)
+        previewPanel.Controls.Add(previewTitle)
+        previewPanel.Controls.Add(previewMeta)
         previewPanel.Controls.Add(cover)
 
-        Dim infoLayout As New TableLayoutPanel()
-        infoLayout.Dock = DockStyle.Fill
-        infoLayout.ColumnCount = 1
-        infoLayout.RowCount = 2
-        infoLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 24.0F))
-        infoLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        infoLayout.Margin = New Padding(0, 0, 0, 6)
-        infoLayout.Tag = template
-        infoLayout.Cursor = Cursors.Hand
-
         Dim nameLabel As New Label()
-        nameLabel.Dock = DockStyle.Fill
+        nameLabel.Name = "TemplateName"
+        nameLabel.AutoSize = False
         nameLabel.TextAlign = ContentAlignment.MiddleLeft
         nameLabel.AutoEllipsis = True
         nameLabel.ForeColor = Color.FromArgb(39, 45, 55)
@@ -403,7 +373,8 @@ Public Class ThemePptTaskPane
         nameLabel.Cursor = Cursors.Hand
 
         Dim detailLabel As New Label()
-        detailLabel.Dock = DockStyle.Fill
+        detailLabel.Name = "TemplateMeta"
+        detailLabel.AutoSize = False
         detailLabel.TextAlign = ContentAlignment.MiddleLeft
         detailLabel.AutoEllipsis = True
         detailLabel.ForeColor = Color.FromArgb(86, 94, 108)
@@ -412,11 +383,9 @@ Public Class ThemePptTaskPane
         detailLabel.Tag = template
         detailLabel.Cursor = Cursors.Hand
 
-        infoLayout.Controls.Add(nameLabel, 0, 0)
-        infoLayout.Controls.Add(detailLabel, 0, 1)
-
         Dim selectLabel As New Label()
-        selectLabel.Dock = DockStyle.Fill
+        selectLabel.Name = "TemplateSelect"
+        selectLabel.AutoSize = False
         selectLabel.Text = "选择模板"
         selectLabel.TextAlign = ContentAlignment.MiddleCenter
         selectLabel.ForeColor = Color.FromArgb(39, 45, 55)
@@ -425,10 +394,12 @@ Public Class ThemePptTaskPane
         selectLabel.Tag = template
         selectLabel.Cursor = Cursors.Hand
 
-        cardLayout.Controls.Add(previewPanel, 0, 0)
-        cardLayout.Controls.Add(infoLayout, 0, 1)
-        cardLayout.Controls.Add(selectLabel, 0, 2)
-        card.Controls.Add(cardLayout)
+        card.Controls.Add(previewPanel)
+        card.Controls.Add(nameLabel)
+        card.Controls.Add(detailLabel)
+        card.Controls.Add(selectLabel)
+        AddHandler card.Resize, Sub() LayoutTemplateCard(card)
+        LayoutTemplateCard(card)
         AddTemplateCardClickHandlers(card, template)
 
         If Not String.IsNullOrWhiteSpace(template.Id) Then
@@ -437,6 +408,75 @@ Public Class ThemePptTaskPane
         End If
 
         Return card
+    End Function
+
+    Private Sub LayoutTemplateCard(card As Panel)
+        If card Is Nothing Then Return
+
+        Dim left = card.Padding.Left
+        Dim top = card.Padding.Top
+        Dim innerWidth = Math.Max(120, card.ClientSize.Width - card.Padding.Horizontal)
+        Dim coverHeight = 130
+        Dim nameHeight = 28
+        Dim metaHeight = 22
+        Dim buttonHeight = 30
+        Dim gap = 6
+
+        Dim coverHost = FindTemplateCardChild(card, "TemplateCoverHost")
+        If coverHost IsNot Nothing Then
+            coverHost.Bounds = New Rectangle(left, top, innerWidth, coverHeight)
+            LayoutTemplateCoverHost(coverHost)
+        End If
+
+        Dim nameLabel = FindTemplateCardChild(card, "TemplateName")
+        If nameLabel IsNot Nothing Then
+            nameLabel.Bounds = New Rectangle(left, top + coverHeight + gap, innerWidth, nameHeight)
+        End If
+
+        Dim metaLabel = FindTemplateCardChild(card, "TemplateMeta")
+        If metaLabel IsNot Nothing Then
+            metaLabel.Bounds = New Rectangle(left, top + coverHeight + gap + nameHeight, innerWidth, metaHeight)
+        End If
+
+        Dim selectLabel = FindTemplateCardChild(card, "TemplateSelect")
+        If selectLabel IsNot Nothing Then
+            selectLabel.Bounds = New Rectangle(left, top + coverHeight + gap + nameHeight + metaHeight + gap, innerWidth, buttonHeight)
+        End If
+    End Sub
+
+    Private Sub LayoutTemplateCoverHost(coverHost As Control)
+        Dim contentWidth = Math.Max(80, coverHost.ClientSize.Width - 24)
+        Dim contentLeft = 12
+
+        Dim previewBadge = FindTemplateCardChild(coverHost, "TemplatePreviewBadge")
+        If previewBadge IsNot Nothing Then
+            previewBadge.Bounds = New Rectangle(contentLeft, 8, contentWidth, 22)
+        End If
+
+        Dim previewTitle = FindTemplateCardChild(coverHost, "TemplatePreviewTitle")
+        If previewTitle IsNot Nothing Then
+            previewTitle.Bounds = New Rectangle(contentLeft, 38, contentWidth, 44)
+        End If
+
+        Dim previewMeta = FindTemplateCardChild(coverHost, "TemplatePreviewMeta")
+        If previewMeta IsNot Nothing Then
+            previewMeta.Bounds = New Rectangle(contentLeft, 92, contentWidth, 20)
+        End If
+
+        Dim cover = FindTemplateCardChild(coverHost, "TemplateCoverImage")
+        If cover IsNot Nothing Then
+            cover.Bounds = New Rectangle(0, 0, coverHost.ClientSize.Width, coverHost.ClientSize.Height)
+        End If
+    End Sub
+
+    Private Function FindTemplateCardChild(parent As Control, childName As String) As Control
+        If parent Is Nothing OrElse String.IsNullOrWhiteSpace(childName) Then Return Nothing
+
+        For Each child As Control In parent.Controls
+            If String.Equals(child.Name, childName, StringComparison.Ordinal) Then Return child
+        Next
+
+        Return Nothing
     End Function
 
     Private Function BuildTemplateCoverUrl(coverUrl As String) As String
@@ -493,7 +533,8 @@ Public Class ThemePptTaskPane
         For Each pair In _templateCards
             Dim isSelected = String.Equals(pair.Key, selectedId, StringComparison.Ordinal)
             pair.Value.BackColor = If(isSelected, Color.FromArgb(255, 245, 235), Color.White)
-            pair.Value.Padding = If(isSelected, New Padding(5), New Padding(6))
+            pair.Value.Padding = If(isSelected, New Padding(5), New Padding(8))
+            LayoutTemplateCard(pair.Value)
 
             If _templateSelectLabels.ContainsKey(pair.Key) Then
                 Dim selectLabel = _templateSelectLabels(pair.Key)

@@ -14,6 +14,7 @@ const ribbonDesigner = read('PowerPointAi/Ribbon1.Designer.vb');
 const ribbon = read('PowerPointAi/Ribbon1.vb');
 const addIn = read('PowerPointAi/ThisAddIn.vb');
 const project = read('PowerPointAi/PowerPointAi.vbproj');
+const installer = fs.existsSync('OfficeAgent/OfficeAgent.vdproj') ? read('OfficeAgent/OfficeAgent.vdproj') : '';
 const client = fs.existsSync('PowerPointAi/DocmeePptClient.vb') ? read('PowerPointAi/DocmeePptClient.vb') : '';
 const pane = fs.existsSync('PowerPointAi/ThemePptTaskPane.vb') ? read('PowerPointAi/ThemePptTaskPane.vb') : '';
 
@@ -27,6 +28,8 @@ assert(addIn.includes('New ThemePptTaskPane(Me.Application)'), 'ThisAddIn must c
 
 assert(project.includes('Compile Include="DocmeePptClient.vb"'), 'PowerPoint project must compile DocmeePptClient');
 assert(project.includes('Compile Include="ThemePptTaskPane.vb"'), 'PowerPoint project must compile ThemePptTaskPane');
+assert(installer.includes('"ProductVersion" = "8:2.9.0"'), 'installer version must be bumped so testers install the new template-card build');
+assert(installer.includes('"RemovePreviousVersions" = "11:TRUE"'), 'installer must remove previous versions during upgrade');
 
 assert(client.includes('https://test.docmee.cn'), 'Docmee client must use the test API base URL');
 assert(client.includes('Private Const DemoToken As String = "ak_demo"'), 'Docmee client must use ak_demo token for demo');
@@ -67,6 +70,8 @@ assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display ou
 assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
 assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
 assert(pane.includes('Private ReadOnly _templateCardPanel As New FlowLayoutPanel()'), 'ThemePptTaskPane must provide an OfficePLUS-like template card panel');
+assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.3"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
+assert(pane.includes('"版本 " & ThemePptPaneBuild'), 'ThemePptTaskPane hint text must include the visible build marker');
 assert(pane.includes('_templateCardPanel.AutoScroll = True'), 'template card panel must support scrolling through template covers');
 assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel must be hidden until templates are ready');
 assert(pane.includes('_outputBox.Visible = True'), 'outline output box must be visible while content is streaming');
@@ -81,6 +86,8 @@ assert(pane.includes('ShowTemplateGallery()') && pane.includes('AppendTaskPaneLi
 assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPane must show template cards only when templates were loaded');
 assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
 assert(pane.includes('PictureBoxSizeMode.Zoom'), 'template cards must display template cover images');
+assert(pane.includes('AddHandler card.Resize, Sub() LayoutTemplateCard(card)'), 'template cards must use a deterministic resize layout instead of relying on nested docking');
+assert(pane.includes('Private Sub LayoutTemplateCard(card As Panel)'), 'template card layout must keep cover, name, metadata, and select button visible');
 assert(pane.includes('If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then'), 'template cards must load template cover URLs when available');
 assert(pane.includes('Private Const TemplateCoverToken As String = "ak_demo"'), 'template cover URLs must use the provided ak_demo token');
 assert(pane.includes('BuildTemplateCoverUrl(template.CoverUrl)'), 'template cover loading must append the Docmee cover token before ImageLocation');
@@ -90,6 +97,7 @@ assert(pane.includes('BuildTemplateMetaText(template)'), 'template cards must sh
 assert(pane.includes('Text = "模板预览"'), 'template cards must show a metadata fallback preview instead of an empty cover area');
 assert(pane.includes('selectLabel.Text = If(isSelected, "已选择", "选择模板")'), 'template card selection must update explicit select button text');
 assert(pane.includes('Color.FromArgb(234, 88, 12)'), 'selected template button must use a strong selected color');
+assert(pane.includes('LayoutTemplateCard(pair.Value)'), 'selection style refresh must re-layout template cards after padding changes');
 assert(pane.includes('SelectTemplate(template)'), 'clicking a template card must select that template');
 assert(pane.includes('RefreshTemplateSelectionStyles()'), 'template card selection must have a visual selected state');
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
