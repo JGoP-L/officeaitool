@@ -23,6 +23,9 @@ Public Class ThemePptTaskPane
     Private ReadOnly _templateCombo As New ComboBox()
     Private ReadOnly _refreshTemplatesButton As New Button()
     Private ReadOnly _outputBox As New TextBox()
+    Private ReadOnly _contentPanel As New Panel()
+    Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
+    Private ReadOnly _templateCards As New Dictionary(Of String, Panel)()
     Private ReadOnly _statusLabel As New Label()
 
     Public Sub New(pptApp As PowerPoint.Application)
@@ -96,6 +99,7 @@ Public Class ThemePptTaskPane
         _templateCombo.Dock = DockStyle.Fill
         _templateCombo.DropDownStyle = ComboBoxStyle.DropDownList
         _templateCombo.Enabled = False
+        AddHandler _templateCombo.SelectedIndexChanged, AddressOf TemplateCombo_SelectedIndexChanged
 
         _refreshTemplatesButton.Text = "刷新"
         _refreshTemplatesButton.Width = 66
@@ -117,6 +121,21 @@ Public Class ThemePptTaskPane
         _outputBox.BackColor = Color.FromArgb(248, 250, 252)
         _outputBox.BorderStyle = BorderStyle.FixedSingle
         _outputBox.Margin = New Padding(0, 0, 0, 10)
+        _outputBox.Visible = True
+
+        _contentPanel.Dock = DockStyle.Fill
+        _contentPanel.Margin = New Padding(0, 0, 0, 10)
+
+        _templateCardPanel.Dock = DockStyle.Fill
+        _templateCardPanel.AutoScroll = True
+        _templateCardPanel.FlowDirection = FlowDirection.TopDown
+        _templateCardPanel.WrapContents = False
+        _templateCardPanel.BackColor = Color.White
+        _templateCardPanel.Visible = False
+        AddHandler _templateCardPanel.Resize, AddressOf TemplateCardPanel_Resize
+
+        _contentPanel.Controls.Add(_templateCardPanel)
+        _contentPanel.Controls.Add(_outputBox)
 
         Dim hintLabel As New Label()
         hintLabel.AutoSize = False
@@ -131,7 +150,7 @@ Public Class ThemePptTaskPane
         layout.Controls.Add(templateLabel, 0, 3)
         layout.Controls.Add(templatePanel, 0, 4)
         layout.Controls.Add(_statusLabel, 0, 5)
-        layout.Controls.Add(_outputBox, 0, 6)
+        layout.Controls.Add(_contentPanel, 0, 6)
         layout.Controls.Add(hintLabel, 0, 7)
 
         Me.Controls.Add(layout)
@@ -154,6 +173,8 @@ Public Class ThemePptTaskPane
 
         _generateButton.Enabled = False
         _insertButton.Enabled = False
+        _outputBox.Visible = True
+        _templateCardPanel.Visible = False
         _outputBox.Clear()
         _outline = Nothing
         _outlineMarkdown = ""
@@ -169,10 +190,20 @@ Public Class ThemePptTaskPane
 
             _outputBox.Text = _outlineMarkdown.Trim()
             Await LoadTemplatesAsync()
-            _insertButton.Enabled = True
-            SetStatus("大纲已生成，请选择模板后生成并导入。")
+            If _templateCombo.Items.Count > 0 Then
+                _outputBox.Visible = False
+                _templateCardPanel.Visible = True
+                _insertButton.Enabled = True
+                SetStatus("大纲已生成，请选择模板后生成并导入。")
+            Else
+                _outputBox.Visible = True
+                _templateCardPanel.Visible = False
+                _insertButton.Enabled = False
+            End If
         Catch ex As Exception
             SetStatus("生成失败。")
+            _outputBox.Visible = True
+            _templateCardPanel.Visible = False
             MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             _generateButton.Enabled = True
@@ -203,15 +234,20 @@ Public Class ThemePptTaskPane
             SetStatus("正在加载 Docmee 模板...")
             Dim templates = Await _client.ListTemplatesAsync(1, 20)
             _templateCombo.Items.Clear()
+            _templateCardPanel.Controls.Clear()
+            _templateCards.Clear()
 
             For Each template In templates
                 _templateCombo.Items.Add(template)
+                _templateCardPanel.Controls.Add(CreateTemplateCard(template))
             Next
 
             _templateCombo.Enabled = _templateCombo.Items.Count > 0
             If _templateCombo.Items.Count > 0 AndAlso _templateCombo.SelectedIndex < 0 Then
                 _templateCombo.SelectedIndex = 0
             End If
+            RefreshTemplateSelectionStyles()
+            ResizeTemplateCards()
 
             If _templateCombo.Items.Count = 0 Then
                 SetStatus("未获取到可用模板。")
@@ -221,11 +257,109 @@ Public Class ThemePptTaskPane
         Catch ex As Exception
             _templateCombo.Enabled = False
             SetStatus("模板加载失败。")
+            _outputBox.Visible = True
+            _templateCardPanel.Visible = False
             MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
         Finally
             _refreshTemplatesButton.Enabled = True
         End Try
     End Function
+
+    Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
+        Dim card As New Panel()
+        card.Width = Math.Max(220, _templateCardPanel.ClientSize.Width - 24)
+        card.Height = 164
+        card.Padding = New Padding(6)
+        card.Margin = New Padding(0, 0, 0, 10)
+        card.BackColor = Color.White
+        card.BorderStyle = BorderStyle.FixedSingle
+        card.Tag = template
+
+        Dim cover As New PictureBox()
+        cover.Dock = DockStyle.Top
+        cover.Height = 118
+        cover.BackColor = Color.FromArgb(248, 250, 252)
+        cover.SizeMode = PictureBoxSizeMode.Zoom
+        cover.Tag = template
+
+        If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then
+            Try
+                cover.ImageLocation = template.CoverUrl
+                cover.LoadAsync()
+            Catch
+            End Try
+        End If
+
+        Dim nameLabel As New Label()
+        nameLabel.Dock = DockStyle.Bottom
+        nameLabel.Height = 34
+        nameLabel.TextAlign = ContentAlignment.MiddleLeft
+        nameLabel.AutoEllipsis = True
+        nameLabel.ForeColor = Color.FromArgb(39, 45, 55)
+        nameLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Regular)
+        nameLabel.Text = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
+        nameLabel.Tag = template
+
+        card.Controls.Add(nameLabel)
+        card.Controls.Add(cover)
+        AddTemplateCardClickHandlers(card, template)
+
+        If Not String.IsNullOrWhiteSpace(template.Id) Then
+            _templateCards(template.Id) = card
+        End If
+
+        Return card
+    End Function
+
+    Private Sub AddTemplateCardClickHandlers(control As Control, template As DocmeeTemplateInfo)
+        AddHandler control.Click, Sub(sender, args) SelectTemplate(template)
+
+        For Each child As Control In control.Controls
+            AddTemplateCardClickHandlers(child, template)
+        Next
+    End Sub
+
+    Private Sub SelectTemplate(template As DocmeeTemplateInfo)
+        If template Is Nothing Then Return
+
+        For index As Integer = 0 To _templateCombo.Items.Count - 1
+            Dim item = TryCast(_templateCombo.Items(index), DocmeeTemplateInfo)
+            If item IsNot Nothing AndAlso String.Equals(item.Id, template.Id, StringComparison.Ordinal) Then
+                If _templateCombo.SelectedIndex <> index Then
+                    _templateCombo.SelectedIndex = index
+                End If
+                Exit For
+            End If
+        Next
+
+        RefreshTemplateSelectionStyles()
+    End Sub
+
+    Private Sub TemplateCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
+        RefreshTemplateSelectionStyles()
+    End Sub
+
+    Private Sub RefreshTemplateSelectionStyles()
+        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
+        Dim selectedId = If(selectedTemplate Is Nothing, "", selectedTemplate.Id)
+
+        For Each pair In _templateCards
+            Dim isSelected = String.Equals(pair.Key, selectedId, StringComparison.Ordinal)
+            pair.Value.BackColor = If(isSelected, Color.FromArgb(255, 245, 235), Color.White)
+            pair.Value.Padding = If(isSelected, New Padding(5), New Padding(6))
+        Next
+    End Sub
+
+    Private Sub TemplateCardPanel_Resize(sender As Object, e As EventArgs)
+        ResizeTemplateCards()
+    End Sub
+
+    Private Sub ResizeTemplateCards()
+        Dim cardWidth = Math.Max(220, _templateCardPanel.ClientSize.Width - 24)
+        For Each card As Control In _templateCardPanel.Controls
+            card.Width = cardWidth
+        Next
+    End Sub
 
     Private Async Function GenerateAndImportPptxAsync() As Task
         If String.IsNullOrWhiteSpace(_taskId) OrElse String.IsNullOrWhiteSpace(_outlineMarkdown) Then

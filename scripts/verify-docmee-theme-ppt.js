@@ -66,6 +66,18 @@ assert(pane.includes('AppendOutlineStreamText'), 'ThemePptTaskPane must append s
 assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display outline chunks while they stream');
 assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
 assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
+assert(pane.includes('Private ReadOnly _templateCardPanel As New FlowLayoutPanel()'), 'ThemePptTaskPane must provide an OfficePLUS-like template card panel');
+assert(pane.includes('_templateCardPanel.AutoScroll = True'), 'template card panel must support scrolling through template covers');
+assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel must be hidden until templates are ready');
+assert(pane.includes('_outputBox.Visible = True'), 'outline output box must be visible while content is streaming');
+assert(pane.includes('_outputBox.Visible = False'), 'outline output box must be hidden after content generation completes');
+assert(pane.includes('_templateCardPanel.Visible = True'), 'template card panel must replace the outline box after content generation completes');
+assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPane must show template cards only when templates were loaded');
+assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
+assert(pane.includes('PictureBoxSizeMode.Zoom'), 'template cards must display template cover images');
+assert(pane.includes('If Not String.IsNullOrWhiteSpace(template.CoverUrl) Then'), 'template cards must load template cover URLs when available');
+assert(pane.includes('SelectTemplate(template)'), 'clicking a template card must select that template');
+assert(pane.includes('RefreshTemplateSelectionStyles()'), 'template card selection must have a visual selected state');
 assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
 assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template selector');
 assert(pane.includes('Dim markdown = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must send the same markdown outline into generatePptx');
