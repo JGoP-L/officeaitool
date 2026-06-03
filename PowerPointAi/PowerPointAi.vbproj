@@ -260,6 +260,9 @@
     <Compile Include="PowerPointCompletionManager.vb" />
     <Compile Include="PowerPointJsonCommandSchema.vb" />
     <Compile Include="DocmeePptClient.vb" />
+    <Compile Include="TemplateSelectionForm.vb">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="ThemePptTaskPane.vb">
       <SubType>UserControl</SubType>
     </Compile>

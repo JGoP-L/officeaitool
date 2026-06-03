@@ -1,5 +1,6 @@
 Imports System.Collections.Generic
 Imports System.IO
+Imports System.Net
 Imports System.Net.Http
 Imports System.Text
 Imports System.Threading.Tasks
@@ -187,7 +188,7 @@ Public Class DocmeePptClient
         End Using
     End Function
 
-    Public Async Function ListTemplatesAsync(Optional page As Integer = 1, Optional size As Integer = 10) As Task(Of List(Of DocmeeTemplateInfo))
+    Public Async Function ListTemplatesAsync(Optional page As Integer = 1, Optional size As Integer = 10, Optional cancellationToken As Threading.CancellationToken = Nothing) As Task(Of List(Of DocmeeTemplateInfo))
         Dim payload As New JObject From {
             {"page", Math.Max(page, 1)},
             {"size", Math.Max(size, 1)},
@@ -204,7 +205,7 @@ Public Class DocmeePptClient
                 request.Headers.Add("token", DemoToken)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using response = Await client.SendAsync(request).ConfigureAwait(False)
+                Using response = Await client.SendAsync(request, cancellationToken).ConfigureAwait(False)
                     Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     EnsureSuccess(response, responseText)
 
@@ -235,20 +236,64 @@ Public Class DocmeePptClient
         End Using
     End Function
 
-    Public Async Function DownloadTemplateCoverAsync(coverUrl As String) As Task(Of Byte())
+    Public Async Function DownloadTemplateCoverAsync(coverUrl As String, Optional cancellationToken As Threading.CancellationToken = Nothing) As Task(Of Byte())
         If String.IsNullOrWhiteSpace(coverUrl) Then
             Throw New ArgumentException("缺少模板封面地址。", NameOf(coverUrl))
         End If
 
-        Using client = CreateHttpClient(TimeSpan.FromSeconds(5))
-            Using response = Await client.GetAsync(coverUrl).ConfigureAwait(False)
-                If Not response.IsSuccessStatusCode Then
-                    Throw New HttpRequestException($"Docmee 模板封面请求失败: {(CInt(response.StatusCode))} {response.ReasonPhrase}")
-                End If
+        Using handler As New HttpClientHandler() With {.AllowAutoRedirect = False}
+            Using client As New HttpClient(handler)
+                client.Timeout = TimeSpan.FromSeconds(8)
 
-                Return Await response.Content.ReadAsByteArrayAsync().ConfigureAwait(False)
+                Dim currentUrl = coverUrl.Trim()
+                For redirectCount As Integer = 0 To 4
+                    Using request As New HttpRequestMessage(HttpMethod.Get, currentUrl)
+                        request.Headers.TryAddWithoutValidation("token", DemoToken)
+
+                        Using response = Await client.SendAsync(request, cancellationToken).ConfigureAwait(False)
+                            If IsRedirectStatusCode(response.StatusCode) Then
+                                Dim location = response.Headers.Location
+                                If location Is Nothing Then
+                                    Throw New HttpRequestException($"Docmee 模板封面重定向缺少 Location: {(CInt(response.StatusCode))}")
+                                End If
+
+                                currentUrl = ResolveRedirectUrl(response.RequestMessage.RequestUri, location)
+                                Continue For
+                            End If
+
+                            If Not response.IsSuccessStatusCode Then
+                                Throw New HttpRequestException($"Docmee 模板封面请求失败: {(CInt(response.StatusCode))} {response.ReasonPhrase}")
+                            End If
+
+                            Dim bytes = Await response.Content.ReadAsByteArrayAsync().ConfigureAwait(False)
+                            Dim contentType = If(response.Content.Headers.ContentType Is Nothing, "", response.Content.Headers.ContentType.MediaType)
+                            If bytes Is Nothing OrElse bytes.Length = 0 Then
+                                Throw New InvalidOperationException("Docmee 模板封面返回为空。")
+                            End If
+
+                            If Not String.IsNullOrWhiteSpace(contentType) AndAlso
+                               Not contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) Then
+                                Throw New InvalidOperationException($"Docmee 模板封面返回的不是图片: {contentType}")
+                            End If
+
+                            Return bytes
+                        End Using
+                    End Using
+                Next
             End Using
         End Using
+
+        Throw New HttpRequestException("Docmee 模板封面重定向次数过多。")
+    End Function
+
+    Private Shared Function IsRedirectStatusCode(statusCode As HttpStatusCode) As Boolean
+        Dim code = CInt(statusCode)
+        Return code = 301 OrElse code = 302 OrElse code = 303 OrElse code = 307 OrElse code = 308
+    End Function
+
+    Private Shared Function ResolveRedirectUrl(baseUri As Uri, location As Uri) As String
+        If location.IsAbsoluteUri Then Return location.AbsoluteUri
+        Return New Uri(baseUri, location).AbsoluteUri
     End Function
 
     Public Async Function GeneratePptxAsync(taskId As String, templateId As String, markdown As String) As Task(Of DocmeePptInfo)

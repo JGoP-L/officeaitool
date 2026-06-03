@@ -117,6 +117,8 @@ Public Class ThisAddIn
     End Sub
 
     Public Sub ShowThemePptTaskPane()
+        EnsureCoreServicesLoaded()
+
         If themePptTaskPane Is Nothing Then
             themePptControl = New ThemePptTaskPane(Me.Application)
             themePptTaskPane = Me.CustomTaskPanes.Add(themePptControl, "主题生成PPT")

@@ -1,18 +1,25 @@
 Imports System.Collections.Generic
 Imports System.Drawing
+Imports System.Drawing.Drawing2D
 Imports System.IO
 Imports System.Text
+Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
+Imports Microsoft.Web.WebView2.Core
+Imports Microsoft.Web.WebView2.WinForms
 Imports Microsoft.Office.Core
 Imports Newtonsoft.Json.Linq
+Imports ShareRibbon
 Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 
 Public Class ThemePptTaskPane
     Inherits UserControl
 
     Private Const TemplateCoverToken As String = "ak_demo"
-    Private Const ThemePptPaneBuild As String = "2026.06.02.7"
+    Private Const ThemePptPaneBuild As String = "2026.06.03.15"
+    Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
+    Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -21,24 +28,42 @@ Public Class ThemePptTaskPane
     Private _taskId As String
     Private _lastTemplateLoadUsedFallback As Boolean
     Private _isTemplateLoading As Boolean
+    Private _templateLoadCts As CancellationTokenSource
+    Private _templateCoverCts As CancellationTokenSource
+    Private _templateCoverFailureCount As Integer
 
     Private ReadOnly _topicBox As New TextBox()
     Private ReadOnly _generateButton As New Button()
     Private ReadOnly _insertButton As New Button()
     Private ReadOnly _templateCombo As New ComboBox()
     Private ReadOnly _refreshTemplatesButton As New Button()
+    Private ReadOnly _selectTemplateButton As New Button()
     Private ReadOnly _outputBox As New TextBox()
     Private ReadOnly _contentPanel As New Panel()
     Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
+    Private ReadOnly _templateListBox As New ListBox()
+    Private ReadOnly _templateWebView As New WebView2()
+    Private ReadOnly _templatePaintGallery As New TemplateGalleryPaintControl()
     Private ReadOnly _templateCards As New Dictionary(Of String, Panel)()
     Private ReadOnly _templateSelectLabels As New Dictionary(Of String, Label)()
     Private ReadOnly _templateCoverBoxes As New Dictionary(Of String, PictureBox)()
+    Private ReadOnly _templateCoverHosts As New Dictionary(Of String, Panel)()
+    Private ReadOnly _templateCoverStatusLabels As New Dictionary(Of String, Label)()
+    Private ReadOnly _templatePreviewImages As New Dictionary(Of String, System.Drawing.Image)()
+    Private ReadOnly _templateCoverImageUrls As New Dictionary(Of String, String)()
+    Private ReadOnly _templateCoverFilePaths As New Dictionary(Of String, String)()
+    Private ReadOnly _templateCoverMessages As New Dictionary(Of String, String)()
     Private ReadOnly _statusLabel As New Label()
     Private _templateCoverLoadGeneration As Integer
+    Private _templateWebViewReady As Boolean
+    Private _templateWebViewInitializing As Boolean
+    Private _pendingTemplateGalleryRender As Boolean
 
     Public Sub New(pptApp As PowerPoint.Application)
         _pptApp = pptApp
+        AppendThemePptLog("Pane constructing. Build=" & ThemePptPaneBuild)
         BuildLayout()
+        AppendThemePptLog("Pane constructed.")
     End Sub
 
     Private Sub BuildLayout()
@@ -98,9 +123,10 @@ Public Class ThemePptTaskPane
 
         Dim templatePanel As New TableLayoutPanel()
         templatePanel.Dock = DockStyle.Fill
-        templatePanel.ColumnCount = 2
+        templatePanel.ColumnCount = 3
         templatePanel.RowCount = 1
         templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
         templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
         templatePanel.Margin = New Padding(0, 0, 0, 10)
 
@@ -114,8 +140,15 @@ Public Class ThemePptTaskPane
         _refreshTemplatesButton.Height = 28
         AddHandler _refreshTemplatesButton.Click, AddressOf RefreshTemplatesButton_Click
 
+        _selectTemplateButton.Text = "预览模板"
+        _selectTemplateButton.Width = 82
+        _selectTemplateButton.Height = 28
+        _selectTemplateButton.Enabled = False
+        AddHandler _selectTemplateButton.Click, AddressOf SelectTemplateButton_Click
+
         templatePanel.Controls.Add(_templateCombo, 0, 0)
         templatePanel.Controls.Add(_refreshTemplatesButton, 1, 0)
+        templatePanel.Controls.Add(_selectTemplateButton, 2, 0)
 
         _statusLabel.AutoSize = True
         _statusLabel.ForeColor = Color.FromArgb(86, 94, 108)
@@ -142,6 +175,26 @@ Public Class ThemePptTaskPane
         _templateCardPanel.Visible = False
         AddHandler _templateCardPanel.Resize, AddressOf TemplateCardPanel_Resize
 
+        _templateListBox.Dock = DockStyle.Fill
+        _templateListBox.DrawMode = DrawMode.OwnerDrawFixed
+        _templateListBox.ItemHeight = 182
+        _templateListBox.IntegralHeight = False
+        _templateListBox.BorderStyle = BorderStyle.FixedSingle
+        _templateListBox.BackColor = Color.White
+        _templateListBox.Visible = False
+        AddHandler _templateListBox.DrawItem, AddressOf TemplateListBox_DrawItem
+        AddHandler _templateListBox.SelectedIndexChanged, AddressOf TemplateListBox_SelectedIndexChanged
+
+        _templateWebView.Dock = DockStyle.Fill
+        _templateWebView.Visible = False
+        _templateWebView.DefaultBackgroundColor = Color.White
+
+        _templatePaintGallery.Dock = DockStyle.Fill
+        _templatePaintGallery.Visible = False
+        _templatePaintGallery.BackColor = Color.White
+        AddHandler _templatePaintGallery.TemplateSelected, AddressOf TemplatePaintGallery_TemplateSelected
+
+        _contentPanel.Controls.Add(_templateListBox)
         _contentPanel.Controls.Add(_templateCardPanel)
         _contentPanel.Controls.Add(_outputBox)
 
@@ -164,20 +217,326 @@ Public Class ThemePptTaskPane
         Me.Controls.Add(layout)
     End Sub
 
+    Private Async Sub ThemePptTaskPane_Load(sender As Object, e As EventArgs)
+        AppendThemePptLog("Pane load: WebView2 lazy initialization requested.")
+        Await InitializeTemplateWebViewAsync()
+    End Sub
+
+    Private Async Function InitializeTemplateWebViewAsync() As Task
+        If _templateWebViewReady OrElse _templateWebViewInitializing Then Return
+
+        _templateWebViewInitializing = True
+        Try
+            AppendThemePptLog("WebView2 initialize start.")
+            WebView2Loader.EnsureWebView2Loader()
+            Dim userDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OfficeAiThemePptWebView2")
+            Dim env = Await CoreWebView2Environment.CreateAsync(Nothing, userDataFolder)
+            Await _templateWebView.EnsureCoreWebView2Async(env)
+
+            If _templateWebView.CoreWebView2 IsNot Nothing Then
+                _templateWebView.CoreWebView2.Settings.IsScriptEnabled = True
+                _templateWebView.CoreWebView2.Settings.IsWebMessageEnabled = True
+                _templateWebView.CoreWebView2.Settings.AreDevToolsEnabled = True
+                Directory.CreateDirectory(GetTemplateCoverCacheDirectory())
+                _templateWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    TemplateCoverHostName,
+                    GetTemplateCoverCacheDirectory(),
+                    CoreWebView2HostResourceAccessKind.Allow)
+                AddHandler _templateWebView.CoreWebView2.NavigationCompleted, AddressOf TemplateWebView_NavigationCompleted
+                AddHandler _templateWebView.CoreWebView2.WebMessageReceived, AddressOf TemplateWebView_WebMessageReceived
+                _templateWebViewReady = True
+                AppendThemePptLog("WebView2 initialize success.")
+                RenderTemplateGallery()
+            Else
+                AppendThemePptLog("WebView2 initialize failed: CoreWebView2 is null.")
+                SetStatus("模板列表 WebView2 初始化失败：CoreWebView2 不可用。")
+            End If
+        Catch ex As Exception
+            AppendThemePptLog("WebView2 initialize exception: " & ex.ToString())
+            SetStatus("模板列表 WebView2 初始化失败：" & ex.Message)
+        Finally
+            _templateWebViewInitializing = False
+        End Try
+    End Function
+
     Private Sub ShowOutlineOutput()
         _templateCardPanel.Visible = False
+        _templateListBox.Visible = False
+        _templateWebView.Visible = False
+        _templatePaintGallery.Visible = False
         _outputBox.Visible = True
         _outputBox.BringToFront()
     End Sub
 
     Private Sub ShowTemplateGallery()
-        If _templateCardPanel.Controls.Count = 0 Then Return
+        If _templateCombo.Items.Count = 0 Then Return
 
-        _outputBox.Visible = False
-        _templateCardPanel.Visible = True
-        _templateCardPanel.BringToFront()
-        ResizeTemplateCards()
+        _templateCardPanel.Visible = False
+        _templateListBox.Visible = False
+        _templateWebView.Visible = False
+        _templatePaintGallery.Visible = False
+        _outputBox.Visible = True
+        _outputBox.BringToFront()
+        AppendThemePptLog("ShowTemplateGallery skipped in task pane; use WebView2 dialog. count=" &
+                          _templateCombo.Items.Count.ToString() & ", selected=" & GetSelectedTemplateId())
     End Sub
+
+    Private Sub RenderTemplateGallery()
+        ' The PowerPoint task pane is sensitive to hosted child HWNDs and direct GDI redraws.
+        ' Keep template rendering on the lightweight ListBox path only.
+    End Sub
+
+    Private Sub UpdateTemplatePaintGallery()
+        Try
+            Dim templates = GetCurrentTemplatesSnapshot()
+            _templatePaintGallery.SetData(templates, _templatePreviewImages, _templateCoverMessages, GetSelectedTemplateId())
+            AppendThemePptLog("PaintGallery data updated: templates=" & templates.Count.ToString() &
+                              ", images=" & _templatePreviewImages.Count.ToString() &
+                              ", messages=" & _templateCoverMessages.Count.ToString() &
+                              ", size=" & _templatePaintGallery.Width.ToString() & "x" & _templatePaintGallery.Height.ToString())
+        Catch ex As Exception
+            AppendThemePptLog("PaintGallery data update exception: " & ex.ToString())
+            SetStatus("模板列表渲染失败：" & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub NavigateTemplateGalleryFile()
+        Try
+            Dim cacheDirectory = GetTemplateCoverCacheDirectory()
+            Directory.CreateDirectory(cacheDirectory)
+            Dim htmlPath = Path.Combine(cacheDirectory, "gallery.html")
+            File.WriteAllText(htmlPath, BuildTemplateGalleryHtml(), Encoding.UTF8)
+            AppendThemePptLog("WebView2 gallery HTML written: " & htmlPath)
+            _templateWebView.CoreWebView2.Navigate("https://" & TemplateCoverHostName & "/gallery.html?t=" & DateTime.UtcNow.Ticks.ToString())
+        Catch ex As Exception
+            SetStatus("模板列表 HTML 写入失败：" & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub TemplateWebView_NavigationCompleted(sender As Object, e As CoreWebView2NavigationCompletedEventArgs)
+        If Not e.IsSuccess Then
+            SetStatus("模板列表渲染失败：" & e.WebErrorStatus.ToString())
+            Return
+        End If
+
+        If _templateCombo.Items.Count > 0 AndAlso _templateCoverImageUrls.Count >= _templateCombo.Items.Count Then
+            SetStatus("模板列表已渲染，封面加载完成。")
+        End If
+    End Sub
+
+    Private Function BuildTemplateGalleryHtml() As String
+        Dim selectedId = GetSelectedTemplateId()
+        Dim builder As New StringBuilder()
+
+        builder.AppendLine("<!doctype html>")
+        builder.AppendLine("<html><head><meta charset=""utf-8""><style>")
+        builder.AppendLine("html,body{margin:0;padding:0;background:#fff;font-family:'Microsoft YaHei UI','Microsoft YaHei',Arial,sans-serif;color:#272d37;font-size:12px;}")
+        builder.AppendLine(".wrap{padding:0 4px 10px 0;box-sizing:border-box;}")
+        builder.AppendLine(".card{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;background:#fff;margin:0 0 10px 0;padding:8px;cursor:pointer;}")
+        builder.AppendLine(".card.selected{border:2px solid #ea580c;background:#fff7ed;padding:7px;}")
+        builder.AppendLine(".cover{width:100%;aspect-ratio:16/9;background:#fff8f1;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;overflow:hidden;box-sizing:border-box;}")
+        builder.AppendLine(".cover img{display:block;width:100%;height:100%;object-fit:contain;background:#fff;}")
+        builder.AppendLine(".fallback{width:100%;height:100%;box-sizing:border-box;border-left:5px solid #ea580c;padding:18px 14px;display:flex;flex-direction:column;justify-content:space-between;}")
+        builder.AppendLine(".fallback-title{font-weight:700;color:#272d37;line-height:1.5;word-break:break-word;}")
+        builder.AppendLine(".fallback-status{color:#64748b;line-height:1.5;word-break:break-word;}")
+        builder.AppendLine(".fallback-status.error{color:#b91c1c;}")
+        builder.AppendLine(".title{margin-top:8px;font-size:13px;font-weight:700;line-height:1.45;word-break:break-word;}")
+        builder.AppendLine(".meta{margin-top:6px;color:#64748b;line-height:1.4;word-break:break-word;}")
+        builder.AppendLine(".status{margin-top:6px;color:#64748b;line-height:1.45;word-break:break-word;}")
+        builder.AppendLine(".status.error{color:#b91c1c;}")
+        builder.AppendLine(".btn{margin-top:8px;height:28px;min-width:96px;display:inline-flex;align-items:center;justify-content:center;background:#f1f5f9;color:#272d37;font-weight:700;}")
+        builder.AppendLine(".selected .btn{background:#ea580c;color:#fff;}")
+        builder.AppendLine("</style></head><body><div class=""wrap"">")
+
+        For Each item In _templateCombo.Items
+            Dim template = TryCast(item, DocmeeTemplateInfo)
+            If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Continue For
+
+            Dim isSelected = String.Equals(template.Id, selectedId, StringComparison.Ordinal)
+            Dim status = If(_templateCoverMessages.ContainsKey(template.Id), _templateCoverMessages(template.Id), "")
+            Dim hasError = status.StartsWith("封面加载失败", StringComparison.Ordinal)
+            Dim imageUrl = If(_templateCoverImageUrls.ContainsKey(template.Id), _templateCoverImageUrls(template.Id), "")
+            Dim title = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
+
+            builder.Append("<div class=""card")
+            If isSelected Then builder.Append(" selected")
+            builder.Append(""" data-id=""").Append(EscapeHtmlAttribute(template.Id)).Append(""">")
+            builder.AppendLine("<div class=""cover"">")
+            If Not String.IsNullOrWhiteSpace(imageUrl) Then
+                builder.Append("<img src=""").Append(EscapeHtmlAttribute(imageUrl)).Append(""" alt=""").Append(EscapeHtmlAttribute(title)).Append(""">")
+            Else
+                builder.Append("<div class=""fallback""><div class=""fallback-title"">").Append(EscapeHtml(title)).Append("</div>")
+                builder.Append("<div class=""fallback-status")
+                If hasError Then builder.Append(" error")
+                builder.Append(""">").Append(EscapeHtml(If(String.IsNullOrWhiteSpace(status), "封面加载中...", status))).Append("</div></div>")
+            End If
+            builder.AppendLine("</div>")
+            builder.Append("<div class=""title"">").Append(EscapeHtml(title)).AppendLine("</div>")
+            builder.Append("<div class=""meta"">").Append(EscapeHtml(BuildTemplateMetaText(template))).AppendLine("</div>")
+            If Not String.IsNullOrWhiteSpace(status) AndAlso String.IsNullOrWhiteSpace(imageUrl) Then
+                builder.Append("<div class=""status")
+                If hasError Then builder.Append(" error")
+                builder.Append(""">").Append(EscapeHtml(status)).AppendLine("</div>")
+            End If
+            builder.Append("<div class=""btn"">").Append(If(isSelected, "已选择", "选择模板")).AppendLine("</div>")
+            builder.AppendLine("</div>")
+        Next
+
+        builder.AppendLine("</div><script>")
+        builder.AppendLine("document.addEventListener('click',function(e){var card=e.target.closest('.card');if(!card)return;window.chrome.webview.postMessage({type:'selectTemplate',id:card.getAttribute('data-id')});});")
+        builder.AppendLine("</script></body></html>")
+        Return builder.ToString()
+    End Function
+
+    Private Sub TemplateWebView_WebMessageReceived(sender As Object, e As CoreWebView2WebMessageReceivedEventArgs)
+        Try
+            Dim payload = JObject.Parse(e.WebMessageAsJson)
+            If Not String.Equals(TryGetString(payload("type")), "selectTemplate", StringComparison.Ordinal) Then Return
+
+            Dim templateId = TryGetString(payload("id"))
+            If String.IsNullOrWhiteSpace(templateId) Then Return
+
+            Dim template = FindTemplateById(templateId)
+            If template IsNot Nothing Then SelectTemplate(template)
+        Catch ex As Exception
+            SetStatus("模板选择失败：" & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub TemplatePaintGallery_TemplateSelected(sender As Object, template As DocmeeTemplateInfo)
+        AppendThemePptLog("PaintGallery template selected: " & If(template Is Nothing, "", template.Id))
+        SelectTemplate(template)
+    End Sub
+
+    Private Function GetSelectedTemplateId() As String
+        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
+        If selectedTemplate Is Nothing Then Return ""
+        Return If(selectedTemplate.Id, "")
+    End Function
+
+    Private Function FindTemplateById(templateId As String) As DocmeeTemplateInfo
+        If String.IsNullOrWhiteSpace(templateId) Then Return Nothing
+
+        For Each item In _templateCombo.Items
+            Dim template = TryCast(item, DocmeeTemplateInfo)
+            If template IsNot Nothing AndAlso String.Equals(template.Id, templateId, StringComparison.Ordinal) Then
+                Return template
+            End If
+        Next
+
+        Return Nothing
+    End Function
+
+    Private Sub ShowTemplateSelectionDialog()
+        Dim templates = GetCurrentTemplatesSnapshot()
+        If templates.Count = 0 Then
+            SetStatus("没有可预览的模板。")
+            Return
+        End If
+
+        AppendThemePptLog("Template dialog opening. count=" & templates.Count.ToString() &
+                          ", selected=" & GetSelectedTemplateId())
+
+        Using dialog As New TemplateSelectionForm(templates, GetSelectedTemplateId(), AddressOf BuildTemplateCoverUrl)
+            Dim owner = Me.FindForm()
+            Dim result As DialogResult
+            If owner IsNot Nothing Then
+                result = dialog.ShowDialog(owner)
+            Else
+                result = dialog.ShowDialog()
+            End If
+
+            If result = DialogResult.OK AndAlso dialog.SelectedTemplate IsNot Nothing Then
+                SelectTemplate(dialog.SelectedTemplate)
+                Dim displayName = If(String.IsNullOrWhiteSpace(dialog.SelectedTemplate.Name),
+                                     dialog.SelectedTemplate.Id,
+                                     dialog.SelectedTemplate.Name)
+                SetStatus("已选择模板：" & displayName)
+            End If
+        End Using
+    End Sub
+
+    Private Shared Function TryGetString(token As JToken) As String
+        If token Is Nothing OrElse token.Type = JTokenType.Null Then Return ""
+        Return token.ToString()
+    End Function
+
+    Private Shared Function EscapeHtml(value As String) As String
+        If String.IsNullOrEmpty(value) Then Return ""
+        Return value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("""", "&quot;").Replace("'", "&#39;")
+    End Function
+
+    Private Shared Function EscapeHtmlAttribute(value As String) As String
+        Return EscapeHtml(value)
+    End Function
+
+    Private Shared Function GetTemplateCoverCacheDirectory() As String
+        Return Path.Combine(Path.GetTempPath(), "OfficeAiThemePptCovers")
+    End Function
+
+    Friend Shared Function GetThemePptLogPath() As String
+        Return Path.Combine(Path.GetTempPath(), "OfficeAiThemePpt", "theme-ppt.log")
+    End Function
+
+    Friend Shared Sub AppendThemePptLog(message As String)
+        Try
+            Dim logPath = GetThemePptLogPath()
+            Dim logDirectory = Path.GetDirectoryName(logPath)
+            If Not String.IsNullOrWhiteSpace(logDirectory) Then Directory.CreateDirectory(logDirectory)
+            File.AppendAllText(logPath,
+                               DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") & " [" & ThemePptPaneBuild & "] " & message & Environment.NewLine,
+                               Encoding.UTF8)
+        Catch
+        End Try
+    End Sub
+
+    Private Shared Function GetSafeFileName(value As String) As String
+        If String.IsNullOrWhiteSpace(value) Then Return Guid.NewGuid().ToString("N")
+
+        Dim builder As New StringBuilder()
+        For Each ch In value
+            If Char.IsLetterOrDigit(ch) OrElse ch = "_"c OrElse ch = "-"c Then
+                builder.Append(ch)
+            Else
+                builder.Append("_"c)
+            End If
+        Next
+
+        If builder.Length = 0 Then Return Guid.NewGuid().ToString("N")
+        Return builder.ToString()
+    End Function
+
+    Private Shared Function GetImageFileExtension(bytes As Byte()) As String
+        If bytes IsNot Nothing AndAlso bytes.Length >= 4 Then
+            If bytes(0) = &HFF AndAlso bytes(1) = &HD8 Then Return ".jpg"
+            If bytes(0) = &H89 AndAlso bytes(1) = &H50 AndAlso bytes(2) = &H4E AndAlso bytes(3) = &H47 Then Return ".png"
+            If bytes(0) = &H47 AndAlso bytes(1) = &H49 AndAlso bytes(2) = &H46 Then Return ".gif"
+            If bytes.Length >= 12 AndAlso bytes(0) = &H52 AndAlso bytes(1) = &H49 AndAlso bytes(2) = &H46 AndAlso bytes(3) = &H46 AndAlso bytes(8) = &H57 AndAlso bytes(9) = &H45 AndAlso bytes(10) = &H42 AndAlso bytes(11) = &H50 Then Return ".webp"
+        End If
+
+        Return ".png"
+    End Function
+
+    Private Function SaveTemplateCoverFile(bytes As Byte(), templateId As String, loadGeneration As Integer) As String
+        If bytes Is Nothing OrElse bytes.Length = 0 Then Return ""
+
+        Dim cacheDirectory = GetTemplateCoverCacheDirectory()
+        Directory.CreateDirectory(cacheDirectory)
+        Dim fileName = GetSafeFileName(templateId) & "_" & loadGeneration.ToString() & "_" & Guid.NewGuid().ToString("N") & GetImageFileExtension(bytes)
+        Dim filePath = Path.Combine(cacheDirectory, fileName)
+        File.WriteAllBytes(filePath, bytes)
+
+        If _templateCoverFilePaths.ContainsKey(templateId) Then
+            Try
+                File.Delete(_templateCoverFilePaths(templateId))
+            Catch
+            End Try
+        End If
+
+        _templateCoverFilePaths(templateId) = filePath
+        AppendThemePptLog("Cover file saved: id=" & templateId & ", path=" & filePath & ", bytes=" & bytes.Length.ToString())
+        Return "https://" & TemplateCoverHostName & "/" & fileName
+    End Function
 
     Private Async Sub GenerateButton_Click(sender As Object, e As EventArgs)
         Await GenerateOutlineAsync()
@@ -185,6 +544,17 @@ Public Class ThemePptTaskPane
 
     Private Async Sub RefreshTemplatesButton_Click(sender As Object, e As EventArgs)
         Await LoadTemplatesAsync()
+    End Sub
+
+    Private Async Sub SelectTemplateButton_Click(sender As Object, e As EventArgs)
+        If _isTemplateLoading Then Return
+
+        If _templateCombo.Items.Count = 0 Then
+            Await LoadTemplatesAsync()
+        End If
+
+        If _templateCombo.Items.Count = 0 Then Return
+        ShowTemplateSelectionDialog()
     End Sub
 
     Private Async Function GenerateOutlineAsync() As Task
@@ -254,13 +624,22 @@ Public Class ThemePptTaskPane
         If _isTemplateLoading Then Return
 
         _isTemplateLoading = True
+        AppendThemePptLog("LoadTemplatesAsync start.")
         _refreshTemplatesButton.Enabled = False
+        _selectTemplateButton.Enabled = False
         _lastTemplateLoadUsedFallback = False
+        CancelTemplateCoverLoad()
+        CancelTemplateLoad()
+        _templateLoadCts = New CancellationTokenSource()
+        Dim loadCts = _templateLoadCts
+        Dim cancellationToken = loadCts.Token
 
         Try
             SetStatus("正在加载 Docmee 模板...")
             Await Task.Yield()
-            Dim templates = Await LoadTemplatesInBackgroundAsync()
+            Dim templates = Await LoadTemplatesInBackgroundAsync(cancellationToken)
+            cancellationToken.ThrowIfCancellationRequested()
+            AppendThemePptLog("LoadTemplatesAsync fetched count=" & If(templates Is Nothing, 0, templates.Count).ToString())
             PopulateTemplates(templates)
 
             If _templateCombo.Items.Count = 0 Then
@@ -268,7 +647,10 @@ Public Class ThemePptTaskPane
             Else
                 SetStatus($"已加载 {_templateCombo.Items.Count} 个模板。")
             End If
+        Catch ex As OperationCanceledException
+            SetStatus("模板加载已取消。")
         Catch ex As Exception
+            AppendThemePptLog("LoadTemplatesAsync exception: " & ex.ToString())
             AppendTemplateLoadFailure(ex)
 
             Dim fallbackTemplates = DocmeePptClient.GetFallbackTemplates()
@@ -276,6 +658,7 @@ Public Class ThemePptTaskPane
                 _lastTemplateLoadUsedFallback = True
                 PopulateTemplates(fallbackTemplates)
                 SetStatus($"模板接口失败，已使用内置模板 {fallbackTemplates.Count} 个。")
+                ShowTemplateGallery()
             Else
                 _templateCombo.Enabled = False
                 SetStatus("模板加载失败。")
@@ -285,21 +668,36 @@ Public Class ThemePptTaskPane
         Finally
             _isTemplateLoading = False
             _refreshTemplatesButton.Enabled = True
+            _selectTemplateButton.Enabled = _templateCombo.Items.Count > 0
+            If Object.ReferenceEquals(_templateLoadCts, loadCts) Then
+                _templateLoadCts.Dispose()
+                _templateLoadCts = Nothing
+            End If
         End Try
     End Function
 
-    Private Function LoadTemplatesInBackgroundAsync() As Task(Of List(Of DocmeeTemplateInfo))
+    Private Function LoadTemplatesInBackgroundAsync(cancellationToken As CancellationToken) As Task(Of List(Of DocmeeTemplateInfo))
         Return Task.Run(Function() As List(Of DocmeeTemplateInfo)
-                            Return _client.ListTemplatesAsync(1, 20).GetAwaiter().GetResult()
-                        End Function)
+                            cancellationToken.ThrowIfCancellationRequested()
+                            Return _client.ListTemplatesAsync(1, 20, cancellationToken).GetAwaiter().GetResult()
+                        End Function, cancellationToken)
     End Function
 
     Private Sub PopulateTemplates(templates As IEnumerable(Of DocmeeTemplateInfo))
+        AppendThemePptLog("PopulateTemplates start.")
         _templateCoverLoadGeneration += 1
+        _templateCoverFailureCount = 0
+        CancelTemplateCoverLoad()
         ClearTemplateCoverImages()
         _templateCombo.Items.Clear()
+        _templateListBox.Items.Clear()
         _templateCards.Clear()
         _templateSelectLabels.Clear()
+        _templateCoverHosts.Clear()
+        _templateCoverStatusLabels.Clear()
+        _templateCoverImageUrls.Clear()
+        _templateCoverFilePaths.Clear()
+        _templateCoverMessages.Clear()
 
         _templateCardPanel.SuspendLayout()
         Try
@@ -309,20 +707,20 @@ Public Class ThemePptTaskPane
                 For Each template In templates
                     If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Continue For
                     _templateCombo.Items.Add(template)
-                    _templateCardPanel.Controls.Add(CreateTemplateCard(template))
                 Next
             End If
         Finally
             _templateCardPanel.ResumeLayout(True)
         End Try
 
-        _templateCombo.Enabled = _templateCombo.Items.Count > 0
+        _templateCombo.Enabled = False
+        _selectTemplateButton.Enabled = _templateCombo.Items.Count > 0
         If _templateCombo.Items.Count > 0 AndAlso _templateCombo.SelectedIndex < 0 Then
             _templateCombo.SelectedIndex = 0
         End If
         RefreshTemplateSelectionStyles()
         ResizeTemplateCards()
-        BeginLoadTemplateCovers()
+        AppendThemePptLog("PopulateTemplates completed: count=" & _templateCombo.Items.Count.ToString() & ", generation=" & _templateCoverLoadGeneration.ToString())
     End Sub
 
     Private Sub ClearTemplateCardPanel()
@@ -342,42 +740,188 @@ Public Class ThemePptTaskPane
             End If
         Next
 
-        _templateCoverBoxes.Clear()
-    End Sub
-
-    Private Async Sub BeginLoadTemplateCovers()
-        Dim loadGeneration = _templateCoverLoadGeneration
-        Dim templates = GetCurrentTemplatesSnapshot()
-        Await Task.Delay(200)
-
-        For Each template In templates
-            If loadGeneration <> _templateCoverLoadGeneration Then Return
-            If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.CoverUrl) Then Continue For
-
-            Try
-                Dim bytes = Await DownloadTemplateCoverInBackgroundAsync(BuildTemplateCoverUrl(template.CoverUrl))
-                If loadGeneration <> _templateCoverLoadGeneration Then Return
-
-                Dim coverImage As System.Drawing.Image = Await Task.Run(Function() As System.Drawing.Image
-                                                                            Using stream As New MemoryStream(bytes)
-                                                                                Using loaded As System.Drawing.Image = System.Drawing.Image.FromStream(stream)
-                                                                                    Return CType(New Bitmap(loaded), System.Drawing.Image)
-                                                                                End Using
-                                                                            End Using
-                                                                        End Function)
-
-                SetTemplateCoverImage(template.Id, coverImage, loadGeneration)
-            Catch
-                MarkTemplateCoverUnavailable(template.Id, loadGeneration)
-            End Try
+        For Each pair In _templateCoverHosts
+            If pair.Value IsNot Nothing AndAlso pair.Value.BackgroundImage IsNot Nothing Then
+                Dim image = pair.Value.BackgroundImage
+                pair.Value.BackgroundImage = Nothing
+                image.Dispose()
+            End If
         Next
+
+        For Each pair In _templatePreviewImages
+            If pair.Value IsNot Nothing Then
+                pair.Value.Dispose()
+            End If
+        Next
+
+        For Each pair In _templateCoverFilePaths
+            If Not String.IsNullOrWhiteSpace(pair.Value) Then
+                Try
+                    File.Delete(pair.Value)
+                Catch
+                End Try
+            End If
+        Next
+
+        _templateCoverBoxes.Clear()
+        _templateCoverHosts.Clear()
+        _templatePreviewImages.Clear()
+        _templateCoverImageUrls.Clear()
+        _templateCoverFilePaths.Clear()
     End Sub
 
-    Private Function DownloadTemplateCoverInBackgroundAsync(coverUrl As String) As Task(Of Byte())
-        Return Task.Run(Function() As Byte()
-                            Return _client.DownloadTemplateCoverAsync(coverUrl).GetAwaiter().GetResult()
-                        End Function)
+    Private Async Sub BeginLoadTemplateCovers(loadGeneration As Integer, cancellationToken As CancellationToken)
+        Dim templates = GetCurrentTemplatesSnapshot()
+        Dim semaphore As New SemaphoreSlim(MaxConcurrentTemplateCoverLoads)
+        AppendThemePptLog("BeginLoadTemplateCovers: generation=" & loadGeneration.ToString() & ", templates=" & templates.Count.ToString())
+
+        Try
+            Await Task.Delay(200, cancellationToken).ConfigureAwait(False)
+            AppendThemePptLog("BeginLoadTemplateCovers scheduling: generation=" & loadGeneration.ToString())
+
+            Dim loadTasks As New List(Of Task)()
+            Dim skippedWithoutCover As Integer = 0
+            For Each template In templates
+                If loadGeneration <> _templateCoverLoadGeneration Then Return
+                If cancellationToken.IsCancellationRequested Then Return
+                If template Is Nothing Then Continue For
+                If String.IsNullOrWhiteSpace(template.CoverUrl) Then
+                    skippedWithoutCover += 1
+                    AppendThemePptLog("Cover skipped: id=" & template.Id & ", missing coverUrl.")
+                    MarkTemplateCoverUnavailable(template.Id, loadGeneration, "模板未返回封面地址")
+                    Continue For
+                End If
+
+                Dim currentTemplate = template
+                loadTasks.Add(LoadSingleTemplateCoverAsync(currentTemplate, loadGeneration, semaphore, cancellationToken))
+            Next
+            AppendThemePptLog("BeginLoadTemplateCovers scheduled: tasks=" & loadTasks.Count.ToString() &
+                              ", skippedWithoutCover=" & skippedWithoutCover.ToString())
+
+            Await Task.WhenAll(loadTasks)
+            UpdateTemplateCoverLoadStatus(loadGeneration)
+        Catch ex As OperationCanceledException
+        Finally
+            semaphore.Dispose()
+        End Try
+    End Sub
+
+    Private Async Function LoadSingleTemplateCoverAsync(template As DocmeeTemplateInfo, loadGeneration As Integer, semaphore As SemaphoreSlim, cancellationToken As CancellationToken) As Task
+        Try
+            Await semaphore.WaitAsync(cancellationToken)
+            Try
+                If loadGeneration <> _templateCoverLoadGeneration Then Return
+                cancellationToken.ThrowIfCancellationRequested()
+
+                Dim bytes As Byte() = Nothing
+                Dim lastError As Exception = Nothing
+                For attempt As Integer = 1 To 3
+                    Try
+                        AppendThemePptLog("Cover download start: id=" & template.Id & ", attempt=" & attempt.ToString())
+                        bytes = Await DownloadTemplateCoverInBackgroundAsync(BuildTemplateCoverUrl(template.CoverUrl), cancellationToken)
+                        AppendThemePptLog("Cover download success: id=" & template.Id & ", bytes=" & If(bytes Is Nothing, 0, bytes.Length).ToString())
+                        Exit For
+                    Catch ex As OperationCanceledException
+                        Throw
+                    Catch ex As Exception
+                        AppendThemePptLog("Cover download attempt failed: id=" & template.Id & ", attempt=" & attempt.ToString() & ", error=" & ex.Message)
+                        lastError = ex
+                    End Try
+
+                    If bytes IsNot Nothing Then Exit For
+                    If attempt < 3 Then Await Task.Delay(300 * attempt, cancellationToken)
+                Next
+
+                If bytes Is Nothing AndAlso lastError IsNot Nothing Then Throw lastError
+                If loadGeneration <> _templateCoverLoadGeneration Then Return
+                cancellationToken.ThrowIfCancellationRequested()
+
+                Dim coverVirtualUrl = ""
+                Dim coverImage As System.Drawing.Image = Await Task.Run(Function() LoadTemplateCoverImageFromBytes(bytes, template.Id), cancellationToken)
+
+                SetTemplateCoverImage(template.Id, coverImage, loadGeneration, coverVirtualUrl)
+            Finally
+                semaphore.Release()
+            End Try
+        Catch ex As OperationCanceledException
+        Catch ex As Exception
+            AppendThemePptLog("Cover unavailable: id=" & template.Id & ", error=" & ex.ToString())
+            MarkTemplateCoverUnavailable(template.Id, loadGeneration, ex.Message)
+        End Try
     End Function
+
+    Private Sub UpdateTemplateCoverLoadStatus(loadGeneration As Integer)
+        If Me.InvokeRequired Then
+            Me.BeginInvoke(CType(Sub() UpdateTemplateCoverLoadStatus(loadGeneration), MethodInvoker))
+            Return
+        End If
+
+        If loadGeneration <> _templateCoverLoadGeneration Then Return
+
+        Dim total = _templateListBox.Items.Count
+        If total <= 0 Then Return
+
+        Dim failed = 0
+        For Each pair In _templateCoverMessages
+            If Not String.IsNullOrWhiteSpace(pair.Value) AndAlso
+               pair.Value.StartsWith("封面加载失败", StringComparison.Ordinal) Then
+                failed += 1
+            End If
+        Next
+
+        Dim success = _templatePreviewImages.Count
+        If success > 0 AndAlso failed = 0 Then
+            SetStatus("模板封面加载完成。")
+        ElseIf success > 0 Then
+            SetStatus("已显示 " & success & "/" & total & " 张模板封面，" & failed & " 张失败，卡片内已显示原因。")
+        ElseIf failed > 0 Then
+            SetStatus("模板封面加载失败，卡片内已显示具体原因。")
+        End If
+    End Sub
+
+    Private Function DownloadTemplateCoverInBackgroundAsync(coverUrl As String, cancellationToken As CancellationToken) As Task(Of Byte())
+        Return Task.Run(Function() As Byte()
+                            cancellationToken.ThrowIfCancellationRequested()
+                            Return _client.DownloadTemplateCoverAsync(coverUrl, cancellationToken).GetAwaiter().GetResult()
+                        End Function, cancellationToken)
+    End Function
+
+    Private Function LoadTemplateCoverImageFromBytes(bytes As Byte(), templateId As String) As System.Drawing.Image
+        If bytes Is Nothing OrElse bytes.Length = 0 Then
+            Throw New InvalidOperationException("模板封面图片为空。")
+        End If
+
+        Dim safeId = If(String.IsNullOrWhiteSpace(templateId), Guid.NewGuid().ToString("N"), templateId)
+        Dim tempPath = Path.Combine(Path.GetTempPath(), "wenduoduo_cover_" & safeId & "_" & Guid.NewGuid().ToString("N") & ".png")
+        File.WriteAllBytes(tempPath, bytes)
+
+        Try
+            Using loaded As System.Drawing.Image = System.Drawing.Image.FromFile(tempPath)
+                Return CType(New Bitmap(loaded), System.Drawing.Image)
+            End Using
+        Finally
+            Try
+                File.Delete(tempPath)
+            Catch
+            End Try
+        End Try
+    End Function
+
+    Private Sub CancelTemplateLoad()
+        If _templateLoadCts IsNot Nothing Then
+            _templateLoadCts.Cancel()
+            _templateLoadCts.Dispose()
+            _templateLoadCts = Nothing
+        End If
+    End Sub
+
+    Private Sub CancelTemplateCoverLoad()
+        If _templateCoverCts IsNot Nothing Then
+            _templateCoverCts.Cancel()
+            _templateCoverCts.Dispose()
+            _templateCoverCts = Nothing
+        End If
+    End Sub
 
     Private Function GetCurrentTemplatesSnapshot() As List(Of DocmeeTemplateInfo)
         Dim templates As New List(Of DocmeeTemplateInfo)()
@@ -388,39 +932,117 @@ Public Class ThemePptTaskPane
         Return templates
     End Function
 
-    Private Sub SetTemplateCoverImage(templateId As String, image As Image, loadGeneration As Integer)
+    Private Sub SetTemplateCoverImage(templateId As String, image As Image, loadGeneration As Integer, Optional coverVirtualUrl As String = "")
         If Me.InvokeRequired Then
-            Me.BeginInvoke(CType(Sub() SetTemplateCoverImage(templateId, image, loadGeneration), MethodInvoker))
+            Me.BeginInvoke(CType(Sub() SetTemplateCoverImage(templateId, image, loadGeneration, coverVirtualUrl), MethodInvoker))
             Return
         End If
 
         If loadGeneration <> _templateCoverLoadGeneration OrElse
-           String.IsNullOrWhiteSpace(templateId) OrElse
-           Not _templateCoverBoxes.ContainsKey(templateId) Then
+           String.IsNullOrWhiteSpace(templateId) Then
             If image IsNot Nothing Then image.Dispose()
             Return
         End If
 
-        Dim cover = _templateCoverBoxes(templateId)
-        Dim oldImage = cover.Image
-        cover.Image = image
-        cover.Visible = True
-        cover.BringToFront()
+        Dim oldImage As System.Drawing.Image = Nothing
+        If _templateCoverBoxes.ContainsKey(templateId) Then
+            Dim cover = _templateCoverBoxes(templateId)
+            oldImage = cover.Image
+            cover.Image = CreateScaledTemplateImage(image, 640, 360)
+            cover.Visible = True
+            cover.BringToFront()
+            cover.Invalidate()
+            If cover.IsHandleCreated Then cover.Update()
+        End If
+
+        If _templatePreviewImages.ContainsKey(templateId) Then
+            _templatePreviewImages(templateId).Dispose()
+        End If
+        _templatePreviewImages(templateId) = CreateScaledTemplateImage(image, 320, 180)
+        If Not String.IsNullOrWhiteSpace(coverVirtualUrl) Then
+            _templateCoverImageUrls(templateId) = coverVirtualUrl
+        End If
+        _templateCoverMessages(templateId) = ""
+        AppendThemePptLog("Cover image set: id=" & templateId &
+                          ", size=" & If(image Is Nothing, "null", image.Width.ToString() & "x" & image.Height.ToString()) &
+                          ", galleryImages=" & _templatePreviewImages.Count.ToString())
+        InvalidateTemplateListItem(templateId)
+
+        If _templateCoverHosts.ContainsKey(templateId) Then
+            Dim host = _templateCoverHosts(templateId)
+            Dim oldBackground = host.BackgroundImage
+            host.BackgroundImage = Nothing
+            host.Invalidate()
+            If oldBackground IsNot Nothing Then oldBackground.Dispose()
+        End If
+
+        If _templateCoverStatusLabels.ContainsKey(templateId) Then
+            _templateCoverStatusLabels(templateId).Visible = False
+        End If
 
         If oldImage IsNot Nothing Then oldImage.Dispose()
+        If image IsNot Nothing Then image.Dispose()
     End Sub
 
-    Private Sub MarkTemplateCoverUnavailable(templateId As String, loadGeneration As Integer)
+    Private Sub InvalidateTemplateListItem(templateId As String)
+        If _templateListBox Is Nothing OrElse String.IsNullOrWhiteSpace(templateId) Then Return
+        If Not _templateListBox.IsHandleCreated OrElse _templateListBox.Items.Count = 0 Then Return
+
+        For index As Integer = 0 To _templateListBox.Items.Count - 1
+            Dim item = TryCast(_templateListBox.Items(index), DocmeeTemplateInfo)
+            If item IsNot Nothing AndAlso String.Equals(item.Id, templateId, StringComparison.Ordinal) Then
+                Dim bounds = _templateListBox.GetItemRectangle(index)
+                If bounds.Width > 0 AndAlso bounds.Height > 0 Then
+                    _templateListBox.Invalidate(bounds)
+                Else
+                    _templateListBox.Invalidate()
+                End If
+                Return
+            End If
+        Next
+    End Sub
+
+    Private Sub MarkTemplateCoverUnavailable(templateId As String, loadGeneration As Integer, Optional reason As String = "")
         If Me.InvokeRequired Then
-            Me.BeginInvoke(CType(Sub() MarkTemplateCoverUnavailable(templateId, loadGeneration), MethodInvoker))
+            Me.BeginInvoke(CType(Sub() MarkTemplateCoverUnavailable(templateId, loadGeneration, reason), MethodInvoker))
             Return
         End If
 
         If loadGeneration <> _templateCoverLoadGeneration OrElse
-           String.IsNullOrWhiteSpace(templateId) OrElse
-           Not _templateCoverBoxes.ContainsKey(templateId) Then Return
+           String.IsNullOrWhiteSpace(templateId) Then Return
 
-        _templateCoverBoxes(templateId).Visible = False
+        If _templateCoverBoxes.ContainsKey(templateId) Then
+            _templateCoverBoxes(templateId).Visible = False
+        End If
+        Dim failureMessage = If(String.IsNullOrWhiteSpace(reason), "封面加载失败", reason.Trim())
+        If failureMessage.Length > 80 Then failureMessage = failureMessage.Substring(0, 80) & "..."
+        _templateCoverMessages(templateId) = "封面加载失败：" & failureMessage
+        If _templateCoverImageUrls.ContainsKey(templateId) Then _templateCoverImageUrls.Remove(templateId)
+        InvalidateTemplateListItem(templateId)
+
+        If _templateCoverStatusLabels.ContainsKey(templateId) Then
+            If _templateCoverHosts.ContainsKey(templateId) Then
+                Dim host = _templateCoverHosts(templateId)
+                Dim template = TryCast(host.Tag, DocmeeTemplateInfo)
+                Dim oldBackground = host.BackgroundImage
+                host.BackgroundImage = CreateTemplatePreviewBitmap(template, "封面加载失败：" & failureMessage)
+                host.BackgroundImageLayout = ImageLayout.Stretch
+                host.Invalidate()
+                If oldBackground IsNot Nothing Then oldBackground.Dispose()
+            End If
+            Dim statusLabel = _templateCoverStatusLabels(templateId)
+            statusLabel.Text = "封面加载失败：" & failureMessage
+            statusLabel.ForeColor = Color.FromArgb(185, 28, 28)
+            statusLabel.Visible = True
+            statusLabel.BringToFront()
+        End If
+        _templateCoverFailureCount += 1
+
+        If _templateCoverFailureCount = 1 Then
+            Dim message = If(String.IsNullOrWhiteSpace(reason), "未知错误", reason.Trim())
+            If message.Length > 120 Then message = message.Substring(0, 120) & "..."
+            SetStatus("部分模板封面加载失败，已显示文字预览: " & message)
+        End If
     End Sub
 
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
@@ -438,6 +1060,8 @@ Public Class ThemePptTaskPane
         previewPanel.Name = "TemplateCoverHost"
         previewPanel.BackColor = Color.FromArgb(255, 248, 241)
         previewPanel.BorderStyle = BorderStyle.FixedSingle
+        previewPanel.BackgroundImage = CreateTemplatePreviewBitmap(template, "封面加载中...")
+        previewPanel.BackgroundImageLayout = ImageLayout.Stretch
         previewPanel.Tag = template
         previewPanel.Cursor = Cursors.Hand
 
@@ -476,15 +1100,28 @@ Public Class ThemePptTaskPane
         Dim cover As New PictureBox()
         cover.Name = "TemplateCoverImage"
         cover.BackColor = Color.FromArgb(248, 250, 252)
+        cover.Dock = DockStyle.Fill
         cover.SizeMode = PictureBoxSizeMode.Zoom
         cover.Tag = template
         cover.Cursor = Cursors.Hand
         cover.Visible = False
 
+        Dim coverStatusLabel As New Label()
+        coverStatusLabel.Name = "TemplateCoverStatus"
+        coverStatusLabel.AutoSize = False
+        coverStatusLabel.Text = "封面加载中..."
+        coverStatusLabel.TextAlign = ContentAlignment.MiddleCenter
+        coverStatusLabel.ForeColor = Color.FromArgb(86, 94, 108)
+        coverStatusLabel.BackColor = Color.Transparent
+        coverStatusLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Regular)
+        coverStatusLabel.Tag = template
+        coverStatusLabel.Cursor = Cursors.Hand
+
         previewPanel.Controls.Add(previewBadge)
         previewPanel.Controls.Add(previewTitle)
         previewPanel.Controls.Add(previewMeta)
         previewPanel.Controls.Add(cover)
+        previewPanel.Controls.Add(coverStatusLabel)
 
         Dim nameLabel As New Label()
         nameLabel.Name = "TemplateName"
@@ -530,7 +1167,9 @@ Public Class ThemePptTaskPane
         If Not String.IsNullOrWhiteSpace(template.Id) Then
             _templateCards(template.Id) = card
             _templateSelectLabels(template.Id) = selectLabel
+            _templateCoverHosts(template.Id) = previewPanel
             _templateCoverBoxes(template.Id) = cover
+            _templateCoverStatusLabels(template.Id) = coverStatusLabel
         End If
 
         Return card
@@ -592,6 +1231,13 @@ Public Class ThemePptTaskPane
         Dim cover = FindTemplateCardChild(coverHost, "TemplateCoverImage")
         If cover IsNot Nothing Then
             cover.Bounds = New Rectangle(0, 0, coverHost.ClientSize.Width, coverHost.ClientSize.Height)
+            cover.BringToFront()
+        End If
+
+        Dim coverStatus = FindTemplateCardChild(coverHost, "TemplateCoverStatus")
+        If coverStatus IsNot Nothing Then
+            coverStatus.Bounds = New Rectangle(contentLeft, Math.Max(8, coverHost.ClientSize.Height - 34), contentWidth, 24)
+            If Not cover.Visible Then coverStatus.BringToFront()
         End If
     End Sub
 
@@ -611,6 +1257,46 @@ Public Class ThemePptTaskPane
         Dim trimmedUrl = coverUrl.Trim()
         Dim separator = If(trimmedUrl.Contains("?"), "&", "?")
         Return trimmedUrl & separator & "token=" & TemplateCoverToken
+    End Function
+
+    Private Function CreateTemplatePreviewBitmap(template As DocmeeTemplateInfo, statusText As String) As Bitmap
+        Dim width = 640
+        Dim height = 360
+        Dim bitmap As New Bitmap(width, height)
+
+        Using g = Graphics.FromImage(bitmap)
+            g.Clear(Color.FromArgb(255, 248, 241))
+            Using borderPen As New Pen(Color.FromArgb(226, 232, 240), 6.0F)
+                g.DrawRectangle(borderPen, 3, 3, width - 6, height - 6)
+            End Using
+
+            Using accentBrush As New SolidBrush(Color.FromArgb(234, 88, 12))
+                g.FillRectangle(accentBrush, 0, 0, width, 18)
+                g.FillRectangle(accentBrush, 0, height - 18, width, 18)
+            End Using
+
+            Dim title = If(template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Name), "模板预览", template.Name.Trim())
+            Dim meta = BuildTemplateMetaText(template)
+            Dim status = If(String.IsNullOrWhiteSpace(statusText), "封面加载中...", statusText.Trim())
+
+            Using titleFont As New Font(Me.Font.FontFamily, 42.0F, FontStyle.Bold),
+                  metaFont As New Font(Me.Font.FontFamily, 24.0F, FontStyle.Regular),
+                  statusFont As New Font(Me.Font.FontFamily, 22.0F, FontStyle.Regular),
+                  titleBrush As New SolidBrush(Color.FromArgb(39, 45, 55)),
+                  metaBrush As New SolidBrush(Color.FromArgb(86, 94, 108)),
+                  statusBrush As New SolidBrush(Color.FromArgb(185, 28, 28))
+
+                Dim format As New StringFormat()
+                format.Trimming = StringTrimming.EllipsisWord
+                format.FormatFlags = StringFormatFlags.LineLimit
+
+                g.DrawString(title, titleFont, titleBrush, New RectangleF(48, 90, width - 96, 150), format)
+                g.DrawString(meta, metaFont, metaBrush, New RectangleF(48, 265, width - 96, 58), format)
+                g.DrawString(status, statusFont, statusBrush, New RectangleF(48, 385, width - 96, 72), format)
+            End Using
+        End Using
+
+        Return bitmap
     End Function
 
     Private Function BuildTemplateMetaText(template As DocmeeTemplateInfo) As String
@@ -651,6 +1337,134 @@ Public Class ThemePptTaskPane
     Private Sub TemplateCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
         RefreshTemplateSelectionStyles()
     End Sub
+
+    Private Sub TemplateListBox_SelectedIndexChanged(sender As Object, e As EventArgs)
+        Dim selectedTemplate = TryCast(_templateListBox.SelectedItem, DocmeeTemplateInfo)
+        If selectedTemplate Is Nothing Then Return
+
+        For index As Integer = 0 To _templateCombo.Items.Count - 1
+            Dim item = TryCast(_templateCombo.Items(index), DocmeeTemplateInfo)
+            If item IsNot Nothing AndAlso String.Equals(item.Id, selectedTemplate.Id, StringComparison.Ordinal) Then
+                If _templateCombo.SelectedIndex <> index Then _templateCombo.SelectedIndex = index
+                Exit For
+            End If
+        Next
+
+        _templateListBox.Invalidate()
+    End Sub
+
+    Private Sub TemplateListBox_DrawItem(sender As Object, e As DrawItemEventArgs)
+        If e.Index < 0 OrElse e.Index >= _templateListBox.Items.Count Then Return
+
+        Dim template = TryCast(_templateListBox.Items(e.Index), DocmeeTemplateInfo)
+        If template Is Nothing Then Return
+
+        Dim isSelected = (e.State And DrawItemState.Selected) = DrawItemState.Selected
+        Dim cardBounds = Rectangle.Inflate(e.Bounds, -6, -5)
+        Dim imageBounds = New Rectangle(cardBounds.Left + 10, cardBounds.Top + 10, Math.Min(240, Math.Max(160, cardBounds.Width \ 3)), cardBounds.Height - 20)
+        Dim textLeft = imageBounds.Right + 12
+        Dim textBounds = New Rectangle(textLeft, cardBounds.Top + 12, Math.Max(120, cardBounds.Right - textLeft - 12), cardBounds.Height - 24)
+
+        Using backgroundBrush As New SolidBrush(If(isSelected, Color.FromArgb(255, 245, 235), Color.White))
+            e.Graphics.FillRectangle(backgroundBrush, e.Bounds)
+            e.Graphics.FillRectangle(backgroundBrush, cardBounds)
+        End Using
+
+        Using borderPen As New Pen(If(isSelected, Color.FromArgb(234, 88, 12), Color.FromArgb(203, 213, 225)), If(isSelected, 2.0F, 1.0F))
+            e.Graphics.DrawRectangle(borderPen, cardBounds)
+        End Using
+
+        DrawTemplateListPreview(e.Graphics, template, imageBounds)
+
+        Dim title = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
+        Dim meta = BuildTemplateMetaText(template)
+        Dim status = If(_templateCoverMessages.ContainsKey(template.Id), _templateCoverMessages(template.Id), "")
+
+        Using titleFont As New Font(Me.Font.FontFamily, 10.0F, FontStyle.Bold),
+              metaFont As New Font(Me.Font.FontFamily, 8.5F, FontStyle.Regular),
+              statusFont As New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular),
+              titleBrush As New SolidBrush(Color.FromArgb(39, 45, 55)),
+              metaBrush As New SolidBrush(Color.FromArgb(86, 94, 108)),
+              statusBrush As New SolidBrush(If(status.StartsWith("封面加载失败", StringComparison.Ordinal), Color.FromArgb(185, 28, 28), Color.FromArgb(86, 94, 108)))
+
+            Dim format As New StringFormat()
+            format.Trimming = StringTrimming.EllipsisWord
+            format.FormatFlags = StringFormatFlags.LineLimit
+
+            e.Graphics.DrawString(title, titleFont, titleBrush, New RectangleF(textBounds.Left, textBounds.Top, textBounds.Width, 42), format)
+            e.Graphics.DrawString(meta, metaFont, metaBrush, New RectangleF(textBounds.Left, textBounds.Top + 48, textBounds.Width, 22), format)
+            If Not String.IsNullOrWhiteSpace(status) Then
+                e.Graphics.DrawString(status, statusFont, statusBrush, New RectangleF(textBounds.Left, textBounds.Top + 78, textBounds.Width, 38), format)
+            End If
+        End Using
+
+        Dim buttonBounds = New Rectangle(textBounds.Left, cardBounds.Bottom - 38, Math.Min(120, textBounds.Width), 28)
+        Using buttonBrush As New SolidBrush(If(isSelected, Color.FromArgb(234, 88, 12), Color.FromArgb(241, 245, 249))),
+              buttonTextBrush As New SolidBrush(If(isSelected, Color.White, Color.FromArgb(39, 45, 55))),
+              buttonFont As New Font(Me.Font.FontFamily, 8.5F, FontStyle.Bold)
+            e.Graphics.FillRectangle(buttonBrush, buttonBounds)
+            TextRenderer.DrawText(e.Graphics, If(isSelected, "已选择", "选择模板"), buttonFont, buttonBounds, If(isSelected, Color.White, Color.FromArgb(39, 45, 55)), TextFormatFlags.HorizontalCenter Or TextFormatFlags.VerticalCenter)
+        End Using
+    End Sub
+
+    Private Sub DrawTemplateListPreview(graphics As Graphics, template As DocmeeTemplateInfo, bounds As Rectangle)
+        Using backgroundBrush As New SolidBrush(Color.FromArgb(255, 248, 241)),
+              borderPen As New Pen(Color.FromArgb(226, 232, 240))
+            graphics.FillRectangle(backgroundBrush, bounds)
+            graphics.DrawRectangle(borderPen, bounds)
+        End Using
+
+        If template IsNot Nothing AndAlso _templatePreviewImages.ContainsKey(template.Id) Then
+            DrawImageZoom(graphics, _templatePreviewImages(template.Id), bounds)
+            Return
+        End If
+
+        Dim title = If(template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Name), "模板预览", template.Name.Trim())
+        Dim status = If(template IsNot Nothing AndAlso _templateCoverMessages.ContainsKey(template.Id), _templateCoverMessages(template.Id), "封面加载中...")
+
+        Using accentBrush As New SolidBrush(Color.FromArgb(234, 88, 12)),
+              titleFont As New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold),
+              statusFont As New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular),
+              titleBrush As New SolidBrush(Color.FromArgb(39, 45, 55)),
+              statusBrush As New SolidBrush(If(status.StartsWith("封面加载失败", StringComparison.Ordinal), Color.FromArgb(185, 28, 28), Color.FromArgb(86, 94, 108)))
+
+            graphics.FillRectangle(accentBrush, bounds.Left, bounds.Top, 5, bounds.Height)
+            Dim inner = Rectangle.Inflate(bounds, -12, -10)
+            TextRenderer.DrawText(graphics, title, titleFont, New Rectangle(inner.Left, inner.Top + 18, inner.Width, 42), Color.FromArgb(39, 45, 55), TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+            TextRenderer.DrawText(graphics, status, statusFont, New Rectangle(inner.Left, inner.Bottom - 44, inner.Width, 40), If(status.StartsWith("封面加载失败", StringComparison.Ordinal), Color.FromArgb(185, 28, 28), Color.FromArgb(86, 94, 108)), TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+        End Using
+    End Sub
+
+    Private Sub DrawImageZoom(graphics As Graphics, image As System.Drawing.Image, bounds As Rectangle)
+        If image Is Nothing OrElse bounds.Width <= 0 OrElse bounds.Height <= 0 Then Return
+
+        Dim scale = Math.Min(bounds.Width / CDbl(image.Width), bounds.Height / CDbl(image.Height))
+        Dim width = CInt(image.Width * scale)
+        Dim height = CInt(image.Height * scale)
+        Dim left = bounds.Left + (bounds.Width - width) \ 2
+        Dim top = bounds.Top + (bounds.Height - height) \ 2
+        graphics.DrawImage(image, New Rectangle(left, top, width, height))
+    End Sub
+
+    Private Function CreateScaledTemplateImage(source As System.Drawing.Image, maxWidth As Integer, maxHeight As Integer) As System.Drawing.Image
+        If source Is Nothing Then Return Nothing
+
+        Dim scale = Math.Min(maxWidth / CDbl(source.Width), maxHeight / CDbl(source.Height))
+        scale = Math.Min(1.0R, scale)
+        Dim width = Math.Max(1, CInt(Math.Round(source.Width * scale)))
+        Dim height = Math.Max(1, CInt(Math.Round(source.Height * scale)))
+        Dim bitmap As New Bitmap(width, height)
+
+        Using g As Graphics = Graphics.FromImage(bitmap)
+            g.Clear(Color.White)
+            g.SmoothingMode = SmoothingMode.AntiAlias
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality
+            g.DrawImage(source, New Rectangle(0, 0, width, height))
+        End Using
+
+        Return bitmap
+    End Function
 
     Private Sub RefreshTemplateSelectionStyles()
         Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
@@ -1328,7 +2142,307 @@ Public Class ThemePptTaskPane
         Return Not String.IsNullOrWhiteSpace(GetNodeText(node, ""))
     End Function
 
+    Private Class TemplateGalleryPaintControl
+        Inherits ScrollableControl
+
+        Private Const OuterPadding As Integer = 6
+        Private Const CardGap As Integer = 10
+        Private Const CardPadding As Integer = 8
+        Private Const CardExtraHeight As Integer = 104
+        Private ReadOnly _templates As New List(Of DocmeeTemplateInfo)()
+        Private ReadOnly _images As New Dictionary(Of String, Image)()
+        Private ReadOnly _messages As New Dictionary(Of String, String)()
+        Private _selectedId As String = ""
+        Private _paintCount As Integer
+
+        Public Event TemplateSelected(sender As Object, template As DocmeeTemplateInfo)
+
+        Public Sub New()
+            Me.AutoScroll = True
+            Me.BackColor = Color.White
+            Me.Cursor = Cursors.Default
+            SetStyle(ControlStyles.UserPaint Or
+                     ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.Selectable, True)
+            UpdateStyles()
+        End Sub
+
+        Public Sub SetData(templates As IEnumerable(Of DocmeeTemplateInfo),
+                           images As IDictionary(Of String, Image),
+                           messages As IDictionary(Of String, String),
+                           selectedId As String)
+            _templates.Clear()
+            If templates IsNot Nothing Then
+                For Each template In templates
+                    If template IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(template.Id) Then
+                        _templates.Add(template)
+                    End If
+                Next
+            End If
+
+            _images.Clear()
+            If images IsNot Nothing Then
+                For Each pair In images
+                    If Not String.IsNullOrWhiteSpace(pair.Key) AndAlso pair.Value IsNot Nothing Then
+                        _images(pair.Key) = pair.Value
+                    End If
+                Next
+            End If
+
+            _messages.Clear()
+            If messages IsNot Nothing Then
+                For Each pair In messages
+                    If Not String.IsNullOrWhiteSpace(pair.Key) Then
+                        _messages(pair.Key) = If(pair.Value, "")
+                    End If
+                Next
+            End If
+
+            _selectedId = If(selectedId, "")
+            UpdateScrollRange()
+            Invalidate()
+        End Sub
+
+        Public Sub RenderNow()
+            ThemePptTaskPane.AppendThemePptLog("PaintGallery RenderNow skipped: direct rendering disabled.")
+            Invalidate()
+        End Sub
+
+        Protected Overrides Sub OnCreateControl()
+            MyBase.OnCreateControl()
+            ThemePptTaskPane.AppendThemePptLog("PaintGallery created. handle=" & Me.Handle.ToString() & ", size=" & Me.Width.ToString() & "x" & Me.Height.ToString())
+        End Sub
+
+        Protected Overrides Sub OnResize(e As EventArgs)
+            MyBase.OnResize(e)
+            UpdateScrollRange()
+            ThemePptTaskPane.AppendThemePptLog("PaintGallery resized: " & Me.Width.ToString() & "x" & Me.Height.ToString())
+            Invalidate()
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            _paintCount += 1
+            If _paintCount <= 5 OrElse _paintCount Mod 20 = 0 Then
+                ThemePptTaskPane.AppendThemePptLog("PaintGallery OnPaint: paint=" & _paintCount.ToString() &
+                                                  ", templates=" & _templates.Count.ToString() &
+                                                  ", images=" & _images.Count.ToString() &
+                                                  ", size=" & Me.Width.ToString() & "x" & Me.Height.ToString() &
+                                                  ", scroll=" & Me.AutoScrollPosition.X.ToString() & "," & Me.AutoScrollPosition.Y.ToString())
+            End If
+
+            PaintGalleryContent(e.Graphics)
+        End Sub
+
+        Private Sub PaintGalleryContent(graphics As Graphics)
+            graphics.Clear(Me.BackColor)
+            graphics.SmoothingMode = SmoothingMode.AntiAlias
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality
+
+            Dim state = graphics.Save()
+            graphics.TranslateTransform(Me.AutoScrollPosition.X, Me.AutoScrollPosition.Y)
+            Try
+                If _templates.Count = 0 Then
+                    DrawEmptyState(graphics)
+                    Return
+                End If
+
+                For index As Integer = 0 To _templates.Count - 1
+                    DrawCard(graphics, _templates(index), GetCardBounds(index))
+                Next
+            Finally
+                graphics.Restore(state)
+            End Try
+        End Sub
+
+        Protected Overrides Sub OnMouseDown(e As MouseEventArgs)
+            MyBase.OnMouseDown(e)
+            If e.Button <> MouseButtons.Left Then Return
+
+            Dim template = HitTestTemplate(e.Location)
+            If template IsNot Nothing Then
+                Me.Focus()
+                RaiseEvent TemplateSelected(Me, template)
+            End If
+        End Sub
+
+        Protected Overrides Sub OnMouseMove(e As MouseEventArgs)
+            MyBase.OnMouseMove(e)
+            Me.Cursor = If(HitTestTemplate(e.Location) Is Nothing, Cursors.Default, Cursors.Hand)
+        End Sub
+
+        Private Sub UpdateScrollRange()
+            Dim totalHeight = OuterPadding
+            For index As Integer = 0 To _templates.Count - 1
+                totalHeight += GetCardHeight() + CardGap
+            Next
+
+            If _templates.Count > 0 Then totalHeight += OuterPadding
+            Me.AutoScrollMinSize = New Size(0, Math.Max(0, totalHeight))
+        End Sub
+
+        Private Function GetCardWidth() As Integer
+            Dim scrollbarWidth = If(Me.VerticalScroll.Visible, SystemInformation.VerticalScrollBarWidth, SystemInformation.VerticalScrollBarWidth)
+            Return Math.Max(220, Me.ClientSize.Width - scrollbarWidth - OuterPadding * 2)
+        End Function
+
+        Private Function GetCoverHeight() As Integer
+            Dim coverWidth = Math.Max(180, GetCardWidth() - CardPadding * 2)
+            Return Math.Max(120, Math.Min(360, CInt(Math.Round(coverWidth * 9.0R / 16.0R))))
+        End Function
+
+        Private Function GetCardHeight() As Integer
+            Return GetCoverHeight() + CardExtraHeight
+        End Function
+
+        Private Function GetCardBounds(index As Integer) As Rectangle
+            Dim top = OuterPadding + index * (GetCardHeight() + CardGap)
+            Return New Rectangle(OuterPadding, top, GetCardWidth(), GetCardHeight())
+        End Function
+
+        Private Function HitTestTemplate(point As Point) As DocmeeTemplateInfo
+            Dim contentPoint = New Point(point.X - Me.AutoScrollPosition.X, point.Y - Me.AutoScrollPosition.Y)
+            For index As Integer = 0 To _templates.Count - 1
+                If GetCardBounds(index).Contains(contentPoint) Then
+                    Return _templates(index)
+                End If
+            Next
+
+            Return Nothing
+        End Function
+
+        Private Sub DrawEmptyState(graphics As Graphics)
+            Dim bounds = New Rectangle(OuterPadding, OuterPadding, Math.Max(180, GetCardWidth()), 140)
+            Using backgroundBrush As New SolidBrush(Color.FromArgb(248, 250, 252)),
+                  borderPen As New Pen(Color.FromArgb(203, 213, 225)),
+                  titleFont As New Font(Me.Font.FontFamily, 10.0F, FontStyle.Bold),
+                  textFont As New Font(Me.Font.FontFamily, 9.0F, FontStyle.Regular)
+                graphics.FillRectangle(backgroundBrush, bounds)
+                graphics.DrawRectangle(borderPen, bounds)
+                TextRenderer.DrawText(graphics, "暂无模板", titleFont, New Rectangle(bounds.Left + 14, bounds.Top + 34, bounds.Width - 28, 26), Color.FromArgb(39, 45, 55), TextFormatFlags.Left Or TextFormatFlags.VerticalCenter)
+                TextRenderer.DrawText(graphics, "点击刷新后会在这里显示模板封面。", textFont, New Rectangle(bounds.Left + 14, bounds.Top + 68, bounds.Width - 28, 44), Color.FromArgb(86, 94, 108), TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+            End Using
+        End Sub
+
+        Private Sub DrawCard(graphics As Graphics, template As DocmeeTemplateInfo, cardBounds As Rectangle)
+            If template Is Nothing Then Return
+
+            Dim isSelected = String.Equals(template.Id, _selectedId, StringComparison.Ordinal)
+            Dim borderColor = If(isSelected, Color.FromArgb(234, 88, 12), Color.FromArgb(203, 213, 225))
+            Dim backgroundColor = If(isSelected, Color.FromArgb(255, 247, 237), Color.White)
+
+            Using backgroundBrush As New SolidBrush(backgroundColor),
+                  borderPen As New Pen(borderColor, If(isSelected, 2.0F, 1.0F))
+                graphics.FillRectangle(backgroundBrush, cardBounds)
+                graphics.DrawRectangle(borderPen, cardBounds)
+            End Using
+
+            Dim coverBounds = New Rectangle(cardBounds.Left + CardPadding,
+                                            cardBounds.Top + CardPadding,
+                                            Math.Max(1, cardBounds.Width - CardPadding * 2),
+                                            GetCoverHeight())
+            DrawCover(graphics, template, coverBounds)
+
+            Dim textLeft = cardBounds.Left + CardPadding
+            Dim textWidth = Math.Max(1, cardBounds.Width - CardPadding * 2)
+            Dim textTop = coverBounds.Bottom + 8
+            Dim titleBounds = New Rectangle(textLeft, textTop, textWidth, 30)
+            Dim metaBounds = New Rectangle(textLeft, titleBounds.Bottom + 2, textWidth, 22)
+            Dim statusBounds = New Rectangle(textLeft, metaBounds.Bottom + 2, textWidth, 26)
+            Dim buttonBounds = New Rectangle(textLeft, cardBounds.Bottom - CardPadding - 28, Math.Min(126, textWidth), 28)
+
+            Dim title = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name.Trim())
+            Dim meta = BuildMetaText(template)
+            Dim status = GetStatusText(template)
+
+            Using titleFont As New Font(Me.Font.FontFamily, 9.5F, FontStyle.Bold),
+                  metaFont As New Font(Me.Font.FontFamily, 8.5F, FontStyle.Regular),
+                  statusFont As New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular)
+                TextRenderer.DrawText(graphics, title, titleFont, titleBounds, Color.FromArgb(39, 45, 55), TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis)
+                TextRenderer.DrawText(graphics, meta, metaFont, metaBounds, Color.FromArgb(86, 94, 108), TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis)
+                If Not String.IsNullOrWhiteSpace(status) AndAlso Not _images.ContainsKey(template.Id) Then
+                    Dim statusColor = If(IsFailureStatus(status), Color.FromArgb(185, 28, 28), Color.FromArgb(86, 94, 108))
+                    TextRenderer.DrawText(graphics, status, statusFont, statusBounds, statusColor, TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis)
+                End If
+            End Using
+
+            Using buttonBrush As New SolidBrush(If(isSelected, Color.FromArgb(234, 88, 12), Color.FromArgb(241, 245, 249))),
+                  buttonFont As New Font(Me.Font.FontFamily, 8.5F, FontStyle.Bold)
+                graphics.FillRectangle(buttonBrush, buttonBounds)
+                TextRenderer.DrawText(graphics, If(isSelected, "已选择", "选择模板"), buttonFont, buttonBounds, If(isSelected, Color.White, Color.FromArgb(39, 45, 55)), TextFormatFlags.HorizontalCenter Or TextFormatFlags.VerticalCenter)
+            End Using
+        End Sub
+
+        Private Sub DrawCover(graphics As Graphics, template As DocmeeTemplateInfo, bounds As Rectangle)
+            Using backgroundBrush As New SolidBrush(Color.FromArgb(255, 248, 241)),
+                  borderPen As New Pen(Color.FromArgb(226, 232, 240))
+                graphics.FillRectangle(backgroundBrush, bounds)
+                graphics.DrawRectangle(borderPen, bounds)
+            End Using
+
+            Dim image As Image = Nothing
+            If template IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(template.Id) AndAlso _images.TryGetValue(template.Id, image) AndAlso image IsNot Nothing Then
+                Try
+                    DrawImageContain(graphics, image, Rectangle.Inflate(bounds, -1, -1))
+                    Return
+                Catch ex As Exception
+                    ThemePptTaskPane.AppendThemePptLog("PaintGallery draw image failed: id=" & template.Id & ", error=" & ex.Message)
+                End Try
+            End If
+
+            Dim title = If(template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Name), "模板预览", template.Name.Trim())
+            Dim status = GetStatusText(template)
+            If String.IsNullOrWhiteSpace(status) Then status = "封面加载中..."
+
+            Using accentBrush As New SolidBrush(Color.FromArgb(234, 88, 12)),
+                  titleFont As New Font(Me.Font.FontFamily, 9.5F, FontStyle.Bold),
+                  statusFont As New Font(Me.Font.FontFamily, 8.5F, FontStyle.Regular)
+                graphics.FillRectangle(accentBrush, bounds.Left, bounds.Top, 5, bounds.Height)
+                Dim inner = Rectangle.Inflate(bounds, -14, -12)
+                TextRenderer.DrawText(graphics, title, titleFont, New Rectangle(inner.Left, inner.Top + 20, inner.Width, 48), Color.FromArgb(39, 45, 55), TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+                Dim statusColor = If(IsFailureStatus(status), Color.FromArgb(185, 28, 28), Color.FromArgb(86, 94, 108))
+                TextRenderer.DrawText(graphics, status, statusFont, New Rectangle(inner.Left, inner.Bottom - 44, inner.Width, 40), statusColor, TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+            End Using
+        End Sub
+
+        Private Shared Sub DrawImageContain(graphics As Graphics, image As Image, bounds As Rectangle)
+            If image Is Nothing OrElse bounds.Width <= 0 OrElse bounds.Height <= 0 Then Return
+
+            Dim scale = Math.Min(bounds.Width / CDbl(image.Width), bounds.Height / CDbl(image.Height))
+            Dim width = Math.Max(1, CInt(Math.Round(image.Width * scale)))
+            Dim height = Math.Max(1, CInt(Math.Round(image.Height * scale)))
+            Dim left = bounds.Left + (bounds.Width - width) \ 2
+            Dim top = bounds.Top + (bounds.Height - height) \ 2
+            graphics.DrawImage(image, New Rectangle(left, top, width, height))
+        End Sub
+
+        Private Function GetStatusText(template As DocmeeTemplateInfo) As String
+            If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Return ""
+            If _messages.ContainsKey(template.Id) Then Return If(_messages(template.Id), "")
+            Return ""
+        End Function
+
+        Private Shared Function IsFailureStatus(status As String) As Boolean
+            Return Not String.IsNullOrWhiteSpace(status) AndAlso status.Contains("失败")
+        End Function
+
+        Private Shared Function BuildMetaText(template As DocmeeTemplateInfo) As String
+            Dim parts As New List(Of String)()
+            If template IsNot Nothing Then
+                If Not String.IsNullOrWhiteSpace(template.Category) Then parts.Add(template.Category.Trim())
+                If Not String.IsNullOrWhiteSpace(template.Style) Then parts.Add(template.Style.Trim())
+            End If
+
+            If parts.Count = 0 Then Return "Docmee 模板"
+            Return String.Join(" / ", parts)
+        End Function
+    End Class
+
     Private Sub SetStatus(text As String)
+        AppendThemePptLog("Status: " & If(text, ""))
         _statusLabel.Text = text
     End Sub
 End Class
