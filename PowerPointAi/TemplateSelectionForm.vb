@@ -205,6 +205,7 @@ Public Class TemplateSelectionForm
 
                     _currentPage = safePage
                     _hasNextPage = _pageLoader IsNot Nothing AndAlso _templates.Count >= _pageSize
+                    _isLoadingPage = False
                     _browser.NavigateToString(BuildHtml())
                 End Sub)
         Catch ex As Exception

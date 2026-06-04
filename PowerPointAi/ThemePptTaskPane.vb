@@ -18,7 +18,7 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class ThemePptTaskPane
     Inherits UserControl
 
-    Private Const ThemePptPaneBuild As String = "2026.06.04.8"
+    Private Const ThemePptPaneBuild As String = "2026.06.04.9"
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
     Private Const TemplatePageSize As Integer = 20
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
