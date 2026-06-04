@@ -336,7 +336,7 @@
     <ManifestKeyFile>PowerPointAi_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>3EDA84195BFB8FB2A33799B91C6CF89077184134</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>737EB511ED7866391B8399EF7E24ECBCA741B61F</ManifestCertificateThumbprint>
   </PropertyGroup>
   <!-- PostBuild: copy unsigned Markdig.dll to output (avoids VSTO manifest signing error MSB3178) -->
   <Target Name="CopyUnsignedDllsAfterBuild" AfterTargets="Build">
