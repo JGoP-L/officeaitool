@@ -2,6 +2,7 @@ Imports System.Collections.Generic
 Imports System.Drawing
 Imports System.Drawing.Drawing2D
 Imports System.IO
+Imports System.Runtime.InteropServices
 Imports System.Text
 Imports System.Threading
 Imports System.Threading.Tasks
@@ -17,15 +18,23 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class ThemePptTaskPane
     Inherits UserControl
 
-    Private Const ThemePptPaneBuild As String = "2026.06.04.7"
+    Private Const ThemePptPaneBuild As String = "2026.06.04.8"
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
+    Private Const TemplatePageSize As Integer = 20
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
+    Private Const WM_SETREDRAW As Integer = &HB
+    Private Const EM_LINESCROLL As Integer = &HB6
+    Private Const EM_GETFIRSTVISIBLELINE As Integer = &HCE
     Private Const GenerationModeTitle As String = "标题生成"
     Private Const GenerationModeDocument As String = "文档生成"
     Private Const GenerationModeMarkdown As String = "Markdown大纲"
     Private Shared ReadOnly MarkdownPreviewPipelineLock As New Object()
     Private Shared _markdownPreviewPipeline As MarkdownPipeline
     Private Shared _markdownPreviewPipelineInitializeError As String
+
+    <DllImport("user32.dll", CharSet:=CharSet.Auto)>
+    Private Shared Function SendMessage(hWnd As IntPtr, msg As Integer, wParam As IntPtr, lParam As IntPtr) As IntPtr
+    End Function
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -37,6 +46,8 @@ Public Class ThemePptTaskPane
     Private _templateLoadCts As CancellationTokenSource
     Private _templateCoverCts As CancellationTokenSource
     Private _templateCoverFailureCount As Integer
+    Private _templatePage As Integer = 1
+    Private _templateHasNextPage As Boolean
     Private _isOutlineEditCompleted As Boolean
     Private _templateConfirmedForCurrentOutline As Boolean
     Private _confirmedTemplateId As String
@@ -739,7 +750,12 @@ Public Class ThemePptTaskPane
         AppendThemePptLog("Template dialog opening. count=" & templates.Count.ToString() &
                           ", selected=" & GetSelectedTemplateId())
 
-        Using dialog As New TemplateSelectionForm(templates, GetSelectedTemplateId(), AddressOf BuildTemplateCoverUrl)
+        Using dialog As New TemplateSelectionForm(templates,
+                                                  GetSelectedTemplateId(),
+                                                  AddressOf BuildTemplateCoverUrl,
+                                                  _templatePage,
+                                                  TemplatePageSize,
+                                                  AddressOf LoadTemplatePageForDialog)
             Dim owner = Me.FindForm()
             Dim result As DialogResult
             If owner IsNot Nothing Then
@@ -749,6 +765,12 @@ Public Class ThemePptTaskPane
             End If
 
             If result = DialogResult.OK AndAlso dialog.SelectedTemplate IsNot Nothing Then
+                If dialog.CurrentPage <> _templatePage Then
+                    _templatePage = dialog.CurrentPage
+                    _templateHasNextPage = dialog.HasNextPage
+                    PopulateTemplates(dialog.CurrentTemplates)
+                End If
+
                 SelectTemplate(dialog.SelectedTemplate)
                 _templateConfirmedForCurrentOutline = True
                 _confirmedTemplateId = dialog.SelectedTemplate.Id
@@ -760,6 +782,12 @@ Public Class ThemePptTaskPane
             End If
         End Using
     End Sub
+
+    Private Function LoadTemplatePageForDialog(page As Integer) As List(Of DocmeeTemplateInfo)
+        Dim safePage = Math.Max(1, page)
+        AppendThemePptLog("Template dialog page load requested: page=" & safePage.ToString())
+        Return LoadTemplatesInBackgroundAsync(safePage, CancellationToken.None).GetAwaiter().GetResult()
+    End Function
 
     Private Function CanChooseTemplate() As Boolean
         Return _isOutlineEditCompleted AndAlso
@@ -917,12 +945,19 @@ Public Class ThemePptTaskPane
         If _outlineEditor.IsDisposed Then Return
 
         _applyingMarkdownEditorHighlight = True
+        Dim redrawSuspended = False
         Try
             Dim text = If(_outlineEditor.Text, "")
             Dim selectionStart = Math.Min(_outlineEditor.SelectionStart, text.Length)
             Dim selectionLength = Math.Min(_outlineEditor.SelectionLength, Math.Max(0, text.Length - selectionStart))
+            Dim firstVisibleLine = GetOutlineEditorFirstVisibleLine()
 
             _outlineEditor.SuspendLayout()
+            If _outlineEditor.IsHandleCreated Then
+                SetOutlineEditorRedraw(False)
+                redrawSuspended = True
+            End If
+
             _outlineEditor.SelectAll()
             _outlineEditor.SelectionFont = New Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular)
             _outlineEditor.SelectionColor = Color.FromArgb(31, 41, 55)
@@ -945,12 +980,43 @@ Public Class ThemePptTaskPane
             End While
 
             _outlineEditor.Select(selectionStart, selectionLength)
+            RestoreOutlineEditorFirstVisibleLine(firstVisibleLine)
         Catch ex As Exception
             AppendThemePptLog("Markdown editor highlight failed: " & ex.ToString())
         Finally
+            If redrawSuspended Then
+                SetOutlineEditorRedraw(True)
+            End If
             _outlineEditor.ResumeLayout()
             _applyingMarkdownEditorHighlight = False
         End Try
+    End Sub
+
+    Private Function GetOutlineEditorFirstVisibleLine() As Integer
+        If _outlineEditor Is Nothing OrElse _outlineEditor.IsDisposed OrElse Not _outlineEditor.IsHandleCreated Then Return -1
+        Return SendMessage(_outlineEditor.Handle, EM_GETFIRSTVISIBLELINE, IntPtr.Zero, IntPtr.Zero).ToInt32()
+    End Function
+
+    Private Sub RestoreOutlineEditorFirstVisibleLine(firstVisibleLine As Integer)
+        If firstVisibleLine < 0 Then Return
+        If _outlineEditor Is Nothing OrElse _outlineEditor.IsDisposed OrElse Not _outlineEditor.IsHandleCreated Then Return
+
+        Dim currentVisibleLine = GetOutlineEditorFirstVisibleLine()
+        If currentVisibleLine < 0 Then Return
+
+        Dim delta = firstVisibleLine - currentVisibleLine
+        If delta <> 0 Then
+            SendMessage(_outlineEditor.Handle, EM_LINESCROLL, IntPtr.Zero, New IntPtr(delta))
+        End If
+    End Sub
+
+    Private Sub SetOutlineEditorRedraw(enabled As Boolean)
+        If _outlineEditor Is Nothing OrElse _outlineEditor.IsDisposed OrElse Not _outlineEditor.IsHandleCreated Then Return
+
+        SendMessage(_outlineEditor.Handle, WM_SETREDRAW, If(enabled, New IntPtr(1), IntPtr.Zero), IntPtr.Zero)
+        If enabled Then
+            _outlineEditor.Invalidate()
+        End If
     End Sub
 
     Private Sub HighlightMarkdownEditorLine(line As String, lineStart As Integer, lineLength As Integer)
@@ -1315,7 +1381,7 @@ Public Class ThemePptTaskPane
             Return
         End If
 
-        Await LoadTemplatesAsync()
+        Await LoadTemplatesAsync(_templatePage)
     End Sub
 
     Private Async Sub SelectTemplateButton_Click(sender As Object, e As EventArgs)
@@ -1600,11 +1666,12 @@ Public Class ThemePptTaskPane
         Await GenerateAndImportPptxAsync()
     End Sub
 
-    Private Async Function LoadTemplatesAsync() As Task
+    Private Async Function LoadTemplatesAsync(Optional page As Integer = 1) As Task
         If _isTemplateLoading Then Return
 
+        Dim requestedPage = Math.Max(1, page)
         _isTemplateLoading = True
-        AppendThemePptLog("LoadTemplatesAsync start.")
+        AppendThemePptLog("LoadTemplatesAsync start. page=" & requestedPage.ToString())
         _refreshTemplatesButton.Enabled = False
         _selectTemplateButton.Enabled = False
         _lastTemplateLoadUsedFallback = False
@@ -1617,9 +1684,11 @@ Public Class ThemePptTaskPane
         Try
             SetStatus("正在加载 Docmee 模板...")
             Await Task.Yield()
-            Dim templates = Await LoadTemplatesInBackgroundAsync(cancellationToken)
+            Dim templates = Await LoadTemplatesInBackgroundAsync(requestedPage, cancellationToken)
             cancellationToken.ThrowIfCancellationRequested()
             AppendThemePptLog("LoadTemplatesAsync fetched count=" & If(templates Is Nothing, 0, templates.Count).ToString())
+            _templatePage = requestedPage
+            _templateHasNextPage = templates IsNot Nothing AndAlso templates.Count >= TemplatePageSize
             PopulateTemplates(templates)
 
             If _templateCombo.Items.Count = 0 Then
@@ -1636,6 +1705,8 @@ Public Class ThemePptTaskPane
             Dim fallbackTemplates = DocmeePptClient.GetFallbackTemplates()
             If fallbackTemplates.Count > 0 Then
                 _lastTemplateLoadUsedFallback = True
+                _templatePage = 1
+                _templateHasNextPage = False
                 PopulateTemplates(fallbackTemplates)
                 SetStatus($"模板接口失败，已使用内置模板 {fallbackTemplates.Count} 个。")
                 ShowTemplateGallery()
@@ -1655,10 +1726,10 @@ Public Class ThemePptTaskPane
         End Try
     End Function
 
-    Private Function LoadTemplatesInBackgroundAsync(cancellationToken As CancellationToken) As Task(Of List(Of DocmeeTemplateInfo))
+    Private Function LoadTemplatesInBackgroundAsync(page As Integer, cancellationToken As CancellationToken) As Task(Of List(Of DocmeeTemplateInfo))
         Return Task.Run(Function() As List(Of DocmeeTemplateInfo)
                             cancellationToken.ThrowIfCancellationRequested()
-                            Return _client.ListTemplatesAsync(1, 20, cancellationToken).GetAwaiter().GetResult()
+                            Return _client.ListTemplatesAsync(Math.Max(1, page), TemplatePageSize, cancellationToken).GetAwaiter().GetResult()
                         End Function, cancellationToken)
     End Function
 
@@ -2308,15 +2379,23 @@ Public Class ThemePptTaskPane
     Private Sub SelectTemplate(template As DocmeeTemplateInfo)
         If template Is Nothing Then Return
 
+        Dim selectedIndex = -1
         For index As Integer = 0 To _templateCombo.Items.Count - 1
             Dim item = TryCast(_templateCombo.Items(index), DocmeeTemplateInfo)
             If item IsNot Nothing AndAlso String.Equals(item.Id, template.Id, StringComparison.Ordinal) Then
-                If _templateCombo.SelectedIndex <> index Then
-                    _templateCombo.SelectedIndex = index
-                End If
+                selectedIndex = index
                 Exit For
             End If
         Next
+
+        If selectedIndex < 0 Then
+            _templateCombo.Items.Add(template)
+            selectedIndex = _templateCombo.Items.Count - 1
+        End If
+
+        If _templateCombo.SelectedIndex <> selectedIndex Then
+            _templateCombo.SelectedIndex = selectedIndex
+        End If
 
         RefreshTemplateSelectionStyles()
     End Sub
