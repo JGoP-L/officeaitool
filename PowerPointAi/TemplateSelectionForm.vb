@@ -2,6 +2,7 @@ Imports System.Collections.Generic
 Imports System.Drawing
 Imports System.IO
 Imports System.Text
+Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
 Imports Microsoft.Web.WebView2.Core
@@ -16,12 +17,15 @@ Public Class TemplateSelectionForm
     Private ReadOnly _selectedTemplateId As String
     Private ReadOnly _coverUrlBuilder As Func(Of String, String)
     Private ReadOnly _browser As New WebView2()
+    Private ReadOnly _uiThreadId As Integer
     Private _selectedTemplate As DocmeeTemplateInfo
     Private _initialized As Boolean
 
     Public Sub New(templates As IEnumerable(Of DocmeeTemplateInfo),
                    selectedTemplateId As String,
                    coverUrlBuilder As Func(Of String, String))
+        _uiThreadId = Thread.CurrentThread.ManagedThreadId
+
         If templates IsNot Nothing Then
             For Each template In templates
                 If template IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(template.Id) Then
@@ -53,6 +57,11 @@ Public Class TemplateSelectionForm
     End Property
 
     Private Async Sub TemplateSelectionForm_Shown(sender As Object, e As EventArgs)
+        If Not IsOnFormUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() TemplateSelectionForm_Shown(sender, e), MethodInvoker))
+            Return
+        End If
+
         If _initialized Then Return
         _initialized = True
 
@@ -71,24 +80,36 @@ Public Class TemplateSelectionForm
         Dim userDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                                           "OfficeAiThemeTemplateDialogWebView2")
         Dim env = Await CoreWebView2Environment.CreateAsync(Nothing, userDataFolder)
-        Await _browser.EnsureCoreWebView2Async(env)
+        Await EnsureBrowserCoreWebViewOnUiThreadAsync(env)
+        Await RunOnUiThreadAsync(
+            Sub()
+                If _browser.CoreWebView2 Is Nothing Then
+                    Throw New InvalidOperationException("CoreWebView2 不可用")
+                End If
 
-        If _browser.CoreWebView2 Is Nothing Then
-            Throw New InvalidOperationException("CoreWebView2 不可用")
-        End If
+                _browser.CoreWebView2.Settings.IsScriptEnabled = True
+                _browser.CoreWebView2.Settings.IsWebMessageEnabled = True
+                _browser.CoreWebView2.Settings.AreDevToolsEnabled = True
+                AddHandler _browser.CoreWebView2.WebMessageReceived, AddressOf Browser_WebMessageReceived
 
-        _browser.CoreWebView2.Settings.IsScriptEnabled = True
-        _browser.CoreWebView2.Settings.IsWebMessageEnabled = True
-        _browser.CoreWebView2.Settings.AreDevToolsEnabled = True
-        AddHandler _browser.CoreWebView2.WebMessageReceived, AddressOf Browser_WebMessageReceived
-
-        _browser.NavigateToString(BuildHtml())
+                _browser.NavigateToString(BuildHtml())
+            End Sub)
         ThemePptTaskPane.AppendThemePptLog("Template dialog WebView2 navigate string.")
     End Function
 
     Private Sub Browser_WebMessageReceived(sender As Object, e As CoreWebView2WebMessageReceivedEventArgs)
+        Dim messageJson = e.WebMessageAsJson
+        If Not IsOnFormUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() HandleBrowserMessage(messageJson), MethodInvoker))
+            Return
+        End If
+
+        HandleBrowserMessage(messageJson)
+    End Sub
+
+    Private Sub HandleBrowserMessage(messageJson As String)
         Try
-            Dim payload = JObject.Parse(e.WebMessageAsJson)
+            Dim payload = JObject.Parse(messageJson)
             Dim messageType = TryGetString(payload("type"))
 
             If String.Equals(messageType, "cancel", StringComparison.Ordinal) Then
@@ -115,6 +136,73 @@ Public Class TemplateSelectionForm
             ThemePptTaskPane.AppendThemePptLog("Template dialog message failed: " & ex.ToString())
         End Try
     End Sub
+
+    Private Function IsOnFormUiThread() As Boolean
+        Return Thread.CurrentThread.ManagedThreadId = _uiThreadId AndAlso Not Me.InvokeRequired
+    End Function
+
+    Private Function BeginInvokeIfAlive(action As MethodInvoker) As Boolean
+        If action Is Nothing OrElse Me.IsDisposed OrElse Not Me.IsHandleCreated Then Return False
+
+        Try
+            Me.BeginInvoke(action)
+            Return True
+        Catch ex As ObjectDisposedException
+            Return False
+        Catch ex As InvalidOperationException
+            Return False
+        End Try
+    End Function
+
+    Private Function RunOnUiThreadAsync(action As Action) As Task
+        If IsOnFormUiThread() Then
+            action()
+            Return Task.FromResult(True)
+        End If
+
+        Dim tcs As New TaskCompletionSource(Of Boolean)()
+        If Not BeginInvokeIfAlive(CType(Sub()
+                                            Try
+                                                action()
+                                                tcs.TrySetResult(True)
+                                            Catch ex As Exception
+                                                tcs.TrySetException(ex)
+                                            End Try
+                                        End Sub, MethodInvoker)) Then
+            tcs.TrySetException(New ObjectDisposedException(Me.GetType().Name))
+        End If
+
+        Return tcs.Task
+    End Function
+
+    Private Function EnsureBrowserCoreWebViewOnUiThreadAsync(env As CoreWebView2Environment) As Task
+        If IsOnFormUiThread() Then
+            Return _browser.EnsureCoreWebView2Async(env)
+        End If
+
+        Dim tcs As New TaskCompletionSource(Of Boolean)()
+        If Not BeginInvokeIfAlive(CType(Sub()
+                                            Try
+                                                Dim initTask = _browser.EnsureCoreWebView2Async(env)
+                                                initTask.ContinueWith(
+                                                    Sub(task)
+                                                        If task.IsFaulted AndAlso task.Exception IsNot Nothing Then
+                                                            tcs.TrySetException(task.Exception.InnerExceptions)
+                                                        ElseIf task.IsCanceled Then
+                                                            tcs.TrySetCanceled()
+                                                        Else
+                                                            tcs.TrySetResult(True)
+                                                        End If
+                                                    End Sub)
+                                            Catch ex As Exception
+                                                tcs.TrySetException(ex)
+                                            End Try
+                                        End Sub, MethodInvoker)) Then
+            tcs.TrySetException(New ObjectDisposedException(Me.GetType().Name))
+        End If
+
+        Return tcs.Task
+    End Function
 
     Private Function BuildHtml() As String
         Dim builder As New StringBuilder()
@@ -147,7 +235,7 @@ Public Class TemplateSelectionForm
             If String.IsNullOrWhiteSpace(coverUrl) Then
                 builder.Append("<div class=""fallback"">模板没有返回封面地址</div>")
             Else
-                builder.Append("<img alt=""").Append(EscapeHtmlAttribute(title)).Append(""" data-src=""").Append(EscapeHtmlAttribute(coverUrl)).Append(""">")
+                builder.Append("<img alt=""").Append(EscapeHtmlAttribute(title)).Append(""" data-lazy-src=""").Append(EscapeHtmlAttribute(coverUrl)).Append(""" loading=""lazy"" decoding=""async"">")
                 builder.Append("<div class=""error"">封面加载失败</div>")
             End If
             builder.AppendLine("</div>")
@@ -160,8 +248,12 @@ Public Class TemplateSelectionForm
         builder.AppendLine("</main>")
         builder.AppendLine("<script>")
         builder.AppendLine("(function(){")
-        builder.AppendLine("const status=document.getElementById('status');const imgs=[...document.querySelectorAll('img[data-src]')];let done=0,fail=0;function paint(){if(!imgs.length){status.textContent='没有可加载的封面图';return;}status.textContent='封面预加载 '+done+'/'+imgs.length+(fail?'，失败 '+fail:'');}")
-        builder.AppendLine("imgs.forEach(img=>{const thumb=img.closest('.thumb');img.onload=()=>{done++;paint();};img.onerror=()=>{done++;fail++;if(thumb)thumb.classList.add('failed');paint();};img.src=img.dataset.src;});paint();")
+        builder.AppendLine("const lazyStatus=document.getElementById('status');const lazyImgs=[...document.querySelectorAll('img[data-lazy-src]')];let lazyDone=0,lazyFail=0,lazyActive=0;const lazyMaxActive=4;const lazyQueue=[];const lazyQueued=new WeakSet();")
+        builder.AppendLine("function lazyPaint(){if(!lazyImgs.length){lazyStatus.textContent='\u6ca1\u6709\u53ef\u52a0\u8f7d\u7684\u5c01\u9762\u56fe';return;}lazyStatus.textContent='\u5c01\u9762\u52a0\u8f7d '+lazyDone+'/'+lazyImgs.length+(lazyFail?'\uff0c\u5931\u8d25 '+lazyFail:'');}")
+        builder.AppendLine("function lazyEnqueue(img){if(!img||lazyQueued.has(img)||img.dataset.loading==='1'||img.dataset.loaded==='1')return;lazyQueued.add(img);lazyQueue.push(img);lazyPump();}")
+        builder.AppendLine("function lazyFinish(img,ok){lazyActive=Math.max(0,lazyActive-1);lazyDone++;img.dataset.loaded='1';if(!ok){lazyFail++;const thumb=img.closest('.thumb');if(thumb)thumb.classList.add('failed');}lazyPaint();lazyPump();}")
+        builder.AppendLine("function lazyPump(){while(lazyActive<lazyMaxActive&&lazyQueue.length){const img=lazyQueue.shift();lazyActive++;img.dataset.loading='1';img.onload=()=>lazyFinish(img,true);img.onerror=()=>lazyFinish(img,false);img.src=img.dataset.lazySrc;}}")
+        builder.AppendLine("lazyImgs.slice(0,6).forEach(lazyEnqueue);if('IntersectionObserver'in window){const io=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){io.unobserve(entry.target);lazyEnqueue(entry.target);}});},{rootMargin:'420px 0px'});lazyImgs.slice(6).forEach(img=>io.observe(img));}else{lazyImgs.slice(6).forEach(lazyEnqueue);}lazyPaint();")
         builder.AppendLine("document.addEventListener('click',e=>{if(e.target.closest('[data-action=""cancel""]')){window.chrome.webview.postMessage({type:'cancel'});return;}const card=e.target.closest('.card');if(!card)return;window.chrome.webview.postMessage({type:'select',id:card.dataset.id});});")
         builder.AppendLine("})();")
         builder.AppendLine("</script></body></html>")

@@ -17,7 +17,7 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class ThemePptTaskPane
     Inherits UserControl
 
-    Private Const ThemePptPaneBuild As String = "2026.06.04.5"
+    Private Const ThemePptPaneBuild As String = "2026.06.04.7"
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
     Private Const GenerationModeTitle As String = "标题生成"
@@ -44,6 +44,7 @@ Public Class ThemePptTaskPane
     Private _outlinePreviewInitializing As Boolean
     Private _pendingOutlinePreviewRender As Boolean
     Private _suppressOutlineEditorChange As Boolean
+    Private _applyingMarkdownEditorHighlight As Boolean
     Private _markdownPreviewRenderGeneration As Integer
     Private _selectedDocumentPath As String
     Private _lastGeneratedPptId As String
@@ -67,7 +68,7 @@ Public Class ThemePptTaskPane
     Private ReadOnly _outputBox As New TextBox()
     Private ReadOnly _contentPanel As New Panel()
     Private ReadOnly _outlineWorkspacePanel As New SplitContainer()
-    Private ReadOnly _outlineEditor As New TextBox()
+    Private ReadOnly _outlineEditor As New RichTextBox()
     Private ReadOnly _outlinePreviewWebView As New WebView2()
     Private ReadOnly _outlinePreviewDebounceTimer As New System.Windows.Forms.Timer()
     Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
@@ -289,12 +290,15 @@ Public Class ThemePptTaskPane
         _outlineEditor.Dock = DockStyle.Fill
         _outlineEditor.Multiline = True
         _outlineEditor.ReadOnly = False
-        _outlineEditor.ScrollBars = ScrollBars.Vertical
+        _outlineEditor.ScrollBars = RichTextBoxScrollBars.Vertical
         _outlineEditor.WordWrap = True
         _outlineEditor.AcceptsTab = True
         _outlineEditor.Font = New Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular)
         _outlineEditor.BorderStyle = BorderStyle.FixedSingle
         _outlineEditor.BackColor = Color.White
+        _outlineEditor.ForeColor = Color.FromArgb(31, 41, 55)
+        _outlineEditor.DetectUrls = False
+        _outlineEditor.HideSelection = False
         AddHandler _outlineEditor.TextChanged, AddressOf OutlineEditor_TextChanged
 
         outlineEditorPanel.Controls.Add(outlineEditorLabel, 0, 0)
@@ -808,7 +812,8 @@ Public Class ThemePptTaskPane
 
         _suppressOutlineEditorChange = True
         Try
-            _outlineEditor.Text = If(markdown, "")
+            _outlineEditor.Text = NormalizeMarkdownForEditing(markdown)
+            ApplyMarkdownEditorHighlight()
             _outlineEditor.SelectionStart = 0
             _outlineEditor.ScrollToCaret()
         Finally
@@ -816,6 +821,184 @@ Public Class ThemePptTaskPane
         End Try
 
         ScheduleMarkdownPreviewUpdate(True)
+    End Sub
+
+    Private Function NormalizeMarkdownForEditing(markdown As String) As String
+        Dim value = If(markdown, "").Trim()
+        If String.IsNullOrWhiteSpace(value) Then Return ""
+
+        value = value.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
+        value = value.Replace("\r\n", vbLf).Replace("\n", vbLf).Replace("\r", vbLf)
+        value = value.Replace(ChrW(&HA0), " ")
+
+        value = System.Text.RegularExpressions.Regex.Replace(value, "[ \t]+\n", vbLf)
+        value = System.Text.RegularExpressions.Regex.Replace(value, "([^\n])\s+(#{1,6}\s+)", "$1" & vbLf & vbLf & "$2")
+        value = System.Text.RegularExpressions.Regex.Replace(value, "([^\n])\s+([-*+]\s+)", "$1" & vbLf & "$2")
+        value = System.Text.RegularExpressions.Regex.Replace(value, "([^\n])\s+(\d{1,2}[\.\)]\s+)", "$1" & vbLf & "$2")
+        value = System.Text.RegularExpressions.Regex.Replace(value, "\n{3,}", vbLf & vbLf)
+        value = NormalizeGeneratedMarkdownHeadingBodies(value)
+
+        Return value.Trim().Replace(vbLf, Environment.NewLine)
+    End Function
+
+    Private Function NormalizeGeneratedMarkdownHeadingBodies(markdown As String) As String
+        Dim builder As New StringBuilder()
+        Dim lines = If(markdown, "").Split(New String() {vbLf}, StringSplitOptions.None)
+
+        For Each rawLine In lines
+            Dim line = If(rawLine, "").TrimEnd()
+            Dim headingLine As String = Nothing
+            Dim bodyLine As String = Nothing
+
+            If TrySplitGeneratedMarkdownHeadingBody(line, headingLine, bodyLine) Then
+                builder.Append(headingLine).Append(vbLf)
+                builder.Append(vbLf)
+                builder.Append(bodyLine).Append(vbLf)
+            Else
+                builder.Append(line).Append(vbLf)
+            End If
+        Next
+
+        Dim normalized = builder.ToString().Replace(vbCrLf, vbLf).Replace(vbCr, vbLf).TrimEnd()
+        Return System.Text.RegularExpressions.Regex.Replace(normalized, "\n{3,}", vbLf & vbLf)
+    End Function
+
+    Private Function TrySplitGeneratedMarkdownHeadingBody(line As String, ByRef headingLine As String, ByRef bodyLine As String) As Boolean
+        If String.IsNullOrWhiteSpace(line) OrElse Not line.StartsWith("#", StringComparison.Ordinal) Then Return False
+
+        Dim headingLevel = 0
+        While headingLevel < line.Length AndAlso line(headingLevel) = "#"c
+            headingLevel += 1
+        End While
+
+        If headingLevel < 2 OrElse headingLevel > 6 Then Return False
+        If headingLevel >= line.Length OrElse Not Char.IsWhiteSpace(line(headingLevel)) Then Return False
+
+        Dim content = line.Substring(headingLevel).Trim()
+        If content.Length < 18 Then Return False
+
+        Dim splitIndex = FindGeneratedHeadingBodySplitIndex(content)
+        If splitIndex <= 0 Then Return False
+
+        Dim headingText = content.Substring(0, splitIndex).Trim()
+        Dim bodyText = content.Substring(splitIndex).Trim()
+        If headingText.Length < 4 OrElse bodyText.Length < 8 Then Return False
+
+        headingLine = New String("#"c, headingLevel) & " " & headingText
+        bodyLine = bodyText
+        Return True
+    End Function
+
+    Private Function FindGeneratedHeadingBodySplitIndex(content As String) As Integer
+        Dim markers = New String() {
+            " 据", " 根据", " 预计", " 其中", " 海外", " 国内", " 用户", " 企业",
+            " 核心", " 目前", " 通过", " 同时", " 此外", " 随着", " Microsoft",
+            " Google", " IDC", " Gartner", "据IDC", "根据IDC", "据Gartner", "根据Gartner"
+        }
+
+        Dim best = -1
+        For Each marker In markers
+            Dim startIndex = If(marker.StartsWith(" ", StringComparison.Ordinal), 4, 6)
+            Dim index = content.IndexOf(marker, startIndex, StringComparison.OrdinalIgnoreCase)
+            If index >= 0 AndAlso (best < 0 OrElse index < best) Then
+                best = index
+            End If
+        Next
+
+        Return best
+    End Function
+
+    Private Sub ApplyMarkdownEditorHighlight()
+        If _applyingMarkdownEditorHighlight Then Return
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() ApplyMarkdownEditorHighlight(), MethodInvoker))
+            Return
+        End If
+        If _outlineEditor.IsDisposed Then Return
+
+        _applyingMarkdownEditorHighlight = True
+        Try
+            Dim text = If(_outlineEditor.Text, "")
+            Dim selectionStart = Math.Min(_outlineEditor.SelectionStart, text.Length)
+            Dim selectionLength = Math.Min(_outlineEditor.SelectionLength, Math.Max(0, text.Length - selectionStart))
+
+            _outlineEditor.SuspendLayout()
+            _outlineEditor.SelectAll()
+            _outlineEditor.SelectionFont = New Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular)
+            _outlineEditor.SelectionColor = Color.FromArgb(31, 41, 55)
+            _outlineEditor.SelectionBackColor = Color.White
+
+            Dim index = 0
+            While index < text.Length
+                Dim lineEnd = text.IndexOfAny(New Char() {ControlChars.Cr, ControlChars.Lf}, index)
+                Dim lineLength = If(lineEnd >= 0, lineEnd - index, text.Length - index)
+                If lineLength > 0 Then
+                    HighlightMarkdownEditorLine(text.Substring(index, lineLength), index, lineLength)
+                End If
+
+                If lineEnd < 0 Then Exit While
+                If text(lineEnd) = ControlChars.Cr AndAlso lineEnd + 1 < text.Length AndAlso text(lineEnd + 1) = ControlChars.Lf Then
+                    index = lineEnd + 2
+                Else
+                    index = lineEnd + 1
+                End If
+            End While
+
+            _outlineEditor.Select(selectionStart, selectionLength)
+        Catch ex As Exception
+            AppendThemePptLog("Markdown editor highlight failed: " & ex.ToString())
+        Finally
+            _outlineEditor.ResumeLayout()
+            _applyingMarkdownEditorHighlight = False
+        End Try
+    End Sub
+
+    Private Sub HighlightMarkdownEditorLine(line As String, lineStart As Integer, lineLength As Integer)
+        Dim trimmed = line.TrimStart()
+        If String.IsNullOrWhiteSpace(trimmed) Then Return
+
+        Dim leadingSpaces = line.Length - trimmed.Length
+        Dim style As FontStyle = FontStyle.Regular
+        Dim size As Single = 9.5F
+        Dim highlightColor As Color = Color.FromArgb(31, 41, 55)
+
+        If trimmed.StartsWith("#", StringComparison.Ordinal) Then
+            Dim level = 0
+            While level < trimmed.Length AndAlso trimmed(level) = "#"c
+                level += 1
+            End While
+
+            If level > 0 AndAlso level <= 6 AndAlso level < trimmed.Length AndAlso Char.IsWhiteSpace(trimmed(level)) Then
+                style = FontStyle.Bold
+                If level = 1 Then
+                    size = 12.0F
+                    highlightColor = Color.FromArgb(153, 27, 27)
+                ElseIf level = 2 Then
+                    size = 10.5F
+                    highlightColor = Color.FromArgb(194, 65, 12)
+                Else
+                    size = 9.8F
+                    highlightColor = Color.FromArgb(75, 85, 99)
+                End If
+            End If
+        ElseIf trimmed.StartsWith("- ", StringComparison.Ordinal) OrElse
+               trimmed.StartsWith("* ", StringComparison.Ordinal) OrElse
+               trimmed.StartsWith("+ ", StringComparison.Ordinal) OrElse
+               System.Text.RegularExpressions.Regex.IsMatch(trimmed, "^\d{1,2}[\.\)]\s+") Then
+            highlightColor = Color.FromArgb(55, 65, 81)
+        ElseIf trimmed.StartsWith("```", StringComparison.Ordinal) Then
+            highlightColor = Color.FromArgb(37, 99, 235)
+            style = FontStyle.Bold
+        End If
+
+        _outlineEditor.Select(lineStart, lineLength)
+        _outlineEditor.SelectionFont = New Font("Microsoft YaHei UI", size, style)
+        _outlineEditor.SelectionColor = highlightColor
+
+        If leadingSpaces > 0 AndAlso lineLength > leadingSpaces Then
+            _outlineEditor.Select(lineStart, leadingSpaces)
+            _outlineEditor.SelectionColor = Color.FromArgb(156, 163, 175)
+        End If
     End Sub
 
     Private Sub MarkOutlineEditingRequired()
@@ -869,6 +1052,10 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub OutlineEditor_TextChanged(sender As Object, e As EventArgs)
+        If Not _suppressOutlineEditorChange Then
+            ApplyMarkdownEditorHighlight()
+        End If
+
         ScheduleMarkdownPreviewUpdate()
 
         If _suppressOutlineEditorChange Then Return
@@ -1358,7 +1545,7 @@ Public Class ThemePptTaskPane
             Throw New InvalidOperationException("Markdown 大纲应以 # 一级标题开始。")
         End If
 
-        Return markdown
+        Return NormalizeMarkdownForEditing(markdown)
     End Function
 
     Private Sub ValidateEditedMarkdownForDocmee(markdown As String)
