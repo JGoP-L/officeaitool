@@ -58,12 +58,6 @@
   <ItemGroup>
     <!-- Markdig.dll 通过 PostBuild 复制，避免 VSTO 清单签名验证失败 (MSB3178) -->
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ShareRibbon\ShareRibbon.vbproj">
-      <Project>{006508c7-fb9f-4484-a22a-9aa9487acd0b}</Project>
-      <Name>ShareRibbon</Name>
-    </ProjectReference>
-  </ItemGroup>
   <PropertyGroup>
     <!--
       OfficeApplication
@@ -147,6 +141,9 @@
     </Reference>
     <Reference Include="Microsoft.Web.WebView2.Wpf, Version=1.0.3240.44, Culture=neutral, PublicKeyToken=2a8ab48044d2601e, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Web.WebView2.1.0.3240.44\lib\net462\Microsoft.Web.WebView2.Wpf.dll</HintPath>
+    </Reference>
+    <Reference Include="Markdig, Version=0.41.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Markdig.0.41.1\lib\net462\Markdig.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>

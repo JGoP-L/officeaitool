@@ -10,171 +10,259 @@ function assert(condition, message) {
   }
 }
 
+function assertOrder(source, first, second, message) {
+  const firstIndex = source.indexOf(first);
+  const secondIndex = source.indexOf(second);
+  assert(firstIndex !== -1, `${message}: missing ${first}`);
+  assert(secondIndex !== -1, `${message}: missing ${second}`);
+  assert(firstIndex < secondIndex, message);
+}
+
+function methodBlock(source, signature) {
+  const start = source.indexOf(signature);
+  assert(start !== -1, `missing method: ${signature}`);
+  const nextMethod = source.indexOf('\n    Private ', start + signature.length);
+  const nextPublicMethod = source.indexOf('\n    Public ', start + signature.length);
+  const candidates = [nextMethod, nextPublicMethod].filter((index) => index !== -1);
+  const end = candidates.length ? Math.min(...candidates) : source.length;
+  return source.slice(start, end);
+}
+
+function countOccurrences(source, needle) {
+  return source.split(needle).length - 1;
+}
+
 const ribbonDesigner = read('PowerPointAi/Ribbon1.Designer.vb');
 const ribbon = read('PowerPointAi/Ribbon1.vb');
 const addIn = read('PowerPointAi/ThisAddIn.vb');
 const project = read('PowerPointAi/PowerPointAi.vbproj');
+const powerPointAppConfig = read('PowerPointAi/app.config');
+const configSettings = read('ShareRibbon/Config/ConfigSettings.vb');
 const installer = fs.existsSync('OfficeAgent/OfficeAgent.vdproj') ? read('OfficeAgent/OfficeAgent.vdproj') : '';
 const client = fs.existsSync('PowerPointAi/DocmeePptClient.vb') ? read('PowerPointAi/DocmeePptClient.vb') : '';
 const pane = fs.existsSync('PowerPointAi/ThemePptTaskPane.vb') ? read('PowerPointAi/ThemePptTaskPane.vb') : '';
+const templateDialog = fs.existsSync('PowerPointAi/TemplateSelectionForm.vb') ? read('PowerPointAi/TemplateSelectionForm.vb') : '';
+const apiSmoke = fs.existsSync('scripts/verify-docmee-api-smoke.js') ? read('scripts/verify-docmee-api-smoke.js') : '';
 
 assert(ribbonDesigner.includes('Me.TemplateFormatButton.Visible = True'), '主题生成PPT button must be visible');
-assert(ribbonDesigner.includes('Me.TemplateFormatButton.Label = "主题生成PPT"'), 'TemplateFormatButton must be relabeled 主题生成PPT');
+assert(ribbonDesigner.includes('Me.TemplateFormatButton.Label = "AI生成PPT"'), 'TemplateFormatButton must be relabeled AI生成PPT');
+assert(ribbonDesigner.includes('Me.ProofreadButton.Visible = True'), 'PowerPoint ribbon must expose the replace-single-slide button');
+assert(ribbonDesigner.includes('Me.ProofreadButton.Label = "替换单页"'), 'ProofreadButton must be repurposed as 替换单页 for PowerPoint');
+assert(ribbonDesigner.includes('Me.ReformatButton.Visible = True'), 'PowerPoint ribbon must expose the beautify-single-slide button');
+assert(ribbonDesigner.includes('Me.ReformatButton.Label = "美化单页"'), 'ReformatButton must be labeled 美化单页');
+assert(ribbonDesigner.includes('Me.TranslateButton.Label = "文本翻译"'), 'PowerPoint ribbon must expose text translation');
+assert(ribbonDesigner.includes('Me.ContinuationButton.Label = "文本优化"'), 'PowerPoint ribbon must expose text optimization');
 assert(ribbon.includes('Globals.ThisAddIn.ShowThemePptTaskPane()'), 'Ribbon must open the theme PPT task pane');
+assert(ribbon.includes('ReplaceCurrentSlideWithGeneratedTextAsync'), 'Ribbon must implement a replace-single-slide workflow');
+assert(ribbon.includes('DeleteOriginalSlideAfterReplacement'), 'replace-single-slide workflow must delete the old page after inserting the replacement');
+assert(ribbon.includes('ApplySimpleBeautifyToCurrentSlide'), 'Ribbon must implement a beautify-current-slide workflow');
+assert(ribbon.includes('TranslateButton_Click'), 'Ribbon must implement text translation');
+assert(ribbon.includes('ContinuationButton_Click'), 'Ribbon must implement text optimization');
+assert(ribbon.includes('"扩写"') && ribbon.includes('"精简"') && ribbon.includes('"填充"') && ribbon.includes('"补全文案"'), 'text optimization must support expand, shorten, fill, and complete modes');
+assert(ribbon.includes('Case "填充"'), 'text optimization must implement a dedicated fill mode');
 
 assert(addIn.includes('themePptTaskPane'), 'ThisAddIn must keep a theme PPT task pane');
 assert(addIn.includes('ShowThemePptTaskPane'), 'ThisAddIn must expose ShowThemePptTaskPane');
+assert(addIn.includes('EnsureCoreServicesLoaded()'), 'Theme PPT task pane must load core services before WebView2 use');
 assert(addIn.includes('New ThemePptTaskPane(Me.Application)'), 'ThisAddIn must create ThemePptTaskPane');
 
 assert(project.includes('Compile Include="DocmeePptClient.vb"'), 'PowerPoint project must compile DocmeePptClient');
 assert(project.includes('Compile Include="ThemePptTaskPane.vb"'), 'PowerPoint project must compile ThemePptTaskPane');
-assert(installer.includes('"ProductVersion" = "8:2.13.0"'), 'installer version must be bumped so testers install the blank-slide import fix build');
-assert(installer.includes('"RemovePreviousVersions" = "11:TRUE"'), 'installer must remove previous versions during upgrade');
+assert(project.includes('Compile Include="TemplateSelectionForm.vb"'), 'PowerPoint project must compile TemplateSelectionForm');
+assert(project.includes('<Reference Include="Markdig'), 'PowerPoint project must reference Markdig for real markdown preview rendering');
+assert(project.includes('Copy SourceFiles="..\\packages\\Markdig.0.41.1\\lib\\net462\\Markdig.dll"'), 'PowerPoint build must copy Markdig.dll for VSTO runtime');
+assert(
+  countOccurrences(project, 'ProjectReference Include="..\\ShareRibbon\\ShareRibbon.vbproj"') === 1,
+  'PowerPoint project must reference ShareRibbon exactly once to avoid duplicate MSBuild project references'
+);
 
-assert(client.includes('https://test.docmee.cn'), 'Docmee client must use the test API base URL');
-assert(client.includes('Private Const DemoToken As String = "ak_demo"'), 'Docmee client must use ak_demo token for demo');
-assert(client.includes('/api/ppt/v2/createTask'), 'Docmee client must call createTask');
-assert(client.includes('MultipartFormDataContent'), 'createTask must use multipart/form-data');
-assert(client.includes('Private Async Function CreateTaskAsync(content As String, taskType As String)'), 'Docmee client must support creating typed Docmee tasks');
-assert(client.includes('form.Add(New StringContent(taskType, Encoding.UTF8), "type")'), 'Docmee createTask must send the requested task type');
+if (installer) {
+  assert(installer.includes('"RemovePreviousVersions" = "11:TRUE"'), 'installer must remove previous versions during upgrade');
+}
+
+assert(configSettings.includes('DefaultDocmeeApiBaseUrl As String = "https://test.docmee.cn"'), 'Docmee config must retain the demo API fallback URL');
+assert(configSettings.includes('DefaultDocmeeToken As String = "ak_demo"'), 'Docmee config must retain the demo token fallback');
+assert(configSettings.includes('OfficeAi.DocmeeApiBaseUrl'), 'Docmee API base URL must be configurable through app settings');
+assert(configSettings.includes('OfficeAi.DocmeeToken'), 'Docmee token must be configurable through app settings');
+assert(configSettings.includes('OFFICE_AI_DOCMEE_API_BASE_URL'), 'Docmee API base URL must be configurable through environment variables');
+assert(configSettings.includes('OFFICE_AI_DOCMEE_TOKEN'), 'Docmee token must be configurable through environment variables');
+assert(configSettings.includes('DocmeeSettingsFileName As String = "docmee_settings.json"'), 'Docmee settings must have a per-user persisted settings file');
+assert(configSettings.includes('Public Shared Sub SaveDocmeeSettings'), 'Docmee settings must be saveable from the plugin UI');
+assert(configSettings.includes('Private Shared Function LoadDocmeeUserSettings'), 'Docmee settings must load persisted per-user values');
+assert(configSettings.includes('Newtonsoft.Json.JsonConvert'), 'Docmee settings must use structured JSON serialization');
+assert(!configSettings.includes('FirstNonEmpty(apiBaseUrl, DefaultDocmeeApiBaseUrl)'), 'Docmee settings save must not persist demo defaults when the plugin dialog leaves the base URL blank');
+assert(configSettings.includes('Dim normalizedBaseUrl = If(apiBaseUrl, "").Trim().TrimEnd("/"c)'), 'Docmee settings save must preserve a blank base URL so fallback sources can still apply');
+assertOrder(
+  configSettings,
+  'Environment.GetEnvironmentVariable(DocmeeApiBaseUrlEnvironmentVariable)',
+  'SafeAppSetting(DocmeeApiBaseUrlAppSettingKey)',
+  'Docmee API base URL environment variable must override app.config demo defaults'
+);
+assertOrder(
+  configSettings,
+  'Environment.GetEnvironmentVariable(DocmeeTokenEnvironmentVariable)',
+  'SafeAppSetting(DocmeeTokenAppSettingKey)',
+  'Docmee token environment variable must override app.config demo defaults'
+);
+assert(powerPointAppConfig.includes('key="OfficeAi.DocmeeApiBaseUrl"'), 'PowerPoint app.config must expose the Docmee API base URL setting');
+assert(powerPointAppConfig.includes('key="OfficeAi.DocmeeToken"'), 'PowerPoint app.config must expose the Docmee token setting');
+assert(client.includes('GetConfiguredApiBaseUrl'), 'Docmee client must read its API base URL from configuration');
+assert(client.includes('GetConfiguredToken'), 'Docmee client must read its token from configuration');
+assert(client.includes('BuildEndpoint("/api/ppt/v2/createTask")'), 'Docmee createTask endpoint must be built from the configured base URL');
+assert(client.includes('BuildEndpoint("/api/ppt/v2/generateContent")'), 'Docmee generateContent endpoint must be built from the configured base URL');
+assert(client.includes('BuildEndpoint("/api/ppt/v2/generatePptx")'), 'Docmee generatePptx endpoint must be built from the configured base URL');
+assert(client.includes('BuildEndpoint("/api/ppt/updatePptTemplate")'), 'Docmee updatePptTemplate endpoint must be built from the configured base URL');
+assert(client.includes('AddDocmeeTokenHeader'), 'Docmee client must add the token through a shared helper');
+assert(!client.includes('DemoToken'), 'Docmee client must not hard-code the demo token in request code');
 assert(client.includes('Public Async Function CreateMarkdownTaskAsync(markdown As String) As Task(Of String)'), 'Docmee client must create fresh markdown tasks for PPT generation');
 assert(client.includes('Return Await CreateTaskAsync(markdown, "7")'), 'Docmee markdown task creation must use type=7');
-assert(client.includes('/api/ppt/v2/generateContent'), 'Docmee client must call generateContent');
+assert(client.includes('Public Async Function CreateFileTaskAsync(filePath As String) As Task(Of String)'), 'Docmee client must create upload-file tasks for document-to-PPT');
+assert(client.includes('GetTaskTypeForFile(filePath)'), 'Docmee client must choose the Docmee task type from the uploaded document');
+assert(methodBlock(client, 'Private Shared Function GetTaskTypeForFile(filePath As String) As String').includes('Case ".xmind", ".mm"'), 'Docmee mind map uploads must be detected separately');
+assert(methodBlock(client, 'Private Shared Function GetTaskTypeForFile(filePath As String) As String').includes('Return "3"'), 'Docmee mind map uploads must use type=3');
+assert(methodBlock(client, 'Private Shared Function GetTaskTypeForFile(filePath As String) As String').includes('Return "2"'), 'Docmee document-to-editable-markdown flow must use type=2 upload-file tasks');
+assert(!client.includes('Return "4"'), 'Docmee document-to-editable-markdown flow must not use type=4 because generateContent prompt is ignored for type=4');
+assert(client.includes('Private Shared Function IsSupportedUploadFile(filePath As String) As Boolean'), 'Docmee upload flow must validate supported document extensions before upload');
+assert(client.includes('NotSupportedException'), 'Docmee upload flow must show a local unsupported-format error');
+assert(client.includes('".ppt", ".pptx"'), 'Docmee upload validation must support PPT/PPTX files');
+assert(client.includes('".xls", ".xlsx", ".csv"'), 'Docmee upload validation must support spreadsheet inputs');
+assert(client.includes('".html", ".epub", ".mobi"'), 'Docmee upload validation must support HTML and ebook inputs');
+assert(client.includes('".xmind", ".mm"'), 'Docmee upload validation must support mind map inputs');
+assert(client.includes('Using fileStream As New FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read)'), 'Docmee upload tasks must stream the selected file');
+assert(client.includes('Private Shared ReadOnly Property UpdatePptTemplateEndpoint As String'), 'Docmee client must define updatePptTemplate endpoint');
+assert(client.includes('Public Async Function UpdatePptTemplateAsync(pptId As String, templateId As String'), 'Docmee client must expose template replacement for generated PPTs');
+assert(client.includes('{"sync", sync}'), 'Docmee template replacement must send the sync option');
 assert(client.includes('GenerateMarkdownContentAsync'), 'Docmee client must expose markdown outline generation');
 assert(client.includes('"outlineType", "MD"'), 'generateContent must request markdown outline for the task pane');
-assert(client.includes('"questionMode", False'), 'generateContent must disable questionMode');
-assert(client.includes('"isNeedAsk", False'), 'generateContent must disable isNeedAsk');
-assert(client.includes('Optional progressHandler As Action(Of String) = Nothing'), 'GenerateContentAsync must accept a streaming progress callback');
+assert(client.includes('NormalizeDocmeePrompt'), 'Docmee generateContent prompt must be normalized through a shared helper');
+assert(client.includes('If normalized.Length > 49 Then normalized = normalized.Substring(0, 49)'), 'Docmee prompt must be capped below the documented 50-character limit');
 assert(client.includes('ReadAsStreamAsync'), 'GenerateContentAsync must read the SSE response stream');
 assert(client.includes('ReadLineAsync'), 'GenerateContentAsync must parse SSE lines incrementally');
 assert(client.includes('progressHandler.Invoke(chunkText)'), 'GenerateContentAsync must publish streaming outline text chunks');
-assert(client.includes('TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdown)'), 'markdown streaming must ignore final JSON result envelopes and keep streamed markdown chunks');
-assert(!client.includes('finalMarkdown = ExtractMarkdownFromEnvelope(eventPayload)'), 'markdown streaming must not throw when the final event result is a JSON outline object');
-assert(client.includes('/api/ppt/templates'), 'Docmee client must include the template list endpoint for later template selection');
-assert(client.includes('Using client = CreateHttpClient(TimeSpan.FromSeconds(12))'), 'template list calls must use a short timeout so the task pane falls back quickly');
-assert(client.includes('client.SendAsync(request).ConfigureAwait(False)'), 'template list HTTP calls must not capture the Office UI synchronization context');
-assert(client.includes('response.Content.ReadAsStringAsync().ConfigureAwait(False)'), 'template list response reads must not resume on the Office UI thread');
-assert(client.includes('Public Shared Function GetFallbackTemplates() As List(Of DocmeeTemplateInfo)'), 'Docmee client must provide built-in demo templates when the live template list endpoint fails');
-assert(client.includes('.Id = "1940698099655794688"'), 'fallback templates must include a known Docmee demo template id');
-assert(client.includes('Public Async Function DownloadTemplateCoverAsync(coverUrl As String) As Task(Of Byte())'), 'Docmee client must download template covers through a controlled HTTP path');
-assert(client.includes('TimeSpan.FromSeconds(5)'), 'template cover downloads must use a short timeout so the task pane cannot hang');
-assert(client.includes('client.GetAsync(coverUrl).ConfigureAwait(False)'), 'template cover downloads must not capture the Office UI synchronization context');
-assert(client.includes('/api/ppt/v2/generatePptx'), 'Docmee client must generate PPTX after outline');
-assert(client.includes('/api/ppt/downloadPptx'), 'Docmee client must request a downloadable PPT file URL');
-assert(client.includes('Public Class DocmeePptInfo'), 'Docmee client must expose generated PPT metadata');
+assert(client.includes('TryExtractMarkdownFromEnvelope(eventPayload, eventMarkdown)'), 'markdown streaming must keep streamed markdown when final result is JSON');
+assert(methodBlock(client, 'Private Async Function CreateTaskAsync(content As String, taskType As String) As Task(Of String)').includes('Await client.PostAsync(CreateTaskEndpoint, form).ConfigureAwait(False)'), 'Docmee text task creation must avoid resuming HTTP work on the Office UI synchronization context');
+assert(methodBlock(client, 'Private Async Function CreateFileTaskAsync(filePath As String, taskType As String) As Task(Of String)').includes('Await client.PostAsync(CreateTaskEndpoint, form).ConfigureAwait(False)'), 'Docmee file upload task creation must avoid resuming HTTP work on the Office UI synchronization context');
+assert(methodBlock(client, 'Public Async Function GenerateContentAsync(taskId As String').includes('Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)'), 'Docmee JSON outline generation must not capture the Office UI synchronization context during SSE connect');
+assert(methodBlock(client, 'Public Async Function GenerateMarkdownContentAsync(taskId As String').includes('Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)'), 'Docmee Markdown outline generation must not capture the Office UI synchronization context during SSE connect');
+assert(methodBlock(client, 'Private Shared Async Function ReadGeneratedMarkdownStreamAsync').includes('Await reader.ReadLineAsync().ConfigureAwait(False)'), 'Docmee Markdown SSE line reading must stay off the Office UI synchronization context');
+assert(methodBlock(client, 'Private Shared Async Function ReadGeneratedOutlineStreamAsync').includes('Await reader.ReadLineAsync().ConfigureAwait(False)'), 'Docmee JSON SSE line reading must stay off the Office UI synchronization context');
+assert(methodBlock(client, 'Public Async Function GeneratePptxAsync(taskId As String').includes('Await client.SendAsync(request).ConfigureAwait(False)'), 'Docmee PPTX generation must avoid resuming HTTP work on the Office UI synchronization context');
+assert(methodBlock(client, 'Public Async Function DownloadPptxAsync(pptId As String').includes('Await client.SendAsync(request).ConfigureAwait(False)'), 'Docmee download URL lookup must avoid resuming HTTP work on the Office UI synchronization context');
+assert(methodBlock(client, 'Public Async Function UpdatePptTemplateAsync(pptId As String').includes('Await client.SendAsync(request).ConfigureAwait(False)'), 'Docmee template replacement must avoid resuming HTTP work on the Office UI synchronization context');
+assert(methodBlock(client, 'Public Async Function DownloadPptxFileAsync(fileUrl As String').includes('Await client.GetByteArrayAsync(fileUrl).ConfigureAwait(False)'), 'Docmee PPTX byte download must avoid resuming HTTP work on the Office UI synchronization context');
+assert(client.includes('Optional cancellationToken As Threading.CancellationToken = Nothing'), 'template and cover calls must accept cancellation tokens');
+assert(client.includes('Await client.SendAsync(request, cancellationToken).ConfigureAwait(False)'), 'template list HTTP calls must not capture the Office UI synchronization context');
+assert(client.includes('DownloadTemplateCoverAsync(coverUrl As String, Optional cancellationToken As Threading.CancellationToken = Nothing)'), 'template cover downloads must accept cancellation');
+assert(client.includes('HttpClientHandler() With {.AllowAutoRedirect = False}'), 'template cover downloads must handle redirects explicitly');
+assert(client.includes('AddDocmeeTokenHeader(request.Headers)'), 'Docmee HTTP requests must send the configured token');
 assert(client.includes('GeneratePptxAsync'), 'Docmee client must expose GeneratePptxAsync');
-assert(client.includes('.TemplateId = TryGetString(pptInfo("templateId"))'), 'GeneratePptxAsync must return the template id that Docmee actually used');
-assert(client.includes('Public Async Function DownloadPptxAsync(pptId As String, Optional refresh As Boolean = False) As Task(Of String)'), 'Docmee client must allow refreshing the PPTX download after template changes');
-assert(client.includes('{"refresh", refresh}'), 'downloadPptx must pass the requested refresh value');
-assert(client.includes('DownloadPptxFileAsync'), 'Docmee client must download the PPTX file');
+assert(client.includes('DownloadPptxAsync(pptId As String, Optional refresh As Boolean = False)'), 'Docmee client must allow refreshing PPTX downloads');
+assert(client.includes('ValidatePptxBytes(bytes)'), 'Docmee PPTX downloads must validate bytes before writing them to disk');
+assert(client.includes('bytes(0) <> &H50') && client.includes('bytes(1) <> &H4B'), 'Docmee PPTX validation must reject non-ZIP/PPTX responses');
+assert(apiSmoke.includes('files = []'), 'Docmee API smoke must support multipart file parts for document-to-PPT verification');
+assert(apiSmoke.includes('filename="${file.filename}"'), 'Docmee API smoke must send uploaded document filenames');
+assert(apiSmoke.includes('verifyTitleOutline'), 'Docmee API smoke must exercise the title-to-editable-outline path');
+assert(apiSmoke.includes("type: '1'"), 'Docmee API smoke must create a type=1 title task');
+assert(apiSmoke.includes("type: '2'"), 'Docmee API smoke must exercise the type=2 uploaded document task path');
+assert(apiSmoke.includes('/api/ppt/v2/generateContent'), 'Docmee API smoke must generate an editable outline from uploaded documents');
+assert(apiSmoke.includes("outlineType: 'MD'"), 'Docmee API smoke must request a Markdown outline from document uploads');
+assert(apiSmoke.includes('titleGeneration'), 'Docmee API smoke output must report title generation verification');
+assert(apiSmoke.includes('documentUpload'), 'Docmee API smoke output must report document upload verification');
 
+assert(templateDialog.includes('Public Class TemplateSelectionForm'), 'template preview dialog must exist');
+assert(templateDialog.includes('WebView2'), 'template preview dialog must render with WebView2');
+assert(templateDialog.includes('window.chrome.webview.postMessage({type:\'select\''), 'template preview dialog must post selected template id');
+
+assert(pane.includes('Imports Markdig'), 'ThemePptTaskPane must use Markdig for markdown-to-HTML rendering');
 assert(pane.includes('Class ThemePptTaskPane'), 'ThemePptTaskPane class must exist');
-assert(pane.includes('CreateTaskAsync'), 'ThemePptTaskPane must create a Docmee task');
-assert(pane.includes('_outlineMarkdown'), 'ThemePptTaskPane must keep the markdown outline returned by Docmee');
-assert(pane.includes('GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)'), 'ThemePptTaskPane must generate markdown outline content');
-assert(pane.includes('AddressOf AppendOutlineStreamText'), 'ThemePptTaskPane must wire streaming outline text into the UI');
-assert(pane.includes('AppendOutlineStreamText'), 'ThemePptTaskPane must append streamed outline text');
-assert(pane.includes('_outputBox.AppendText'), 'ThemePptTaskPane must display outline chunks while they stream');
-assert(pane.includes('BeginInvoke'), 'ThemePptTaskPane must marshal streamed UI updates onto the task pane thread');
-assert(pane.includes('_outputBox.Text = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must show the completed markdown outline, not raw JSON');
-assert(pane.includes('Private ReadOnly _templateCardPanel As New FlowLayoutPanel()'), 'ThemePptTaskPane must provide an OfficePLUS-like template card panel');
-assert(pane.includes('Private Const ThemePptPaneBuild As String = "2026.06.02.7"'), 'ThemePptTaskPane must show a visible build marker so testers can confirm the installed package');
-assert(pane.includes('"版本 " & ThemePptPaneBuild'), 'ThemePptTaskPane hint text must include the visible build marker');
-assert(pane.includes('_templateCardPanel.AutoScroll = True'), 'template card panel must support scrolling through template covers');
-assert(pane.includes('_templateCardPanel.Visible = False'), 'template card panel must be hidden until templates are ready');
-assert(pane.includes('_outputBox.Visible = True'), 'outline output box must be visible while content is streaming');
-assert(pane.includes('_outputBox.Visible = False'), 'outline output box must be hidden after content generation completes');
-assert(pane.includes('_templateCardPanel.Visible = True'), 'template card panel must replace the outline box after content generation completes');
-assert(pane.includes('Private Sub ShowOutlineOutput()'), 'ThemePptTaskPane must centralize showing the streaming outline output');
-assert(pane.includes('Private Sub ShowTemplateGallery()'), 'ThemePptTaskPane must centralize showing the template gallery');
-assert(pane.includes('ShowOutlineOutput()'), 'ThemePptTaskPane must explicitly show outline output during generation');
-assert(pane.includes('ShowTemplateGallery()'), 'ThemePptTaskPane must explicitly switch to template gallery after outline generation');
-assert(pane.includes('_outputBox.AppendText(vbCrLf & text & vbCrLf)'), 'task pane diagnostics must be recorded without forcing the large outline/log box back after gallery mode');
-assert(pane.includes('ShowTemplateGallery()') && pane.includes('AppendTaskPaneLine("已导入页数: " & importedCount.ToString())'), 'generate/import flow must return to gallery mode after import diagnostics');
-assert(pane.includes('If _templateCombo.Items.Count > 0 Then'), 'ThemePptTaskPane must show template cards only when templates were loaded');
-assert(pane.includes('CreateTemplateCard(template)'), 'ThemePptTaskPane must render selectable template cards');
-assert(pane.includes('PictureBoxSizeMode.Zoom'), 'template cards must display template cover images');
-assert(pane.includes('Private ReadOnly _templateCoverBoxes As New Dictionary(Of String, PictureBox)()'), 'template cover image boxes must be tracked for controlled async loading');
-assert(pane.includes('_templateCardPanel.SuspendLayout()'), 'template cards must be added with layout suspended to avoid UI stalls');
-assert(pane.includes('AddHandler card.Resize, Sub() LayoutTemplateCard(card)'), 'template cards must use a deterministic resize layout instead of relying on nested docking');
-assert(pane.includes('Private Sub LayoutTemplateCard(card As Panel)'), 'template card layout must keep cover, name, metadata, and select button visible');
-assert(pane.includes('String.IsNullOrWhiteSpace(template.CoverUrl) Then Continue For'), 'template cover loader must skip empty cover URLs and load non-empty URLs');
-assert(pane.includes('Private Const TemplateCoverToken As String = "ak_demo"'), 'template cover URLs must use the provided ak_demo token');
-assert(pane.includes('BeginLoadTemplateCovers()'), 'template cover loading must start after cards are visible');
-assert(pane.includes('Await Task.Delay(200)'), 'template cover loading must wait briefly so the visible cards render before image network work starts');
-assert(pane.includes('Private Function DownloadTemplateCoverInBackgroundAsync(coverUrl As String) As Task(Of Byte())'), 'template cover downloads must start from a background task');
-assert(pane.includes('Await DownloadTemplateCoverInBackgroundAsync(BuildTemplateCoverUrl(template.CoverUrl))'), 'template cover loading must not start HTTP work directly on the Office UI thread');
-assert(!pane.includes('Await _client.DownloadTemplateCoverAsync(BuildTemplateCoverUrl(template.CoverUrl))'), 'template cover loading must not call the Docmee client directly from the UI async method');
-assert(!pane.includes('Dim image = Await Task.Run'), 'template cover loader must not declare a local variable named image because VB resolves Image case-insensitively');
-assert(pane.includes('System.Drawing.Image.FromStream(stream)'), 'template cover loader must fully qualify System.Drawing.Image to avoid VB name inference errors');
-assert(!pane.includes('cover.LoadAsync()'), 'template cards must not use PictureBox.LoadAsync because it can hang inside Office task panes');
-assert(!pane.includes('cover.ImageLocation'), 'template cards must not assign remote ImageLocation directly');
-assert(!pane.includes('cover.ImageLocation = template.CoverUrl'), 'template cards must not load raw cover URLs because Docmee returns 403 without a token');
-assert(pane.includes('Private ReadOnly _templateSelectLabels As New Dictionary(Of String, Label)()'), 'template cards must keep explicit select labels for visible selected state');
-assert(pane.includes('BuildTemplateMetaText(template)'), 'template cards must show template metadata even when cover URLs cannot be loaded');
-assert(pane.includes('Text = "模板预览"'), 'template cards must show a metadata fallback preview instead of an empty cover area');
-assert(pane.includes('selectLabel.Text = If(isSelected, "已选择", "选择模板")'), 'template card selection must update explicit select button text');
-assert(pane.includes('Color.FromArgb(234, 88, 12)'), 'selected template button must use a strong selected color');
-assert(pane.includes('LayoutTemplateCard(pair.Value)'), 'selection style refresh must re-layout template cards after padding changes');
-assert(pane.includes('SelectTemplate(template)'), 'clicking a template card must select that template');
-assert(pane.includes('RefreshTemplateSelectionStyles()'), 'template card selection must have a visual selected state');
-assert(pane.includes('LoadTemplatesAsync'), 'ThemePptTaskPane must load template choices for the user');
-assert(pane.includes('ComboBox'), 'ThemePptTaskPane must provide a template selector');
-assert(pane.includes('Private _lastTemplateLoadUsedFallback As Boolean'), 'ThemePptTaskPane must remember whether template loading fell back');
-assert(pane.includes('Private _isTemplateLoading As Boolean'), 'ThemePptTaskPane must guard refresh against overlapping template loads');
-assert(pane.includes('If _isTemplateLoading Then Return'), 'refresh must ignore repeated clicks while template loading is already running');
-assert(pane.includes('Await Task.Yield()'), 'refresh must yield once after setting status so PowerPoint repaints before network work starts');
-assert(pane.includes('Private Function LoadTemplatesInBackgroundAsync() As Task(Of List(Of DocmeeTemplateInfo))'), 'template list requests must start from a background task');
-assert(pane.includes('Dim templates = Await LoadTemplatesInBackgroundAsync()'), 'LoadTemplatesAsync must not start template HTTP work directly on the Office UI thread');
-assert(pane.includes('PopulateTemplates(templates)'), 'ThemePptTaskPane must centralize template population so fallback templates render the same way');
-assert(pane.includes('DocmeePptClient.GetFallbackTemplates()'), 'ThemePptTaskPane must fall back to built-in demo templates if live template loading fails');
-assert(pane.includes('模板接口失败，已使用内置模板'), 'ThemePptTaskPane must tell the user when it is using fallback templates');
-assert(pane.includes('If _lastTemplateLoadUsedFallback Then'), 'ThemePptTaskPane must preserve fallback status after switching to the template gallery');
-assert(pane.includes('AppendTemplateLoadFailure(ex)'), 'ThemePptTaskPane must print the real template loading error for debugging');
-assert(pane.includes('Dim markdown = _outlineMarkdown.Trim()'), 'ThemePptTaskPane must send the same markdown outline into generatePptx');
-assert(pane.includes('AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)'), 'ThemePptTaskPane must print the selected template id before generation');
-assert(pane.includes('Dim pptTaskId = Await _client.CreateMarkdownTaskAsync(markdown)'), 'ThemePptTaskPane must create a fresh markdown task for the selected template');
-assert(pane.includes('AppendTaskPaneLine("生成任务ID: " & pptTaskId)'), 'ThemePptTaskPane must print the final PPT generation task id');
-assert(pane.includes('GeneratePptxAsync'), 'ThemePptTaskPane must generate PPT with the selected template');
-assert(pane.includes('Dim pptInfo = Await _client.GeneratePptxAsync(pptTaskId, selectedTemplate.Id, markdown)'), 'ThemePptTaskPane must generate PPT from the fresh markdown task');
-assert(pane.includes('AppendTaskPaneLine("PPT ID: " & pptInfo.Id)'), 'ThemePptTaskPane must print the generated PPT id');
-assert(pane.includes('AppendTaskPaneLine("返回模板ID: " & pptInfo.TemplateId)'), 'ThemePptTaskPane must print the template id returned by Docmee');
-assert(pane.includes('String.Equals(pptInfo.TemplateId, selectedTemplate.Id, StringComparison.Ordinal)'), 'ThemePptTaskPane must verify Docmee used the selected template id');
-assert(pane.includes('DownloadPptxAsync'), 'ThemePptTaskPane must request a PPT download URL');
-assert(pane.includes('DownloadPptxAsync(pptInfo.Id, True)'), 'ThemePptTaskPane must refresh the downloaded PPTX for the generated template');
-assert(pane.includes('AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)'), 'ThemePptTaskPane must print the returned PPTX download URL for manual comparison');
-assert(pane.includes('AppendTaskPaneLine("本地保存路径: " & localPath)'), 'ThemePptTaskPane must print the local downloaded PPTX path for manual comparison');
-assert(pane.includes('DownloadPptxFileAsync'), 'ThemePptTaskPane must download the generated PPT file');
-assert(pane.includes('ImportPptxIntoPresentation'), 'ThemePptTaskPane must import the downloaded PPT into the active presentation');
-assert(pane.includes('Dim importedCount = ImportPptxIntoPresentation(localPath)'), 'ThemePptTaskPane must know how many slides were imported');
-assert(pane.includes('Dim originalSlideIndex = CaptureActiveSlideIndex(target)'), 'ThemePptTaskPane must capture the user active slide before importing generated template slides');
-assert(pane.includes('RestoreActiveSlide(target, originalSlideIndex)'), 'ThemePptTaskPane must restore the original active slide after import so PowerPoint color palettes do not stay on the generated template');
-assert(pane.includes('AppendTaskPaneLine("已导入页数: " & importedCount.ToString())'), 'ThemePptTaskPane must print the imported slide count');
-assert(pane.includes('Throw New InvalidOperationException("PPTX 已下载，但没有成功导入任何幻灯片。")'), 'ThemePptTaskPane must fail loudly if PowerPoint imports zero slides');
-assert(pane.includes('AppendTaskPaneLine("生成并导入失败: " & ex.Message)'), 'ThemePptTaskPane must print import errors in the task pane');
-assert(pane.includes('ImportPptxFileIntoPresentation(target, downloadPath)'), 'ThemePptTaskPane must prefer file-level import for generated PPTX files to avoid blank clipboard pastes');
-assert(pane.includes('target.Slides.InsertFromFile(downloadPath, beforeCount)'), 'ThemePptTaskPane must call PowerPoint Slides.InsertFromFile for the primary import path');
-assert(pane.includes('AppendTaskPaneLine("导入方式: InsertFromFile")'), 'ThemePptTaskPane must print the primary import method for diagnosis');
-assert(pane.includes('AppendTaskPaneLine("InsertFromFile 导入失败，尝试复制粘贴: " & ex.Message)'), 'ThemePptTaskPane must report fallback from file import to copy/paste');
-assert(pane.includes('CopyPptxSlidesIntoPresentation(target, downloadPath)'), 'ThemePptTaskPane must keep copy/paste as a fallback if file import fails');
-assert(pane.includes('Presentations.Open(downloadPath'), 'ThemePptTaskPane fallback must open the generated PPTX before importing slides');
-assert(pane.includes('sourceSlide.Copy()'), 'ThemePptTaskPane fallback must copy full generated slides to preserve template elements');
-assert(pane.includes('TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex))'), 'ThemePptTaskPane fallback must use source-formatting paste for generated slides');
-assert(pane.includes('target.Windows(1).Activate()'), 'ThemePptTaskPane must activate the destination window before source-formatting paste');
-assert(pane.includes('target.Windows(1).View.GotoSlide(target.Slides.Count)'), 'ThemePptTaskPane must move the destination view to the end before source-formatting paste');
-assert(pane.includes('_pptApp.CommandBars.ExecuteMso("PasteSourceFormatting")'), 'ThemePptTaskPane must request PowerPoint keep-source-formatting paste');
-assert(pane.includes('target.Windows(1).View.GotoSlide(slideIndex)'), 'ThemePptTaskPane must navigate back to the original slide after import');
-assert(pane.includes('target.Slides(slideIndex).Select()'), 'ThemePptTaskPane must reselect the original slide after import');
-assert(pane.includes('target.Slides.Paste(target.Slides.Count + 1)'), 'ThemePptTaskPane must keep a normal paste fallback');
-assert(pane.includes('FixInsertedSlideReadability'), 'ThemePptTaskPane must improve readability only on newly inserted slides');
-assert(pane.includes('importedSlides.Add'), 'ThemePptTaskPane must track exactly pasted slides for readability adjustments');
-assert(pane.includes('FixShapeTextReadability'), 'ThemePptTaskPane must adjust low-contrast text on inserted slides');
-assert(pane.includes('GetSlideBackgroundLuminance'), 'ThemePptTaskPane must consider slide background luminance before adjusting text');
-assert(pane.includes('RGB(45, 52, 64)'), 'ThemePptTaskPane must darken faint text on light generated slides');
-assert(pane.includes('InsertOutlineIntoPresentation'), 'ThemePptTaskPane must insert generated outline into PPT');
-assert(pane.includes('children'), 'ThemePptTaskPane must consume outline children');
-assert(pane.includes('pages'), 'ThemePptTaskPane must consume Docmee pages responses');
-assert(pane.includes('overall_theme'), 'ThemePptTaskPane must use Docmee overall_theme as a title candidate');
-assert(pane.includes('ppLayoutTitleOnly'), 'ThemePptTaskPane must create title/content slides');
+assert(pane.includes('Private ReadOnly _outlineEditor As New TextBox()'), 'ThemePptTaskPane must provide a markdown editor');
+assert(pane.includes('Private ReadOnly _outlinePreviewWebView As New WebView2()'), 'ThemePptTaskPane must provide a markdown preview WebView2');
+assert(pane.includes('Private ReadOnly _generationModeCombo As New ComboBox()'), 'ThemePptTaskPane must allow title/document/markdown generation modes');
+assert(pane.includes('GenerationModeTitle As String = "标题生成"'), 'ThemePptTaskPane must support title-to-PPT mode');
+assert(pane.includes('GenerationModeDocument As String = "文档生成"'), 'ThemePptTaskPane must support document-to-PPT mode');
+assert(pane.includes('GenerationModeMarkdown As String = "Markdown大纲"'), 'ThemePptTaskPane must support pasted markdown outline mode');
+assert(pane.includes('Private ReadOnly _documentPathBox As New TextBox()'), 'ThemePptTaskPane must display the selected document path');
+assert(pane.includes('Private ReadOnly _chooseDocumentButton As New Button()'), 'ThemePptTaskPane must let users choose a source document');
+assert(pane.includes('Private ReadOnly _changeThemeButton As New Button()'), 'ThemePptTaskPane must expose a one-click theme replacement action');
+assert(pane.includes('Private ReadOnly _applyLocalThemeButton As New Button()'), 'ThemePptTaskPane must expose a one-click local current-presentation theme action');
+assert(pane.includes('Private ReadOnly _configureDocmeeButton As New Button()'), 'ThemePptTaskPane must expose Docmee configuration in the plugin UI');
+assert(pane.includes('Private _lastGeneratedPptId As String'), 'ThemePptTaskPane must remember the latest Docmee PPT id for theme replacement');
+assert(pane.includes('Private _lastImportedSlideStartIndex As Integer'), 'ThemePptTaskPane must remember where generated slides were imported');
+assert(pane.includes('Private _lastImportedSlideCount As Integer'), 'ThemePptTaskPane must remember how many generated slides were imported');
+assert(pane.includes('Private ReadOnly _outlinePreviewDebounceTimer As New System.Windows.Forms.Timer()'), 'markdown preview debounce timer must explicitly use WinForms Timer to avoid System.Threading.Timer ambiguity');
+assert(pane.includes('Private _markdownPreviewRenderGeneration As Integer'), 'markdown preview must ignore stale background renders');
+assert(pane.includes('Private ReadOnly _finishOutlineEditButton As New Button()'), 'ThemePptTaskPane must provide an explicit finish-edit action');
+assert(pane.includes('Private _isOutlineEditCompleted As Boolean'), 'ThemePptTaskPane must track whether the user finished editing');
+assert(pane.includes('_outlineEditor.ReadOnly = False'), 'markdown editor must be editable by the user');
+assert(pane.includes('AddHandler _outlineEditor.TextChanged, AddressOf OutlineEditor_TextChanged'), 'markdown preview must react to editor changes');
+assert(pane.includes('AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click'), 'finish-edit button must be wired');
+assert(pane.includes('AddHandler _chooseDocumentButton.Click, AddressOf ChooseDocumentButton_Click'), 'document chooser button must be wired');
+assert(pane.includes('AddHandler _changeThemeButton.Click, AddressOf ChangeThemeButton_Click'), 'change-theme button must be wired');
+assert(pane.includes('AddHandler _applyLocalThemeButton.Click, AddressOf ApplyLocalThemeButton_Click'), 'local theme button must be wired');
+assert(pane.includes('AddHandler _configureDocmeeButton.Click, AddressOf ConfigureDocmeeButton_Click'), 'Docmee configuration button must be wired');
+assert(pane.includes('Private Function GetSelectedGenerationMode() As String'), 'ThemePptTaskPane must centralize selected generation mode');
+assert(pane.includes('Select Case mode'), 'ThemePptTaskPane must branch generation by selected source mode');
+assert(pane.includes('Private Async Function GenerateOutlineFromDocumentAsync() As Task(Of String)'), 'ThemePptTaskPane must generate editable markdown from uploaded documents');
+assert(pane.includes('*.ppt;*.pptx'), 'document chooser must expose PPT/PPTX files supported by Docmee');
+assert(pane.includes('*.xls;*.xlsx;*.csv'), 'document chooser must expose spreadsheet files supported by Docmee');
+assert(pane.includes('*.html;*.epub;*.mobi'), 'document chooser must expose HTML and ebook files supported by Docmee');
+assert(pane.includes('*.xmind;*.mm'), 'document chooser must expose mind map files supported by Docmee');
+assert(pane.includes('Private Function PrepareMarkdownOutlineFromInput() As String'), 'ThemePptTaskPane must support pasted markdown outlines');
+assert(pane.includes('GetDocumentPrompt()'), 'document generation must allow an optional user prompt');
+assert(pane.includes('Private Sub UpdateMarkdownPreview()'), 'ThemePptTaskPane must centralize markdown preview rendering');
+assert(pane.includes('Private Sub ScheduleMarkdownPreviewUpdate'), 'ThemePptTaskPane must schedule markdown preview updates instead of rendering on every keystroke');
+assert(pane.includes('Private Function BeginInvokeIfAlive(action As MethodInvoker) As Boolean'), 'ThemePptTaskPane must centralize safe UI marshaling for background callbacks');
+assert(countOccurrences(pane, '.BeginInvoke(') === 1, 'ThemePptTaskPane must route raw BeginInvoke calls through BeginInvokeIfAlive only');
+assert(pane.includes('Private Async Sub OutlinePreviewDebounceTimer_Tick'), 'ThemePptTaskPane must render markdown after a debounce interval');
+assert(pane.includes('Await Task.Run(Function() BuildMarkdownPreviewHtml(markdownSnapshot))'), 'markdown-to-HTML rendering must run off the Office UI thread');
+assert(pane.includes('_markdownPreviewRenderGeneration += 1'), 'scheduling a new markdown preview must invalidate any in-flight render immediately');
+assert(pane.includes('If renderGeneration <> _markdownPreviewRenderGeneration Then Return'), 'stale markdown preview renders must be ignored');
+assert(pane.includes('Markdig.Markdown.ToHtml'), 'ThemePptTaskPane must render markdown using Markdig, not a plain TextBox');
+assert(pane.includes('UseAdvancedExtensions().DisableHtml().Build()'), 'markdown preview must support rich markdown while disabling raw HTML');
+assert(pane.includes('_outlinePreviewWebView.NavigateToString'), 'ThemePptTaskPane must display rendered markdown in WebView2');
+assert(pane.includes('Private Function GetEditedMarkdown() As String'), 'ThemePptTaskPane must read the current edited markdown');
+assert(pane.includes('SetOutlineEditorText(_outlineMarkdown.Trim())'), 'generated markdown must be placed into the editable markdown editor');
+assert(pane.includes('MarkOutlineEditingRequired()'), 'after generation, the user must edit/confirm before template selection');
+const appendOutlineStreamBlock = methodBlock(pane, 'Private Sub AppendOutlineStreamText(chunkText As String)');
+assert(appendOutlineStreamBlock.includes('If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return'), 'streaming outline UI callback must ignore late chunks after the task pane is disposed');
+assert(appendOutlineStreamBlock.includes('If _outputBox.InvokeRequired Then'), 'streaming outline UI callback must marshal background chunks to the UI thread');
+assert(appendOutlineStreamBlock.includes('BeginInvokeIfAlive(CType(Sub() AppendOutlineStreamText(chunkText), MethodInvoker))'), 'streaming outline UI callback must use the safe UI marshaling helper');
+assert(pane.includes('Private Sub MarkOutlineEditingRequired()'), 'ThemePptTaskPane must centralize the editing-required state');
+assert(pane.includes('FinishOutlineEditButton_Click(sender As Object, e As EventArgs)'), 'ThemePptTaskPane must implement finish-edit flow');
+assert(pane.includes('Private Sub ApplyOutlineEditCompletion()'), 'ThemePptTaskPane must centralize completed-edit state changes');
+assert(pane.includes('Private Sub ClearGeneratedPptState()'), 'ThemePptTaskPane must centralize clearing generated PPT state');
+assert(pane.includes('ClearGeneratedPptState()'), 'ThemePptTaskPane must clear stale generated PPT state when the outline changes or generation fails');
+assert(pane.includes('Private Sub ValidateEditedMarkdownForDocmee(markdown As String)'), 'ThemePptTaskPane must validate edited markdown against Docmee outline requirements');
+assert(pane.includes('ValidateEditedMarkdownForDocmee(GetEditedMarkdown())'), 'finish-edit flow must validate the edited markdown before template selection');
+assert(pane.includes('ValidateEditedMarkdownForDocmee(markdown)'), 'PPT generation must revalidate edited markdown before sending it to Docmee');
+assert(pane.includes('headingLevel = 1') && pane.includes('headingLevel = 2'), 'Docmee markdown validation must check required level-1 and level-2 headings');
+assert(pane.includes('If Not _isOutlineEditCompleted Then'), 'template selection and generation must guard against unfinished edits');
+assert(pane.includes('请先完成 Markdown 大纲编辑'), 'unfinished edits must show a clear user-facing message');
+assert(pane.includes('_selectTemplateButton.Enabled = CanChooseTemplate()'), 'template preview must only be enabled when editing is complete and templates exist');
+assert(pane.includes('_insertButton.Enabled = CanGenerateFromTemplate()'), 'generation must only be enabled after editing is complete and a template is selected');
+assert(pane.includes('Dim markdown = GetEditedMarkdown()'), 'PPT generation must use the user-edited markdown');
+assert(!pane.includes('Dim markdown = _outlineMarkdown.Trim()'), 'PPT generation must not use the stale original markdown');
+assert(pane.includes('CreateMarkdownTaskAsync(markdown)'), 'ThemePptTaskPane must create a fresh markdown task from edited markdown');
+assert(pane.includes('GeneratePptxAsync(pptTaskId, selectedTemplate.Id, markdown)'), 'ThemePptTaskPane must generate PPT from edited markdown and selected template');
+assert(pane.includes('_lastGeneratedPptId = pptInfo.Id'), 'ThemePptTaskPane must retain generated PPT id after generation');
+assert(pane.includes('CaptureImportedSlideRange(importedCount)'), 'ThemePptTaskPane must record the imported slide range');
+assertOrder(
+  methodBlock(pane, 'Private Async Function GenerateAndImportPptxAsync() As Task'),
+  'ClearGeneratedPptState()',
+  'Dim pptTaskId = Await _client.CreateMarkdownTaskAsync(markdown)',
+  'starting a fresh template generation must clear stale PPT/theme state before creating the new Docmee markdown task'
+);
+assert(pane.includes('Private Async Function ChangeThemeForLatestPptAsync() As Task'), 'ThemePptTaskPane must implement the change-theme action');
+assert(pane.includes('Await _client.UpdatePptTemplateAsync(_lastGeneratedPptId, selectedTemplate.Id'), 'change-theme action must call Docmee updatePptTemplate');
+assert(pane.includes('ReplaceImportedSlideRange(localPath)'), 'change-theme action must replace the previous imported slide range in Office');
+assert(pane.includes('Uri.EscapeDataString(DocmeePptClient.GetConfiguredToken())'), 'template cover URLs must use the configured Docmee token');
+assert(pane.includes('Private Function ApplyLocalThemeToCurrentPresentation() As Integer'), 'ThemePptTaskPane must implement one-click local theming for the current presentation');
+assert(pane.includes('Private Function ApplyLocalThemeToSlide(slide As PowerPoint.Slide'), 'local theming must apply to each slide');
+assert(pane.includes('wenduoduoAI_LocalThemeAccent'), 'local theming must mark reusable accent shapes to avoid duplicates');
+assert(pane.includes('For slideIndex As Integer = 1 To presentation.Slides.Count'), 'local theming must iterate every slide in the active presentation');
+assert(pane.includes('Private Sub ShowDocmeeSettingsDialog()'), 'ThemePptTaskPane must provide a Docmee settings dialog');
+assert(pane.includes('ShareRibbon.ConfigSettings.SaveDocmeeSettings'), 'Docmee settings dialog must persist user-provided settings');
+assert(pane.includes('DocmeePptClient.GetConfiguredApiBaseUrl()'), 'Docmee settings dialog must show the currently configured API base URL');
+assert(pane.includes('DocmeePptClient.GetConfiguredToken()'), 'Docmee settings dialog must show the currently configured token');
 
 console.log('docmee theme ppt checks passed');

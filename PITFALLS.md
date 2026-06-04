@@ -125,3 +125,81 @@ Lessons learned from errors encountered in this project. Updated automatically b
 **Root Cause:** VB is case-insensitive. A local variable named `image` in `Dim image = Await Task.Run(...)` shadowed the imported `System.Drawing.Image` type used inside the same initializer (`Image.FromStream`, `CType(..., Image)`), so the compiler tried to infer the variable from an expression that referenced itself.
 
 **Solution:** Rename the local variable to `coverImage`, explicitly type it as `System.Drawing.Image`, and fully qualify `System.Drawing.Image.FromStream`/`CType(..., System.Drawing.Image)`. Add a static verification check preventing `Dim image = Await Task.Run` from returning.
+
+**Recurring:** Hit again on 2026-06-03 while adding Markdown preview rendering. A function parameter named `markdown` could shadow the imported `Markdig.Markdown` type because VB is case-insensitive. Use the fully qualified `Markdig.Markdown.ToHtml(...)` call when rendering Markdown, especially inside methods that also accept a `markdown` parameter.
+
+## 2026-06-03 PowerPoint COM Must Stay On The Office UI Thread
+
+**Problem:** While adding the single-slide replacement workflow, it was tempting to wrap the whole operation in `Task.Run` so generation would feel asynchronous.
+
+**Root Cause:** PowerPoint VSTO automation uses Office COM objects that are tied to the Office STA/UI thread. Running slide selection, insertion, deletion, or formatting from a background thread can cause hangs, invalid COM access, or unpredictable UI state.
+
+**Solution:** Keep the Ribbon handler as `Async Sub`, await only the model/network call, and perform all PowerPoint COM operations after the await on the captured Office UI thread. Do not put Office slide manipulation inside `Task.Run`.
+
+## 2026-06-03 Static Verification Must Follow Configurable Integration Changes
+
+**Problem:** After changing the Docmee client from hard-coded demo URL/token constants to configurable endpoint/token helpers, `node scripts/verify-docmee-theme-ppt.js` failed because it still expected the old `Private Shared ReadOnly UpdatePptTemplateEndpoint` field shape.
+
+**Root Cause:** The verification script was asserting implementation details instead of the stable contract: configured base URL, configured token, and the required Docmee paths.
+
+**Solution:** Update the script to verify the behavior-level contract: Docmee settings are exposed through `ConfigSettings` and `app.config`, endpoint properties are built from the configured base URL, requests use the shared token helper, and no request code hard-codes `DemoToken`.
+
+## 2026-06-03 Docmee Editable Document Outlines Should Use Type 2
+
+**Problem:** The task pane's document-to-PPT flow mapped `.doc` and `.docx` uploads to Docmee `type=4`, then called `generateContent` to produce editable Markdown.
+
+**Root Cause:** Docmee `type=4` is for Word precise conversion, and the official V2 docs say the `prompt` parameter is ignored for task types other than 1, 2, 5, and 6. The task pane flow is not direct Word conversion; it needs an uploaded document task that can generate editable Markdown and honor the optional user prompt.
+
+**Solution:** Use Docmee `type=2` for the task pane's document upload flow, including Word files, so `generateContent` can produce editable Markdown and keep prompt behavior consistent.
+
+## 2026-06-03 Docmee Upload Filter Must Match Official Formats
+
+**Problem:** The task pane's document picker only allowed Word, PDF, TXT, and Markdown files, even though Docmee V2 upload-file tasks support more document inputs.
+
+**Root Cause:** The UI filter was hard-coded narrowly and the client did not locally validate file extensions before upload, so users could not pick supported PPT/Excel/HTML/ebook/mind-map inputs from the normal picker and unsupported files would fail later at the API boundary.
+
+**Solution:** Expand the picker to Docmee's supported upload formats (`doc/docx/pdf/ppt/pptx/txt/md/xls/xlsx/csv/html/epub/mobi/xmind/mm`) and add a local unsupported-format error before creating the upload task.
+
+## 2026-06-03 App Config Defaults Can Mask Environment Overrides
+
+**Problem:** Docmee environment variables would not take effect because `PowerPointAi/app.config` contains non-empty demo defaults for the Docmee base URL and token.
+
+**Root Cause:** `ConfigSettings.GetDocmeeApiBaseUrl` and `GetDocmeeToken` checked app settings before environment variables. Since app settings always contained `https://test.docmee.cn` and `ak_demo`, the environment fallback path was unreachable.
+
+**Solution:** Read Docmee settings in this order: runtime value, user-saved plugin settings, environment variables, app.config, then demo defaults. Add static verification that environment variables appear before app settings in the fallback chain.
+
+**Recurring:** Hit again on 2026-06-03 with the Docmee settings dialog. Saving a blank API base URL used `FirstNonEmpty(apiBaseUrl, DefaultDocmeeApiBaseUrl)`, which persisted the demo URL into the user settings file and could again mask environment variables. Save the user's literal trimmed value instead, and only apply defaults during read/fallback.
+
+## 2026-06-03 PPT Fill Mode Must Not Reuse Nonblank Text Filtering
+
+**Problem:** The PowerPoint `填充` text optimization mode could miss an empty direct text selection/cursor target and blank table cells, even though filling blank placeholders is the core expected workflow.
+
+**Root Cause:** The selected-text and table-cell target collectors reused the normal optimization filter `Not String.IsNullOrWhiteSpace(...)`, while only the selected-shape branch respected the `allowBlankTextFrame` flag.
+
+**Solution:** Apply `allowBlankTextFrame OrElse Not String.IsNullOrWhiteSpace(...)` consistently to direct text selections, selected shapes, and selected table cells, and add static regression checks for each collection path.
+
+## 2026-06-03 Docmee Async Continuations Should Stay Off Office UI Context
+
+**Problem:** Docmee generation could still feel sluggish in Office even after moving template loading and cover downloads to background tasks, because long HTTP/SSE continuations could resume on the Office UI synchronization context.
+
+**Root Cause:** Several Docmee client awaits for `createTask`, document upload, `generateContent` SSE reading, `generatePptx`, `downloadPptx`, `updatePptTemplate`, and PPTX byte download did not use `ConfigureAwait(False)`.
+
+**Solution:** Add `ConfigureAwait(False)` to Docmee client network and stream awaits while keeping all PowerPoint COM import/replacement/formatting operations on the plugin UI thread, and add static checks so future Docmee HTTP paths do not regress.
+
+## 2026-06-03 Replacement Slide Must Not Fake AI Output
+
+**Problem:** PowerPoint `替换单页` could appear to work without model configuration because the workflow used the user's requirement text as fallback slide content.
+
+**Root Cause:** `GenerateReplacementSlideTextAsync` returned `requirement.Trim()` when the model API settings were missing or the model returned an empty response, hiding configuration failures and producing a non-generated slide.
+
+**Solution:** Require API URL, API Key, and model name before replacement generation, throw a clear error when the model returns no usable content, and keep regression checks that forbid `Return requirement.Trim()` in the replacement generation path.
+
+## 2026-06-04 Streaming UI Callbacks Must Handle Disposed Task Panes
+
+**Problem:** After moving Docmee stream reading off the Office UI synchronization context, late Markdown outline chunks could still arrive after the PowerPoint task pane had been disposed.
+
+**Root Cause:** `AppendOutlineStreamText` marshaled background stream chunks with `BeginInvoke`, but it did not first check whether the task pane or output box had already been disposed.
+
+**Solution:** Return early when `Me.IsDisposed` or `_outputBox.IsDisposed` is true, and add a static regression check so streaming callbacks keep this guard.
+
+**Recurring:** Hit again on 2026-06-04 with a narrower race: several background callbacks still called raw `BeginInvoke` after an `InvokeRequired` check, so the pane could be disposed between the check and the marshal call. Centralize marshaling in `BeginInvokeIfAlive`, catch disposed/invalid handle exceptions, and dispose transferred images when marshaling fails.

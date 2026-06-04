@@ -121,7 +121,7 @@ Public Class ThisAddIn
 
         If themePptTaskPane Is Nothing Then
             themePptControl = New ThemePptTaskPane(Me.Application)
-            themePptTaskPane = Me.CustomTaskPanes.Add(themePptControl, "主题生成PPT")
+            themePptTaskPane = Me.CustomTaskPanes.Add(themePptControl, "AI生成PPT")
             themePptTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             themePptTaskPane.Width = 420
         End If

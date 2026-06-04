@@ -6,6 +6,7 @@ Imports System.Text
 Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
+Imports Markdig
 Imports Microsoft.Web.WebView2.Core
 Imports Microsoft.Web.WebView2.WinForms
 Imports Microsoft.Office.Core
@@ -16,10 +17,13 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class ThemePptTaskPane
     Inherits UserControl
 
-    Private Const TemplateCoverToken As String = "ak_demo"
-    Private Const ThemePptPaneBuild As String = "2026.06.03.15"
+    Private Const ThemePptPaneBuild As String = "2026.06.03.17"
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
+    Private Const GenerationModeTitle As String = "标题生成"
+    Private Const GenerationModeDocument As String = "文档生成"
+    Private Const GenerationModeMarkdown As String = "Markdown大纲"
+    Private Shared ReadOnly MarkdownPreviewPipeline As MarkdownPipeline = New MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build()
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -31,15 +35,39 @@ Public Class ThemePptTaskPane
     Private _templateLoadCts As CancellationTokenSource
     Private _templateCoverCts As CancellationTokenSource
     Private _templateCoverFailureCount As Integer
+    Private _isOutlineEditCompleted As Boolean
+    Private _templateConfirmedForCurrentOutline As Boolean
+    Private _confirmedTemplateId As String
+    Private _outlinePreviewReady As Boolean
+    Private _outlinePreviewInitializing As Boolean
+    Private _pendingOutlinePreviewRender As Boolean
+    Private _suppressOutlineEditorChange As Boolean
+    Private _markdownPreviewRenderGeneration As Integer
+    Private _selectedDocumentPath As String
+    Private _lastGeneratedPptId As String
+    Private _lastImportedSlideStartIndex As Integer
+    Private _lastImportedSlideCount As Integer
 
+    Private ReadOnly _generationModeCombo As New ComboBox()
     Private ReadOnly _topicBox As New TextBox()
+    Private ReadOnly _documentPanel As New TableLayoutPanel()
+    Private ReadOnly _documentPathBox As New TextBox()
+    Private ReadOnly _chooseDocumentButton As New Button()
     Private ReadOnly _generateButton As New Button()
     Private ReadOnly _insertButton As New Button()
+    Private ReadOnly _finishOutlineEditButton As New Button()
+    Private ReadOnly _changeThemeButton As New Button()
+    Private ReadOnly _applyLocalThemeButton As New Button()
+    Private ReadOnly _configureDocmeeButton As New Button()
     Private ReadOnly _templateCombo As New ComboBox()
     Private ReadOnly _refreshTemplatesButton As New Button()
     Private ReadOnly _selectTemplateButton As New Button()
     Private ReadOnly _outputBox As New TextBox()
     Private ReadOnly _contentPanel As New Panel()
+    Private ReadOnly _outlineWorkspacePanel As New SplitContainer()
+    Private ReadOnly _outlineEditor As New TextBox()
+    Private ReadOnly _outlinePreviewWebView As New WebView2()
+    Private ReadOnly _outlinePreviewDebounceTimer As New System.Windows.Forms.Timer()
     Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
     Private ReadOnly _templateListBox As New ListBox()
     Private ReadOnly _templateWebView As New WebView2()
@@ -63,6 +91,7 @@ Public Class ThemePptTaskPane
         _pptApp = pptApp
         AppendThemePptLog("Pane constructing. Build=" & ThemePptPaneBuild)
         BuildLayout()
+        AddHandler Me.Load, AddressOf ThemePptTaskPane_Load
         AppendThemePptLog("Pane constructed.")
     End Sub
 
@@ -73,9 +102,11 @@ Public Class ThemePptTaskPane
         Dim layout As New TableLayoutPanel()
         layout.Dock = DockStyle.Fill
         layout.ColumnCount = 1
-        layout.RowCount = 8
+        layout.RowCount = 10
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 96.0F))
+        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
@@ -86,8 +117,30 @@ Public Class ThemePptTaskPane
         Dim titleLabel As New Label()
         titleLabel.AutoSize = True
         titleLabel.Font = New Font(Me.Font.FontFamily, 12.0F, FontStyle.Bold)
-        titleLabel.Text = "主题生成PPT"
+        titleLabel.Text = "AI生成PPT"
         titleLabel.Margin = New Padding(0, 0, 0, 8)
+
+        Dim modePanel As New TableLayoutPanel()
+        modePanel.Dock = DockStyle.Fill
+        modePanel.ColumnCount = 2
+        modePanel.RowCount = 1
+        modePanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        modePanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        modePanel.Margin = New Padding(0, 0, 0, 8)
+
+        Dim modeLabel As New Label()
+        modeLabel.AutoSize = True
+        modeLabel.Text = "生成方式"
+        modeLabel.Margin = New Padding(0, 4, 10, 0)
+
+        _generationModeCombo.Dock = DockStyle.Fill
+        _generationModeCombo.DropDownStyle = ComboBoxStyle.DropDownList
+        _generationModeCombo.Items.AddRange(New Object() {GenerationModeTitle, GenerationModeDocument, GenerationModeMarkdown})
+        _generationModeCombo.SelectedIndex = 0
+        AddHandler _generationModeCombo.SelectedIndexChanged, AddressOf GenerationModeCombo_SelectedIndexChanged
+
+        modePanel.Controls.Add(modeLabel, 0, 0)
+        modePanel.Controls.Add(_generationModeCombo, 1, 0)
 
         _topicBox.Dock = DockStyle.Fill
         _topicBox.Multiline = True
@@ -95,11 +148,38 @@ Public Class ThemePptTaskPane
         _topicBox.Text = "AI 办公趋势"
         _topicBox.Margin = New Padding(0, 0, 0, 10)
 
+        _documentPanel.Dock = DockStyle.Fill
+        _documentPanel.ColumnCount = 3
+        _documentPanel.RowCount = 1
+        _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        _documentPanel.Margin = New Padding(0, 0, 0, 10)
+        _documentPanel.Visible = False
+
+        Dim documentLabel As New Label()
+        documentLabel.AutoSize = True
+        documentLabel.Text = "文档"
+        documentLabel.Margin = New Padding(0, 6, 10, 0)
+
+        _documentPathBox.Dock = DockStyle.Fill
+        _documentPathBox.ReadOnly = True
+        _documentPathBox.BorderStyle = BorderStyle.FixedSingle
+
+        _chooseDocumentButton.Text = "选择"
+        _chooseDocumentButton.Width = 66
+        _chooseDocumentButton.Height = 28
+        AddHandler _chooseDocumentButton.Click, AddressOf ChooseDocumentButton_Click
+
+        _documentPanel.Controls.Add(documentLabel, 0, 0)
+        _documentPanel.Controls.Add(_documentPathBox, 1, 0)
+        _documentPanel.Controls.Add(_chooseDocumentButton, 2, 0)
+
         Dim buttonPanel As New FlowLayoutPanel()
         buttonPanel.AutoSize = True
         buttonPanel.Dock = DockStyle.Fill
         buttonPanel.FlowDirection = FlowDirection.LeftToRight
-        buttonPanel.WrapContents = False
+        buttonPanel.WrapContents = True
         buttonPanel.Margin = New Padding(0, 0, 0, 10)
 
         _generateButton.Text = "生成大纲"
@@ -113,8 +193,34 @@ Public Class ThemePptTaskPane
         _insertButton.Enabled = False
         AddHandler _insertButton.Click, AddressOf InsertButton_Click
 
+        _finishOutlineEditButton.Text = "完成编辑"
+        _finishOutlineEditButton.Width = 104
+        _finishOutlineEditButton.Height = 32
+        _finishOutlineEditButton.Enabled = False
+        AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click
+
+        _changeThemeButton.Text = "更换主题"
+        _changeThemeButton.Width = 104
+        _changeThemeButton.Height = 32
+        _changeThemeButton.Enabled = False
+        AddHandler _changeThemeButton.Click, AddressOf ChangeThemeButton_Click
+
+        _applyLocalThemeButton.Text = "当前PPT换主题"
+        _applyLocalThemeButton.Width = 128
+        _applyLocalThemeButton.Height = 32
+        AddHandler _applyLocalThemeButton.Click, AddressOf ApplyLocalThemeButton_Click
+
+        _configureDocmeeButton.Text = "Docmee配置"
+        _configureDocmeeButton.Width = 112
+        _configureDocmeeButton.Height = 32
+        AddHandler _configureDocmeeButton.Click, AddressOf ConfigureDocmeeButton_Click
+
         buttonPanel.Controls.Add(_generateButton)
+        buttonPanel.Controls.Add(_finishOutlineEditButton)
         buttonPanel.Controls.Add(_insertButton)
+        buttonPanel.Controls.Add(_changeThemeButton)
+        buttonPanel.Controls.Add(_applyLocalThemeButton)
+        buttonPanel.Controls.Add(_configureDocmeeButton)
 
         Dim templateLabel As New Label()
         templateLabel.AutoSize = True
@@ -138,6 +244,7 @@ Public Class ThemePptTaskPane
         _refreshTemplatesButton.Text = "刷新"
         _refreshTemplatesButton.Width = 66
         _refreshTemplatesButton.Height = 28
+        _refreshTemplatesButton.Enabled = False
         AddHandler _refreshTemplatesButton.Click, AddressOf RefreshTemplatesButton_Click
 
         _selectTemplateButton.Text = "预览模板"
@@ -152,8 +259,67 @@ Public Class ThemePptTaskPane
 
         _statusLabel.AutoSize = True
         _statusLabel.ForeColor = Color.FromArgb(86, 94, 108)
-        _statusLabel.Text = "输入主题，生成大纲后选择模板，再生成并导入 PPT。"
+        _statusLabel.Text = "选择来源生成 Markdown 大纲，编辑完成后再选择模板生成 PPT。"
         _statusLabel.Margin = New Padding(0, 0, 0, 8)
+
+        _outlineWorkspacePanel.Dock = DockStyle.Fill
+        _outlineWorkspacePanel.Orientation = Orientation.Horizontal
+        _outlineWorkspacePanel.SplitterWidth = 6
+        _outlineWorkspacePanel.Panel1MinSize = 120
+        _outlineWorkspacePanel.Panel2MinSize = 120
+        _outlineWorkspacePanel.Visible = False
+
+        Dim outlineEditorPanel As New TableLayoutPanel()
+        outlineEditorPanel.Dock = DockStyle.Fill
+        outlineEditorPanel.ColumnCount = 1
+        outlineEditorPanel.RowCount = 2
+        outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        Dim outlineEditorLabel As New Label()
+        outlineEditorLabel.AutoSize = True
+        outlineEditorLabel.Text = "Markdown 源码"
+        outlineEditorLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
+        outlineEditorLabel.Margin = New Padding(0, 0, 0, 4)
+
+        _outlineEditor.Dock = DockStyle.Fill
+        _outlineEditor.Multiline = True
+        _outlineEditor.ReadOnly = False
+        _outlineEditor.ScrollBars = ScrollBars.Both
+        _outlineEditor.WordWrap = False
+        _outlineEditor.AcceptsTab = True
+        _outlineEditor.Font = New Font("Consolas", 9.0F, FontStyle.Regular)
+        _outlineEditor.BorderStyle = BorderStyle.FixedSingle
+        _outlineEditor.BackColor = Color.White
+        AddHandler _outlineEditor.TextChanged, AddressOf OutlineEditor_TextChanged
+
+        outlineEditorPanel.Controls.Add(outlineEditorLabel, 0, 0)
+        outlineEditorPanel.Controls.Add(_outlineEditor, 0, 1)
+
+        Dim outlinePreviewPanel As New TableLayoutPanel()
+        outlinePreviewPanel.Dock = DockStyle.Fill
+        outlinePreviewPanel.ColumnCount = 1
+        outlinePreviewPanel.RowCount = 2
+        outlinePreviewPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        outlinePreviewPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+
+        Dim outlinePreviewLabel As New Label()
+        outlinePreviewLabel.AutoSize = True
+        outlinePreviewLabel.Text = "Markdown 预览"
+        outlinePreviewLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
+        outlinePreviewLabel.Margin = New Padding(0, 8, 0, 4)
+
+        _outlinePreviewWebView.Dock = DockStyle.Fill
+        _outlinePreviewWebView.DefaultBackgroundColor = Color.White
+
+        _outlinePreviewDebounceTimer.Interval = 350
+        AddHandler _outlinePreviewDebounceTimer.Tick, AddressOf OutlinePreviewDebounceTimer_Tick
+
+        outlinePreviewPanel.Controls.Add(outlinePreviewLabel, 0, 0)
+        outlinePreviewPanel.Controls.Add(_outlinePreviewWebView, 0, 1)
+
+        _outlineWorkspacePanel.Panel1.Controls.Add(outlineEditorPanel)
+        _outlineWorkspacePanel.Panel2.Controls.Add(outlinePreviewPanel)
 
         _outputBox.Dock = DockStyle.Fill
         _outputBox.Multiline = True
@@ -196,6 +362,7 @@ Public Class ThemePptTaskPane
 
         _contentPanel.Controls.Add(_templateListBox)
         _contentPanel.Controls.Add(_templateCardPanel)
+        _contentPanel.Controls.Add(_outlineWorkspacePanel)
         _contentPanel.Controls.Add(_outputBox)
 
         Dim hintLabel As New Label()
@@ -203,24 +370,115 @@ Public Class ThemePptTaskPane
         hintLabel.Dock = DockStyle.Fill
         hintLabel.Height = 42
         hintLabel.ForeColor = Color.FromArgb(86, 94, 108)
-        hintLabel.Text = "版本 " & ThemePptPaneBuild & " | 演示版使用 test.docmee.cn 和 ak_demo，生成的 PPTX 会下载到临时目录并导入当前演示文稿。"
+        hintLabel.Text = "版本 " & ThemePptPaneBuild & " | Docmee 地址和 token 可配置，未配置时使用测试默认值，生成的 PPTX 会下载到临时目录并导入当前演示文稿。"
 
         layout.Controls.Add(titleLabel, 0, 0)
-        layout.Controls.Add(_topicBox, 0, 1)
-        layout.Controls.Add(buttonPanel, 0, 2)
-        layout.Controls.Add(templateLabel, 0, 3)
-        layout.Controls.Add(templatePanel, 0, 4)
-        layout.Controls.Add(_statusLabel, 0, 5)
-        layout.Controls.Add(_contentPanel, 0, 6)
-        layout.Controls.Add(hintLabel, 0, 7)
+        layout.Controls.Add(modePanel, 0, 1)
+        layout.Controls.Add(_topicBox, 0, 2)
+        layout.Controls.Add(_documentPanel, 0, 3)
+        layout.Controls.Add(buttonPanel, 0, 4)
+        layout.Controls.Add(templateLabel, 0, 5)
+        layout.Controls.Add(templatePanel, 0, 6)
+        layout.Controls.Add(_statusLabel, 0, 7)
+        layout.Controls.Add(_contentPanel, 0, 8)
+        layout.Controls.Add(hintLabel, 0, 9)
 
         Me.Controls.Add(layout)
+        UpdateGenerationModeUi()
     End Sub
 
     Private Async Sub ThemePptTaskPane_Load(sender As Object, e As EventArgs)
         AppendThemePptLog("Pane load: WebView2 lazy initialization requested.")
-        Await InitializeTemplateWebViewAsync()
+        Await InitializeOutlinePreviewWebViewAsync()
     End Sub
+
+    Private Sub GenerationModeCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
+        UpdateGenerationModeUi()
+    End Sub
+
+    Private Sub UpdateGenerationModeUi()
+        Dim mode = GetSelectedGenerationMode()
+        _documentPanel.Visible = String.Equals(mode, GenerationModeDocument, StringComparison.Ordinal)
+
+        Select Case mode
+            Case GenerationModeDocument
+                If String.Equals(_topicBox.Text.Trim(), "AI 办公趋势", StringComparison.Ordinal) Then
+                    _topicBox.Text = "可选：补充文档生成要求，例如突出汇报重点。"
+                End If
+                SetStatus("选择 Word 或其他文档，生成 Markdown 大纲后可编辑并选择模板。")
+            Case GenerationModeMarkdown
+                If String.Equals(_topicBox.Text.Trim(), "AI 办公趋势", StringComparison.Ordinal) OrElse
+                   _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
+                    _topicBox.Text = "# 演示主题" & vbCrLf & vbCrLf & "## 章节一" & vbCrLf & "### 页面标题" & vbCrLf & "- 要点内容"
+                End If
+                SetStatus("粘贴 Markdown 大纲，确认后再选择模板生成 PPT。")
+            Case Else
+                If _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
+                    _topicBox.Text = "AI 办公趋势"
+                End If
+                SetStatus("输入主题生成 Markdown 大纲，编辑完成后再选择模板生成 PPT。")
+        End Select
+    End Sub
+
+    Private Function GetSelectedGenerationMode() As String
+        Dim selectedMode = TryCast(_generationModeCombo.SelectedItem, String)
+        If String.IsNullOrWhiteSpace(selectedMode) Then Return GenerationModeTitle
+        Return selectedMode
+    End Function
+
+    Private Sub ChooseDocumentButton_Click(sender As Object, e As EventArgs)
+        Using dialog As New OpenFileDialog()
+            dialog.Title = "选择用于生成 PPT 的文档"
+            dialog.Filter = "Docmee 支持的文档|*.doc;*.docx;*.pdf;*.ppt;*.pptx;*.txt;*.md;*.xls;*.xlsx;*.csv;*.html;*.epub;*.mobi;*.xmind;*.mm|所有文件|*.*"
+            dialog.Multiselect = False
+
+            If dialog.ShowDialog(Me.FindForm()) <> DialogResult.OK Then Return
+
+            _selectedDocumentPath = dialog.FileName
+            _documentPathBox.Text = _selectedDocumentPath
+            SetStatus("已选择文档：" & Path.GetFileName(_selectedDocumentPath))
+        End Using
+    End Sub
+
+    Private Function GetSelectedDocumentPath() As String
+        If Not String.IsNullOrWhiteSpace(_selectedDocumentPath) Then Return _selectedDocumentPath.Trim()
+        Return If(_documentPathBox.Text, "").Trim()
+    End Function
+
+    Private Async Function InitializeOutlinePreviewWebViewAsync() As Task
+        If _outlinePreviewReady OrElse _outlinePreviewInitializing Then Return
+
+        _outlinePreviewInitializing = True
+        Try
+            AppendThemePptLog("Outline preview WebView2 initialize start.")
+            WebView2Loader.EnsureWebView2Loader()
+            Dim userDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OfficeAiThemePptMarkdownPreviewWebView2")
+            Dim env = Await CoreWebView2Environment.CreateAsync(Nothing, userDataFolder)
+            Await _outlinePreviewWebView.EnsureCoreWebView2Async(env)
+
+            If _outlinePreviewWebView.CoreWebView2 Is Nothing Then
+                AppendThemePptLog("Outline preview WebView2 initialize failed: CoreWebView2 is null.")
+                Return
+            End If
+
+            _outlinePreviewWebView.CoreWebView2.Settings.IsScriptEnabled = False
+            _outlinePreviewWebView.CoreWebView2.Settings.IsWebMessageEnabled = False
+            _outlinePreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = True
+            _outlinePreviewReady = True
+            AppendThemePptLog("Outline preview WebView2 initialize success.")
+
+            If _pendingOutlinePreviewRender Then
+                ScheduleMarkdownPreviewUpdate(True)
+            Else
+                _outlinePreviewWebView.NavigateToString(BuildMarkdownPreviewHtml(""))
+            End If
+        Catch ex As Exception
+            AppendThemePptLog("Outline preview WebView2 initialize exception: " & ex.ToString())
+            SetStatus("Markdown 预览初始化失败：" & ex.Message)
+        Finally
+            _outlinePreviewInitializing = False
+        End Try
+    End Function
 
     Private Async Function InitializeTemplateWebViewAsync() As Task
         If _templateWebViewReady OrElse _templateWebViewInitializing Then Return
@@ -260,6 +518,7 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub ShowOutlineOutput()
+        _outlineWorkspacePanel.Visible = False
         _templateCardPanel.Visible = False
         _templateListBox.Visible = False
         _templateWebView.Visible = False
@@ -268,15 +527,23 @@ Public Class ThemePptTaskPane
         _outputBox.BringToFront()
     End Sub
 
-    Private Sub ShowTemplateGallery()
-        If _templateCombo.Items.Count = 0 Then Return
-
+    Private Sub ShowOutlineEditor()
         _templateCardPanel.Visible = False
         _templateListBox.Visible = False
         _templateWebView.Visible = False
         _templatePaintGallery.Visible = False
-        _outputBox.Visible = True
-        _outputBox.BringToFront()
+        _outputBox.Visible = False
+        _outlineWorkspacePanel.Visible = True
+        _outlineWorkspacePanel.BringToFront()
+    End Sub
+
+    Private Sub ShowTemplateGallery()
+        If _templateCombo.Items.Count = 0 Then
+            ShowOutlineEditor()
+            Return
+        End If
+
+        ShowOutlineEditor()
         AppendThemePptLog("ShowTemplateGallery skipped in task pane; use WebView2 dialog. count=" &
                           _templateCombo.Items.Count.ToString() & ", selected=" & GetSelectedTemplateId())
     End Sub
@@ -448,6 +715,9 @@ Public Class ThemePptTaskPane
 
             If result = DialogResult.OK AndAlso dialog.SelectedTemplate IsNot Nothing Then
                 SelectTemplate(dialog.SelectedTemplate)
+                _templateConfirmedForCurrentOutline = True
+                _confirmedTemplateId = dialog.SelectedTemplate.Id
+                RefreshActionButtons()
                 Dim displayName = If(String.IsNullOrWhiteSpace(dialog.SelectedTemplate.Name),
                                      dialog.SelectedTemplate.Id,
                                      dialog.SelectedTemplate.Name)
@@ -455,6 +725,209 @@ Public Class ThemePptTaskPane
             End If
         End Using
     End Sub
+
+    Private Function CanChooseTemplate() As Boolean
+        Return _isOutlineEditCompleted AndAlso
+               Not _isTemplateLoading AndAlso
+               _templateCombo.Items.Count > 0 AndAlso
+               Not String.IsNullOrWhiteSpace(GetEditedMarkdown())
+    End Function
+
+    Private Function CanGenerateFromTemplate() As Boolean
+        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
+        Return CanChooseTemplate() AndAlso
+               _templateConfirmedForCurrentOutline AndAlso
+               selectedTemplate IsNot Nothing AndAlso
+               Not String.IsNullOrWhiteSpace(selectedTemplate.Id) AndAlso
+               String.Equals(selectedTemplate.Id, _confirmedTemplateId, StringComparison.Ordinal)
+    End Function
+
+    Private Function CanChangeTheme() As Boolean
+        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
+        Return Not _isTemplateLoading AndAlso
+               Not String.IsNullOrWhiteSpace(_lastGeneratedPptId) AndAlso
+               _templateConfirmedForCurrentOutline AndAlso
+               selectedTemplate IsNot Nothing AndAlso
+               Not String.IsNullOrWhiteSpace(selectedTemplate.Id) AndAlso
+               String.Equals(selectedTemplate.Id, _confirmedTemplateId, StringComparison.Ordinal)
+    End Function
+
+    Private Sub RefreshActionButtons()
+        _finishOutlineEditButton.Enabled = Not String.IsNullOrWhiteSpace(GetEditedMarkdown()) AndAlso Not _isOutlineEditCompleted
+        _refreshTemplatesButton.Enabled = _isOutlineEditCompleted AndAlso Not _isTemplateLoading
+        _selectTemplateButton.Enabled = CanChooseTemplate()
+        _insertButton.Enabled = CanGenerateFromTemplate()
+        _changeThemeButton.Enabled = CanChangeTheme()
+    End Sub
+
+    Private Function GetEditedMarkdown() As String
+        Return If(_outlineEditor.Text, "").Trim()
+    End Function
+
+    Private Sub SetOutlineEditorText(markdown As String)
+        _suppressOutlineEditorChange = True
+        Try
+        _outlineEditor.Text = If(markdown, "")
+            _outlineEditor.SelectionStart = 0
+            _outlineEditor.ScrollToCaret()
+        Finally
+            _suppressOutlineEditorChange = False
+        End Try
+
+        ScheduleMarkdownPreviewUpdate(True)
+    End Sub
+
+    Private Sub MarkOutlineEditingRequired()
+        _isOutlineEditCompleted = False
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        RefreshActionButtons()
+    End Sub
+
+    Private Sub ClearGeneratedPptState()
+        _lastGeneratedPptId = ""
+        _lastImportedSlideStartIndex = 0
+        _lastImportedSlideCount = 0
+    End Sub
+
+    Private Sub ApplyOutlineEditCompletion()
+        _outlineMarkdown = GetEditedMarkdown()
+        _isOutlineEditCompleted = True
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        RefreshActionButtons()
+    End Sub
+
+    Private Async Sub FinishOutlineEditButton_Click(sender As Object, e As EventArgs)
+        If String.IsNullOrWhiteSpace(GetEditedMarkdown()) Then
+            MessageBox.Show("请先填写 Markdown 大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Try
+            ValidateEditedMarkdownForDocmee(GetEditedMarkdown())
+        Catch ex As Exception
+            MessageBox.Show(ex.Message, "Markdown 大纲", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End Try
+
+        ApplyOutlineEditCompletion()
+        SetStatus("Markdown 大纲编辑完成，正在加载模板...")
+
+        If _templateCombo.Items.Count = 0 Then
+            Await LoadTemplatesAsync()
+        Else
+            RefreshActionButtons()
+        End If
+
+        If _templateCombo.Items.Count > 0 AndAlso _lastTemplateLoadUsedFallback Then
+            SetStatus($"Markdown 大纲编辑完成，模板接口失败，已使用内置模板 {_templateCombo.Items.Count} 个，请预览并选择模板后生成。")
+        ElseIf _templateCombo.Items.Count > 0 Then
+            SetStatus("Markdown 大纲编辑完成，请预览并选择模板后生成。")
+        End If
+    End Sub
+
+    Private Sub OutlineEditor_TextChanged(sender As Object, e As EventArgs)
+        ScheduleMarkdownPreviewUpdate()
+
+        If _suppressOutlineEditorChange Then Return
+
+        Dim hadCompletedEdit = _isOutlineEditCompleted OrElse _templateConfirmedForCurrentOutline
+        _isOutlineEditCompleted = False
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        ClearGeneratedPptState()
+        RefreshActionButtons()
+
+        If hadCompletedEdit Then
+            SetStatus("Markdown 大纲已修改，请先完成编辑，再选择模板生成。")
+        End If
+    End Sub
+
+    Private Sub UpdateMarkdownPreview()
+        ScheduleMarkdownPreviewUpdate(True)
+    End Sub
+
+    Private Sub ScheduleMarkdownPreviewUpdate(Optional immediate As Boolean = False)
+        If _outlinePreviewWebView.InvokeRequired Then
+            BeginInvokeIfAlive(CType(Sub() ScheduleMarkdownPreviewUpdate(immediate), MethodInvoker))
+            Return
+        End If
+
+        _pendingOutlinePreviewRender = True
+        _markdownPreviewRenderGeneration += 1
+        _outlinePreviewDebounceTimer.Stop()
+
+        If immediate Then
+            OutlinePreviewDebounceTimer_Tick(_outlinePreviewDebounceTimer, EventArgs.Empty)
+        Else
+            _outlinePreviewDebounceTimer.Start()
+        End If
+    End Sub
+
+    Private Function BeginInvokeIfAlive(action As MethodInvoker) As Boolean
+        If action Is Nothing OrElse Me.IsDisposed OrElse Not Me.IsHandleCreated Then Return False
+
+        Try
+            Me.BeginInvoke(action)
+            Return True
+        Catch ex As ObjectDisposedException
+            Return False
+        Catch ex As InvalidOperationException
+            Return False
+        End Try
+    End Function
+
+    Private Async Sub OutlinePreviewDebounceTimer_Tick(sender As Object, e As EventArgs)
+        _outlinePreviewDebounceTimer.Stop()
+
+        If Not _outlinePreviewReady OrElse _outlinePreviewWebView.CoreWebView2 Is Nothing Then
+            _pendingOutlinePreviewRender = True
+            Return
+        End If
+
+        _pendingOutlinePreviewRender = False
+        Dim renderGeneration = _markdownPreviewRenderGeneration
+        Dim markdownSnapshot = GetEditedMarkdown()
+        Dim previewHtml = Await Task.Run(Function() BuildMarkdownPreviewHtml(markdownSnapshot))
+
+        If renderGeneration <> _markdownPreviewRenderGeneration Then Return
+        If _outlinePreviewWebView.IsDisposed OrElse _outlinePreviewWebView.CoreWebView2 Is Nothing Then Return
+
+        _outlinePreviewWebView.NavigateToString(previewHtml)
+    End Sub
+
+    Private Function BuildMarkdownPreviewHtml(markdown As String) As String
+        Dim safeMarkdown = If(markdown, "")
+        Dim renderedMarkdown As String
+
+        Try
+            renderedMarkdown = Markdig.Markdown.ToHtml(safeMarkdown, MarkdownPreviewPipeline)
+        Catch ex As Exception
+            renderedMarkdown = "<pre class=""error"">Markdown 渲染失败：" & EscapeHtml(ex.Message) & "</pre>"
+        End Try
+
+        If String.IsNullOrWhiteSpace(renderedMarkdown) Then
+            renderedMarkdown = "<p class=""empty"">暂无 Markdown 大纲</p>"
+        End If
+
+        Dim builder As New StringBuilder()
+        builder.AppendLine("<!doctype html>")
+        builder.AppendLine("<html lang=""zh-CN""><head><meta charset=""utf-8"">")
+        builder.AppendLine("<meta name=""viewport"" content=""width=device-width,initial-scale=1"">")
+        builder.AppendLine("<style>")
+        builder.AppendLine("html,body{margin:0;padding:0;background:#fff;color:#1f2937;font-family:'Microsoft YaHei UI','Segoe UI',Arial,sans-serif;font-size:13px;line-height:1.62;}")
+        builder.AppendLine(".markdown-body{box-sizing:border-box;padding:12px 14px 18px;word-break:break-word;}")
+        builder.AppendLine("h1{font-size:22px;line-height:1.25;margin:0 0 12px;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:8px;}")
+        builder.AppendLine("h2{font-size:17px;line-height:1.35;margin:18px 0 8px;color:#1f2937;}h3{font-size:15px;margin:14px 0 6px;color:#374151;}")
+        builder.AppendLine("p{margin:8px 0;}ul,ol{padding-left:22px;margin:8px 0;}li{margin:4px 0;}blockquote{margin:10px 0;padding:8px 12px;border-left:4px solid #f97316;background:#fff7ed;color:#4b5563;}")
+        builder.AppendLine("code{font-family:Consolas,'Courier New',monospace;background:#f3f4f6;border-radius:4px;padding:1px 4px;}pre{background:#111827;color:#f9fafb;border-radius:6px;padding:10px;overflow:auto;}pre code{background:transparent;color:inherit;padding:0;}")
+        builder.AppendLine("table{border-collapse:collapse;width:100%;margin:10px 0;}th,td{border:1px solid #d1d5db;padding:6px 8px;text-align:left;}th{background:#f3f4f6;}a{color:#2563eb}.empty{color:#6b7280}.error{background:#fef2f2;color:#991b1b;white-space:pre-wrap;}")
+        builder.AppendLine("</style></head><body><main class=""markdown-body"">")
+        builder.AppendLine(renderedMarkdown)
+        builder.AppendLine("</main></body></html>")
+        Return builder.ToString()
+    End Function
 
     Private Shared Function TryGetString(token As JToken) As String
         If token Is Nothing OrElse token.Type = JTokenType.Null Then Return ""
@@ -543,11 +1016,21 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Async Sub RefreshTemplatesButton_Click(sender As Object, e As EventArgs)
+        If Not _isOutlineEditCompleted Then
+            MessageBox.Show("请先完成 Markdown 大纲编辑。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
         Await LoadTemplatesAsync()
     End Sub
 
     Private Async Sub SelectTemplateButton_Click(sender As Object, e As EventArgs)
         If _isTemplateLoading Then Return
+
+        If Not _isOutlineEditCompleted Then
+            MessageBox.Show("请先完成 Markdown 大纲编辑。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
 
         If _templateCombo.Items.Count = 0 Then
             Await LoadTemplatesAsync()
@@ -557,57 +1040,259 @@ Public Class ThemePptTaskPane
         ShowTemplateSelectionDialog()
     End Sub
 
+    Private Async Sub ChangeThemeButton_Click(sender As Object, e As EventArgs)
+        Await ChangeThemeForLatestPptAsync()
+    End Sub
+
+    Private Sub ApplyLocalThemeButton_Click(sender As Object, e As EventArgs)
+        Try
+            Dim changedCount = ApplyLocalThemeToCurrentPresentation()
+            SetStatus($"已为当前演示文稿应用本地主题，共处理 {changedCount} 页。")
+            MessageBox.Show($"当前 PPT 已更换主题，共处理 {changedCount} 页。", "当前PPT换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        Catch ex As Exception
+            SetStatus("当前 PPT 换主题失败。")
+            MessageBox.Show("当前 PPT 换主题失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Sub ConfigureDocmeeButton_Click(sender As Object, e As EventArgs)
+        ShowDocmeeSettingsDialog()
+    End Sub
+
+    Private Sub ShowDocmeeSettingsDialog()
+        Using dialog As New Form()
+            dialog.Text = "Docmee配置"
+            dialog.StartPosition = FormStartPosition.CenterParent
+            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
+            dialog.MaximizeBox = False
+            dialog.MinimizeBox = False
+            dialog.ClientSize = New Size(460, 182)
+
+            Dim layout As New TableLayoutPanel()
+            layout.Dock = DockStyle.Fill
+            layout.Padding = New Padding(14)
+            layout.ColumnCount = 2
+            layout.RowCount = 4
+            layout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 86.0F))
+            layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34.0F))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 34.0F))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 38.0F))
+
+            Dim baseUrlLabel As New Label() With {
+                .Text = "接口地址",
+                .AutoSize = True,
+                .Margin = New Padding(0, 7, 8, 0)
+            }
+            Dim baseUrlBox As New TextBox() With {
+                .Dock = DockStyle.Fill,
+                .Text = DocmeePptClient.GetConfiguredApiBaseUrl()
+            }
+
+            Dim tokenLabel As New Label() With {
+                .Text = "Token",
+                .AutoSize = True,
+                .Margin = New Padding(0, 7, 8, 0)
+            }
+            Dim tokenBox As New TextBox() With {
+                .Dock = DockStyle.Fill,
+                .Text = DocmeePptClient.GetConfiguredToken(),
+                .UseSystemPasswordChar = True
+            }
+
+            Dim hintLabel As New Label() With {
+                .Dock = DockStyle.Fill,
+                .ForeColor = Color.FromArgb(86, 94, 108),
+                .Text = "正式环境请填写 Docmee 开放平台地址和 token；留空会继续使用配置文件、环境变量或测试默认值。"
+            }
+
+            Dim actionPanel As New FlowLayoutPanel() With {
+                .Dock = DockStyle.Fill,
+                .FlowDirection = FlowDirection.RightToLeft
+            }
+            Dim okButton As New Button() With {
+                .Text = "保存",
+                .Width = 78,
+                .Height = 28,
+                .DialogResult = DialogResult.OK
+            }
+            Dim cancelButton As New Button() With {
+                .Text = "取消",
+                .Width = 78,
+                .Height = 28,
+                .DialogResult = DialogResult.Cancel
+            }
+            actionPanel.Controls.Add(okButton)
+            actionPanel.Controls.Add(cancelButton)
+
+            layout.Controls.Add(baseUrlLabel, 0, 0)
+            layout.Controls.Add(baseUrlBox, 1, 0)
+            layout.Controls.Add(tokenLabel, 0, 1)
+            layout.Controls.Add(tokenBox, 1, 1)
+            layout.Controls.Add(hintLabel, 0, 2)
+            layout.SetColumnSpan(hintLabel, 2)
+            layout.Controls.Add(actionPanel, 0, 3)
+            layout.SetColumnSpan(actionPanel, 2)
+
+            dialog.Controls.Add(layout)
+            dialog.AcceptButton = okButton
+            dialog.CancelButton = cancelButton
+
+            If dialog.ShowDialog(Me) <> DialogResult.OK Then Return
+
+            Dim apiBaseUrl = baseUrlBox.Text.Trim()
+            If Not String.IsNullOrWhiteSpace(apiBaseUrl) AndAlso
+               Not apiBaseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) AndAlso
+               Not apiBaseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) Then
+                MessageBox.Show("Docmee 接口地址需要以 http:// 或 https:// 开头。", "Docmee配置", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            ShareRibbon.ConfigSettings.SaveDocmeeSettings(apiBaseUrl, tokenBox.Text)
+            _templateConfirmedForCurrentOutline = False
+            _confirmedTemplateId = ""
+            _templateCombo.Items.Clear()
+            _templateCombo.Enabled = False
+            _selectTemplateButton.Enabled = False
+            CancelTemplateCoverLoad()
+            ClearTemplateCoverImages()
+            SetStatus("Docmee 配置已保存，请刷新模板或重新生成大纲。")
+            RefreshActionButtons()
+        End Using
+    End Sub
+
     Private Async Function GenerateOutlineAsync() As Task
-        Dim topic = _topicBox.Text.Trim()
-        If String.IsNullOrWhiteSpace(topic) Then
-            MessageBox.Show("请输入 PPT 主题。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
+        Dim mode = GetSelectedGenerationMode()
 
         _generateButton.Enabled = False
         _insertButton.Enabled = False
+        _finishOutlineEditButton.Enabled = False
+        _changeThemeButton.Enabled = False
         ShowOutlineOutput()
         _outputBox.Clear()
         _outline = Nothing
         _outlineMarkdown = ""
+        SetOutlineEditorText("")
+        _isOutlineEditCompleted = False
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        ClearGeneratedPptState()
+        RefreshActionButtons()
 
         Try
-            Dim requestContent = BuildRequestContent(topic)
-            SetStatus("正在创建 Docmee 任务...")
-            _taskId = Await _client.CreateTaskAsync(requestContent)
+            Select Case mode
+                Case GenerationModeDocument
+                    _outlineMarkdown = Await GenerateOutlineFromDocumentAsync()
+                Case GenerationModeMarkdown
+                    _outlineMarkdown = PrepareMarkdownOutlineFromInput()
+                    _taskId = ""
+                Case Else
+                    Dim topic = _topicBox.Text.Trim()
+                    If String.IsNullOrWhiteSpace(topic) Then
+                        MessageBox.Show("请输入 PPT 主题。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                        Return
+                    End If
 
-            SetStatus("正在生成 PPT 大纲...")
-            _outputBox.Clear()
-            _outlineMarkdown = Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)
+                    Dim requestContent = BuildRequestContent(topic)
+                    SetStatus("正在创建 Docmee 主题任务...")
+                    _taskId = Await _client.CreateTaskAsync(requestContent)
 
-            _outputBox.Text = _outlineMarkdown.Trim()
-            Await LoadTemplatesAsync()
-            If _templateCombo.Items.Count > 0 Then
-                ShowTemplateGallery()
-                _insertButton.Enabled = True
-                If _lastTemplateLoadUsedFallback Then
-                    SetStatus($"大纲已生成，模板接口失败，已使用内置模板 {_templateCombo.Items.Count} 个。")
-                Else
-                    SetStatus("大纲已生成，请选择模板后生成并导入。")
-                End If
-            Else
-                ShowOutlineOutput()
-                _insertButton.Enabled = False
-            End If
+                    SetStatus("正在生成 PPT Markdown 大纲...")
+                    _outputBox.Clear()
+                    _outlineMarkdown = Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)
+            End Select
+
+            SetOutlineEditorText(_outlineMarkdown.Trim())
+            MarkOutlineEditingRequired()
+            ShowOutlineEditor()
+            SetStatus("大纲已生成，请编辑 Markdown，完成编辑后再选择模板生成。")
         Catch ex As Exception
             SetStatus("生成失败。")
             ShowOutlineOutput()
             MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             _generateButton.Enabled = True
+            RefreshActionButtons()
         End Try
     End Function
 
+    Private Async Function GenerateOutlineFromDocumentAsync() As Task(Of String)
+        Dim documentPath = GetSelectedDocumentPath()
+        If String.IsNullOrWhiteSpace(documentPath) Then
+            Throw New InvalidOperationException("请先选择要生成 PPT 的文档。")
+        End If
+        If Not File.Exists(documentPath) Then
+            Throw New FileNotFoundException("未找到要生成 PPT 的文档。", documentPath)
+        End If
+
+        SetStatus("正在上传文档创建 Docmee 任务...")
+        AppendTaskPaneLine("文档路径: " & documentPath)
+        _taskId = Await _client.CreateFileTaskAsync(documentPath)
+
+        SetStatus("正在根据文档生成 PPT Markdown 大纲...")
+        _outputBox.Clear()
+        Return Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText, GetDocumentPrompt())
+    End Function
+
+    Private Function GetDocumentPrompt() As String
+        Dim text = _topicBox.Text.Trim()
+        If text.StartsWith("可选：", StringComparison.Ordinal) Then Return ""
+        Return text
+    End Function
+
+    Private Function PrepareMarkdownOutlineFromInput() As String
+        Dim markdown = _topicBox.Text.Trim()
+        If String.IsNullOrWhiteSpace(markdown) Then
+            Throw New InvalidOperationException("请先粘贴 Markdown 大纲。")
+        End If
+        If Not markdown.StartsWith("#", StringComparison.Ordinal) Then
+            Throw New InvalidOperationException("Markdown 大纲应以 # 一级标题开始。")
+        End If
+
+        Return markdown
+    End Function
+
+    Private Sub ValidateEditedMarkdownForDocmee(markdown As String)
+        If String.IsNullOrWhiteSpace(markdown) Then
+            Throw New InvalidOperationException("请先填写 Markdown 大纲。")
+        End If
+
+        Dim h1Count = 0
+        Dim h2Count = 0
+        Dim normalized = markdown.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
+        For Each rawLine In normalized.Split(New String() {vbLf}, StringSplitOptions.None)
+            Dim line = rawLine.Trim()
+            If Not line.StartsWith("#", StringComparison.Ordinal) Then Continue For
+
+            Dim headingLevel = 0
+            While headingLevel < line.Length AndAlso line(headingLevel) = "#"c
+                headingLevel += 1
+            End While
+
+            Dim headingText = line.Substring(headingLevel).Trim()
+            If String.IsNullOrWhiteSpace(headingText) Then
+                Throw New InvalidOperationException("Markdown 标题不能只有 #，请补充标题内容。")
+            End If
+
+            If headingLevel = 1 Then h1Count += 1
+            If headingLevel = 2 Then h2Count += 1
+        Next
+
+        If h1Count <> 1 Then
+            Throw New InvalidOperationException("Docmee Markdown 大纲需要且只能有一个一级标题：# 主题。")
+        End If
+        If h2Count < 1 Then
+            Throw New InvalidOperationException("Docmee Markdown 大纲至少需要一个二级章节：## 章节。")
+        End If
+    End Sub
+
     Private Sub AppendOutlineStreamText(chunkText As String)
         If String.IsNullOrEmpty(chunkText) Then Return
+        If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return
 
         If _outputBox.InvokeRequired Then
-            _outputBox.BeginInvoke(CType(Sub() AppendOutlineStreamText(chunkText), MethodInvoker))
+            BeginInvokeIfAlive(CType(Sub() AppendOutlineStreamText(chunkText), MethodInvoker))
             Return
         End If
 
@@ -667,12 +1352,11 @@ Public Class ThemePptTaskPane
             End If
         Finally
             _isTemplateLoading = False
-            _refreshTemplatesButton.Enabled = True
-            _selectTemplateButton.Enabled = _templateCombo.Items.Count > 0
             If Object.ReferenceEquals(_templateLoadCts, loadCts) Then
                 _templateLoadCts.Dispose()
                 _templateLoadCts = Nothing
             End If
+            RefreshActionButtons()
         End Try
     End Function
 
@@ -714,11 +1398,11 @@ Public Class ThemePptTaskPane
         End Try
 
         _templateCombo.Enabled = False
-        _selectTemplateButton.Enabled = _templateCombo.Items.Count > 0
         If _templateCombo.Items.Count > 0 AndAlso _templateCombo.SelectedIndex < 0 Then
             _templateCombo.SelectedIndex = 0
         End If
         RefreshTemplateSelectionStyles()
+        RefreshActionButtons()
         ResizeTemplateCards()
         AppendThemePptLog("PopulateTemplates completed: count=" & _templateCombo.Items.Count.ToString() & ", generation=" & _templateCoverLoadGeneration.ToString())
     End Sub
@@ -852,9 +1536,10 @@ Public Class ThemePptTaskPane
 
     Private Sub UpdateTemplateCoverLoadStatus(loadGeneration As Integer)
         If Me.InvokeRequired Then
-            Me.BeginInvoke(CType(Sub() UpdateTemplateCoverLoadStatus(loadGeneration), MethodInvoker))
+            BeginInvokeIfAlive(CType(Sub() UpdateTemplateCoverLoadStatus(loadGeneration), MethodInvoker))
             Return
         End If
+        If Me.IsDisposed Then Return
 
         If loadGeneration <> _templateCoverLoadGeneration Then Return
 
@@ -934,7 +1619,13 @@ Public Class ThemePptTaskPane
 
     Private Sub SetTemplateCoverImage(templateId As String, image As Image, loadGeneration As Integer, Optional coverVirtualUrl As String = "")
         If Me.InvokeRequired Then
-            Me.BeginInvoke(CType(Sub() SetTemplateCoverImage(templateId, image, loadGeneration, coverVirtualUrl), MethodInvoker))
+            If Not BeginInvokeIfAlive(CType(Sub() SetTemplateCoverImage(templateId, image, loadGeneration, coverVirtualUrl), MethodInvoker)) AndAlso image IsNot Nothing Then
+                image.Dispose()
+            End If
+            Return
+        End If
+        If Me.IsDisposed Then
+            If image IsNot Nothing Then image.Dispose()
             Return
         End If
 
@@ -1004,9 +1695,10 @@ Public Class ThemePptTaskPane
 
     Private Sub MarkTemplateCoverUnavailable(templateId As String, loadGeneration As Integer, Optional reason As String = "")
         If Me.InvokeRequired Then
-            Me.BeginInvoke(CType(Sub() MarkTemplateCoverUnavailable(templateId, loadGeneration, reason), MethodInvoker))
+            BeginInvokeIfAlive(CType(Sub() MarkTemplateCoverUnavailable(templateId, loadGeneration, reason), MethodInvoker))
             Return
         End If
+        If Me.IsDisposed Then Return
 
         If loadGeneration <> _templateCoverLoadGeneration OrElse
            String.IsNullOrWhiteSpace(templateId) Then Return
@@ -1256,7 +1948,7 @@ Public Class ThemePptTaskPane
 
         Dim trimmedUrl = coverUrl.Trim()
         Dim separator = If(trimmedUrl.Contains("?"), "&", "?")
-        Return trimmedUrl & separator & "token=" & TemplateCoverToken
+        Return trimmedUrl & separator & "token=" & Uri.EscapeDataString(DocmeePptClient.GetConfiguredToken())
     End Function
 
     Private Function CreateTemplatePreviewBitmap(template As DocmeeTemplateInfo, statusText As String) As Bitmap
@@ -1335,7 +2027,14 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub TemplateCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
+        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
+        If selectedTemplate Is Nothing OrElse
+           Not String.Equals(selectedTemplate.Id, _confirmedTemplateId, StringComparison.Ordinal) Then
+            _templateConfirmedForCurrentOutline = False
+        End If
+
         RefreshTemplateSelectionStyles()
+        RefreshActionButtons()
     End Sub
 
     Private Sub TemplateListBox_SelectedIndexChanged(sender As Object, e As EventArgs)
@@ -1497,8 +2196,21 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Async Function GenerateAndImportPptxAsync() As Task
-        If String.IsNullOrWhiteSpace(_taskId) OrElse String.IsNullOrWhiteSpace(_outlineMarkdown) Then
-            MessageBox.Show("请先生成大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        Dim markdown = GetEditedMarkdown()
+        If String.IsNullOrWhiteSpace(markdown) Then
+            MessageBox.Show("请先生成或填写大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Try
+            ValidateEditedMarkdownForDocmee(markdown)
+        Catch ex As Exception
+            MessageBox.Show(ex.Message, "Markdown 大纲", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End Try
+
+        If Not _isOutlineEditCompleted Then
+            MessageBox.Show("请先完成 Markdown 大纲编辑。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
@@ -1508,13 +2220,22 @@ Public Class ThemePptTaskPane
             Return
         End If
 
+        If Not _templateConfirmedForCurrentOutline Then
+            MessageBox.Show("请先预览并选择模板。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
         _generateButton.Enabled = False
         _insertButton.Enabled = False
+        _finishOutlineEditButton.Enabled = False
         _refreshTemplatesButton.Enabled = False
-        ShowTemplateGallery()
+        _selectTemplateButton.Enabled = False
+        _changeThemeButton.Enabled = False
+        ShowOutlineOutput()
+        ClearGeneratedPptState()
 
         Try
-            Dim markdown = _outlineMarkdown.Trim()
+            _outlineMarkdown = markdown
 
             SetStatus("正在创建模板生成任务...")
             AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)
@@ -1532,6 +2253,7 @@ Public Class ThemePptTaskPane
             If Not String.Equals(pptInfo.TemplateId, selectedTemplate.Id, StringComparison.Ordinal) Then
                 Throw New InvalidOperationException($"Docmee 返回的模板ID与所选模板不一致。所选: {selectedTemplate.Id}，返回: {pptInfo.TemplateId}")
             End If
+            _lastGeneratedPptId = pptInfo.Id
 
             SetStatus("正在获取 PPTX 下载地址...")
             Dim fileUrl = Await _client.DownloadPptxAsync(pptInfo.Id, True)
@@ -1544,26 +2266,191 @@ Public Class ThemePptTaskPane
 
             SetStatus("正在导入当前演示文稿...")
             Dim importedCount = ImportPptxIntoPresentation(localPath)
+            CaptureImportedSlideRange(importedCount)
             AppendTaskPaneLine("已导入页数: " & importedCount.ToString())
-            ShowTemplateGallery()
             SetStatus($"已生成并导入当前演示文稿，共 {importedCount} 页。")
         Catch ex As Exception
             SetStatus("生成或导入失败。")
             AppendTaskPaneLine("生成并导入失败: " & ex.Message)
+            ClearGeneratedPptState()
             MessageBox.Show("生成并导入 PPT 失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             _generateButton.Enabled = True
-            _insertButton.Enabled = True
-            _refreshTemplatesButton.Enabled = True
-            If _templateCombo.Items.Count > 0 Then
-                ShowTemplateGallery()
-            End If
+            RefreshActionButtons()
         End Try
     End Function
 
+    Private Async Function ChangeThemeForLatestPptAsync() As Task
+        If String.IsNullOrWhiteSpace(_lastGeneratedPptId) Then
+            MessageBox.Show("请先生成并导入 PPT。", "更换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
+        If selectedTemplate Is Nothing OrElse String.IsNullOrWhiteSpace(selectedTemplate.Id) Then
+            MessageBox.Show("请先选择要更换的模板。", "更换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        If Not _templateConfirmedForCurrentOutline Then
+            MessageBox.Show("请先预览并选择模板。", "更换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        _generateButton.Enabled = False
+        _insertButton.Enabled = False
+        _finishOutlineEditButton.Enabled = False
+        _refreshTemplatesButton.Enabled = False
+        _selectTemplateButton.Enabled = False
+        _changeThemeButton.Enabled = False
+        ShowOutlineOutput()
+
+        Try
+            SetStatus("正在更换 Docmee PPT 模板...")
+            AppendTaskPaneLine("更换模板ID: " & selectedTemplate.Id)
+            _lastGeneratedPptId = Await _client.UpdatePptTemplateAsync(_lastGeneratedPptId, selectedTemplate.Id, False)
+            AppendTaskPaneLine("更新后的 PPT ID: " & _lastGeneratedPptId)
+
+            SetStatus("正在获取更换主题后的 PPTX...")
+            Dim fileUrl = Await _client.DownloadPptxAsync(_lastGeneratedPptId, True)
+            AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)
+
+            SetStatus("正在下载更换主题后的 PPTX...")
+            Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_theme_{_lastGeneratedPptId}.pptx")
+            Await _client.DownloadPptxFileAsync(fileUrl, localPath)
+
+            SetStatus("正在替换当前演示文稿中的生成页...")
+            Dim replacedCount = ReplaceImportedSlideRange(localPath)
+            AppendTaskPaneLine("已替换页数: " & replacedCount.ToString())
+            SetStatus($"主题已更换，共替换 {replacedCount} 页。")
+        Catch ex As Exception
+            SetStatus("更换主题失败。")
+            AppendTaskPaneLine("更换主题失败: " & ex.Message)
+            MessageBox.Show("更换主题失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        Finally
+            _generateButton.Enabled = True
+            RefreshActionButtons()
+        End Try
+    End Function
+
+    Private Function ReplaceImportedSlideRange(localPath As String) As Integer
+        Dim target = GetOrCreatePresentation()
+        If _lastImportedSlideStartIndex <= 0 OrElse _lastImportedSlideCount <= 0 Then
+            Dim appendedCount = ImportPptxIntoPresentation(localPath)
+            CaptureImportedSlideRange(appendedCount)
+            Return appendedCount
+        End If
+
+        Dim originalStart = Math.Max(1, Math.Min(_lastImportedSlideStartIndex, target.Slides.Count + 1))
+        Dim originalCount = Math.Min(_lastImportedSlideCount, Math.Max(0, target.Slides.Count - originalStart + 1))
+        If originalCount <= 0 Then
+            Dim appendedCount = ImportPptxIntoPresentation(localPath)
+            CaptureImportedSlideRange(appendedCount)
+            Return appendedCount
+        End If
+
+        Dim insertedCount = ImportPptxIntoPresentation(localPath, originalStart - 1)
+        For slideIndex As Integer = originalStart + insertedCount + originalCount - 1 To originalStart + insertedCount Step -1
+            If slideIndex > 0 AndAlso slideIndex <= target.Slides.Count Then
+                target.Slides(slideIndex).Delete()
+            End If
+        Next
+
+        _lastImportedSlideStartIndex = originalStart
+        _lastImportedSlideCount = insertedCount
+        RestoreActiveSlide(target, originalStart)
+        Return insertedCount
+    End Function
+
+    Private Function ApplyLocalThemeToCurrentPresentation() As Integer
+        Dim presentation = GetOrCreatePresentation()
+        If presentation.Slides.Count = 0 Then
+            Throw New InvalidOperationException("当前演示文稿没有可换主题的幻灯片。")
+        End If
+
+        Dim changedCount = 0
+        For slideIndex As Integer = 1 To presentation.Slides.Count
+            changedCount += ApplyLocalThemeToSlide(presentation.Slides(slideIndex), presentation, slideIndex = 1)
+        Next
+
+        Return changedCount
+    End Function
+
+    Private Function ApplyLocalThemeToSlide(slide As PowerPoint.Slide, presentation As PowerPoint.Presentation, isCover As Boolean) As Integer
+        If slide Is Nothing Then Return 0
+
+        slide.FollowMasterBackground = MsoTriState.msoFalse
+        slide.Background.Fill.Solid()
+        slide.Background.Fill.ForeColor.RGB = If(isCover, RGB(241, 247, 255), RGB(248, 250, 252))
+
+        RemoveLocalThemeAccentShapes(slide)
+
+        Dim slideHeight = CSng(presentation.PageSetup.SlideHeight)
+        Dim accent = slide.Shapes.AddShape(MsoAutoShapeType.msoShapeRectangle, 0, 0, 9, slideHeight)
+        accent.Name = "wenduoduoAI_LocalThemeAccent"
+        accent.Fill.ForeColor.RGB = RGB(26, 115, 232)
+        accent.Line.Visible = MsoTriState.msoFalse
+
+        Dim textShapeIndex = 0
+        For shapeIndex As Integer = 1 To slide.Shapes.Count
+            Dim shape = slide.Shapes(shapeIndex)
+            If ShapeHasText(shape) Then
+                textShapeIndex += 1
+                ApplyLocalThemeTextStyle(shape, textShapeIndex = 1)
+            End If
+        Next
+
+        Return 1
+    End Function
+
+    Private Sub RemoveLocalThemeAccentShapes(slide As PowerPoint.Slide)
+        For shapeIndex As Integer = slide.Shapes.Count To 1 Step -1
+            Try
+                Dim shape = slide.Shapes(shapeIndex)
+                If String.Equals(shape.Name, "wenduoduoAI_LocalThemeAccent", StringComparison.Ordinal) Then
+                    shape.Delete()
+                End If
+            Catch
+            End Try
+        Next
+    End Sub
+
+    Private Function ShapeHasText(shape As PowerPoint.Shape) As Boolean
+        If shape Is Nothing Then Return False
+
+        Try
+            Return shape.HasTextFrame = MsoTriState.msoTrue AndAlso
+                   shape.TextFrame.HasText = MsoTriState.msoTrue AndAlso
+                   Not String.IsNullOrWhiteSpace(shape.TextFrame.TextRange.Text)
+        Catch
+            Return False
+        End Try
+    End Function
+
+    Private Sub ApplyLocalThemeTextStyle(shape As PowerPoint.Shape, isTitle As Boolean)
+        Try
+            Dim textRange = shape.TextFrame.TextRange
+            textRange.Font.Name = "微软雅黑"
+            textRange.Font.Color.RGB = If(isTitle, RGB(22, 32, 48), RGB(45, 52, 64))
+            textRange.Font.Bold = If(isTitle, MsoTriState.msoTrue, MsoTriState.msoFalse)
+
+            If isTitle Then
+                If textRange.Font.Size < 24 Then textRange.Font.Size = 26
+            Else
+                If textRange.Font.Size < 14 Then textRange.Font.Size = 16
+            End If
+
+            shape.TextFrame.MarginLeft = Math.Max(shape.TextFrame.MarginLeft, 8)
+            shape.TextFrame.MarginRight = Math.Max(shape.TextFrame.MarginRight, 8)
+            shape.TextFrame.WordWrap = MsoTriState.msoTrue
+        Catch
+        End Try
+    End Sub
+
     Private Sub AppendTemplateLoadFailure(ex As Exception)
+        If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return
         If _outputBox.InvokeRequired Then
-            _outputBox.BeginInvoke(CType(Sub() AppendTemplateLoadFailure(ex), MethodInvoker))
+            BeginInvokeIfAlive(CType(Sub() AppendTemplateLoadFailure(ex), MethodInvoker))
             Return
         End If
 
@@ -1589,8 +2476,9 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub AppendTaskPaneLine(text As String)
+        If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return
         If _outputBox.InvokeRequired Then
-            _outputBox.BeginInvoke(CType(Sub() AppendTaskPaneLine(text), MethodInvoker))
+            BeginInvokeIfAlive(CType(Sub() AppendTaskPaneLine(text), MethodInvoker))
             Return
         End If
 
@@ -1634,7 +2522,7 @@ Public Class ThemePptTaskPane
         Next
     End Sub
 
-    Private Function ImportPptxIntoPresentation(downloadPath As String) As Integer
+    Private Function ImportPptxIntoPresentation(downloadPath As String, Optional insertAfterIndex As Integer = -1) As Integer
         If String.IsNullOrWhiteSpace(downloadPath) OrElse Not File.Exists(downloadPath) Then
             Throw New FileNotFoundException("未找到下载后的 PPTX 文件。", downloadPath)
         End If
@@ -1642,18 +2530,19 @@ Public Class ThemePptTaskPane
         Dim target = GetOrCreatePresentation()
         Dim originalSlideIndex = CaptureActiveSlideIndex(target)
         Dim importedSlides As New List(Of PowerPoint.Slide)()
+        Dim normalizedInsertAfterIndex = NormalizeInsertAfterIndex(target, insertAfterIndex)
 
         Try
-            importedSlides = ImportPptxFileIntoPresentation(target, downloadPath)
+            importedSlides = ImportPptxFileIntoPresentation(target, downloadPath, normalizedInsertAfterIndex)
             If importedSlides.Count > 0 Then
                 AppendTaskPaneLine("导入方式: InsertFromFile")
             Else
                 AppendTaskPaneLine("InsertFromFile 未导入幻灯片，尝试复制粘贴。")
-                importedSlides = CopyPptxSlidesIntoPresentation(target, downloadPath)
+                importedSlides = CopyPptxSlidesIntoPresentation(target, downloadPath, normalizedInsertAfterIndex)
             End If
         Catch ex As Exception
             AppendTaskPaneLine("InsertFromFile 导入失败，尝试复制粘贴: " & ex.Message)
-            importedSlides = CopyPptxSlidesIntoPresentation(target, downloadPath)
+            importedSlides = CopyPptxSlidesIntoPresentation(target, downloadPath, normalizedInsertAfterIndex)
         Finally
             RestoreActiveSlide(target, originalSlideIndex)
         End Try
@@ -1666,14 +2555,19 @@ Public Class ThemePptTaskPane
         Return importedSlides.Count
     End Function
 
-    Private Function ImportPptxFileIntoPresentation(target As PowerPoint.Presentation, downloadPath As String) As List(Of PowerPoint.Slide)
-        Dim beforeCount = target.Slides.Count
-        Dim insertedCount = target.Slides.InsertFromFile(downloadPath, beforeCount)
+    Private Function NormalizeInsertAfterIndex(target As PowerPoint.Presentation, insertAfterIndex As Integer) As Integer
+        If target Is Nothing Then Return 0
+        If insertAfterIndex < 0 Then Return target.Slides.Count
+        Return Math.Max(0, Math.Min(insertAfterIndex, target.Slides.Count))
+    End Function
+
+    Private Function ImportPptxFileIntoPresentation(target As PowerPoint.Presentation, downloadPath As String, insertAfterIndex As Integer) As List(Of PowerPoint.Slide)
+        Dim insertedCount = target.Slides.InsertFromFile(downloadPath, insertAfterIndex)
         Dim importedSlides As New List(Of PowerPoint.Slide)()
 
         If insertedCount <= 0 Then Return importedSlides
 
-        For slideIndex As Integer = beforeCount + 1 To beforeCount + insertedCount
+        For slideIndex As Integer = insertAfterIndex + 1 To insertAfterIndex + insertedCount
             If slideIndex > 0 AndAlso slideIndex <= target.Slides.Count Then
                 importedSlides.Add(target.Slides(slideIndex))
             End If
@@ -1682,7 +2576,7 @@ Public Class ThemePptTaskPane
         Return importedSlides
     End Function
 
-    Private Function CopyPptxSlidesIntoPresentation(target As PowerPoint.Presentation, downloadPath As String) As List(Of PowerPoint.Slide)
+    Private Function CopyPptxSlidesIntoPresentation(target As PowerPoint.Presentation, downloadPath As String, insertAfterIndex As Integer) As List(Of PowerPoint.Slide)
         Dim sourcePresentation As PowerPoint.Presentation = Nothing
         Dim importedSlides As New List(Of PowerPoint.Slide)()
 
@@ -1693,7 +2587,7 @@ Public Class ThemePptTaskPane
                 WithWindow:=MsoTriState.msoFalse)
 
             For slideIndex As Integer = 1 To sourcePresentation.Slides.Count
-                Dim pastedSlide = TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex))
+                Dim pastedSlide = TryPasteSlideWithSourceFormatting(target, sourcePresentation.Slides(slideIndex), insertAfterIndex + importedSlides.Count)
                 If pastedSlide IsNot Nothing Then importedSlides.Add(pastedSlide)
             Next
         Finally
@@ -1704,6 +2598,18 @@ Public Class ThemePptTaskPane
 
         Return importedSlides
     End Function
+
+    Private Sub CaptureImportedSlideRange(importedCount As Integer)
+        If importedCount <= 0 Then
+            _lastImportedSlideStartIndex = 0
+            _lastImportedSlideCount = 0
+            Return
+        End If
+
+        Dim target = GetOrCreatePresentation()
+        _lastImportedSlideCount = importedCount
+        _lastImportedSlideStartIndex = Math.Max(1, target.Slides.Count - importedCount + 1)
+    End Sub
 
     Private Function CaptureActiveSlideIndex(target As PowerPoint.Presentation) As Integer
         Try
@@ -1736,28 +2642,30 @@ Public Class ThemePptTaskPane
         End Try
     End Sub
 
-    Private Function TryPasteSlideWithSourceFormatting(target As PowerPoint.Presentation, sourceSlide As PowerPoint.Slide) As PowerPoint.Slide
+    Private Function TryPasteSlideWithSourceFormatting(target As PowerPoint.Presentation, sourceSlide As PowerPoint.Slide, insertAfterIndex As Integer) As PowerPoint.Slide
         Dim beforeCount = target.Slides.Count
+        Dim destinationIndex = NormalizeInsertAfterIndex(target, insertAfterIndex)
 
         Try
             sourceSlide.Copy()
-            ActivateDestinationAtEnd(target)
+            ActivateDestinationAtPosition(target, destinationIndex)
             _pptApp.CommandBars.ExecuteMso("PasteSourceFormatting")
 
             If WaitForPastedSlide(target, beforeCount) Then
                 Dim pastedSlide = GetSelectedSlide(target)
                 If pastedSlide IsNot Nothing Then
-                    pastedSlide.MoveTo(target.Slides.Count)
-                    Return target.Slides(target.Slides.Count)
+                    Dim moveToIndex = Math.Min(destinationIndex + 1, target.Slides.Count)
+                    pastedSlide.MoveTo(moveToIndex)
+                    Return target.Slides(moveToIndex)
                 End If
 
-                Return target.Slides(target.Slides.Count)
+                Return target.Slides(Math.Min(destinationIndex + 1, target.Slides.Count))
             End If
         Catch
         End Try
 
         sourceSlide.Copy()
-        Dim pastedSlides = target.Slides.Paste(target.Slides.Count + 1)
+        Dim pastedSlides = target.Slides.Paste(Math.Min(destinationIndex + 1, target.Slides.Count + 1))
         If pastedSlides IsNot Nothing AndAlso pastedSlides.Count > 0 Then Return pastedSlides(1)
         Return Nothing
     End Function
@@ -1769,6 +2677,16 @@ Public Class ThemePptTaskPane
         If target.Slides.Count > 0 Then
             target.Windows(1).View.GotoSlide(target.Slides.Count)
         End If
+    End Sub
+
+    Private Sub ActivateDestinationAtPosition(target As PowerPoint.Presentation, insertAfterIndex As Integer)
+        If target.Windows.Count <= 0 Then Return
+
+        target.Windows(1).Activate()
+        If target.Slides.Count <= 0 Then Return
+
+        Dim gotoIndex = Math.Max(1, Math.Min(insertAfterIndex, target.Slides.Count))
+        target.Windows(1).View.GotoSlide(gotoIndex)
     End Sub
 
     Private Function WaitForPastedSlide(target As PowerPoint.Presentation, beforeCount As Integer) As Boolean

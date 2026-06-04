@@ -19,6 +19,7 @@ Public Class Ribbon1
         Public Property TextRange As PowerPoint.TextRange
         Public Property Shape As PowerPoint.Shape
         Public Property OriginalText As String
+        Public Property SlideContextText As String
     End Class
 
     Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
@@ -53,8 +54,15 @@ Public Class Ribbon1
         End If
     End Sub
 
-    Protected Overrides Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
-        MessageBox.Show("PowerPoint校对功能正在开发中...", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    Protected Overrides Async Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Dim requirement = ShowReplaceSlideDialog()
+            If String.IsNullOrWhiteSpace(requirement) Then Return
+
+            Await ReplaceCurrentSlideWithGeneratedTextAsync(requirement)
+        Catch ex As Exception
+            MessageBox.Show("替换单页出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
     End Sub
 
     ''' <summary>
@@ -73,7 +81,7 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 演示版美化单页 - 先用本地规则快速看到效果
+    ' 美化当前页 - 用本地规则统一背景、字体、标题和文本框适配。
     Protected Overrides Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
             Dim changedCount = ApplySimpleBeautifyToCurrentSlide()
@@ -130,7 +138,7 @@ Public Class Ribbon1
                 .Size = New Size(278, 24),
                 .DropDownStyle = ComboBoxStyle.DropDownList
             }
-            modeCombo.Items.AddRange(New Object() {"润色", "扩写", "精简", "补全文案"})
+            modeCombo.Items.AddRange(New Object() {"润色", "扩写", "精简", "填充", "补全文案"})
             modeCombo.SelectedIndex = 0
             dialog.Controls.Add(modeCombo)
 
@@ -157,8 +165,164 @@ Public Class Ribbon1
         End Using
     End Function
 
+    Private Function ShowReplaceSlideDialog() As String
+        Using dialog As New Form()
+            dialog.Text = "替换单页"
+            dialog.Size = New Size(430, 250)
+            dialog.StartPosition = FormStartPosition.CenterParent
+            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
+            dialog.MaximizeBox = False
+            dialog.MinimizeBox = False
+
+            Dim label As New Label() With {
+                .Text = "输入新单页要求：",
+                .Location = New Point(18, 16),
+                .AutoSize = True
+            }
+            dialog.Controls.Add(label)
+
+            Dim inputBox As New TextBox() With {
+                .Location = New Point(18, 42),
+                .Size = New Size(374, 118),
+                .Multiline = True,
+                .ScrollBars = ScrollBars.Vertical,
+                .Text = "生成一页关于核心结论的汇报页，包含标题和 3 个要点。"
+            }
+            dialog.Controls.Add(inputBox)
+
+            Dim okButton As New Button() With {
+                .Text = "替换",
+                .Location = New Point(222, 174),
+                .Size = New Size(80, 30),
+                .DialogResult = DialogResult.OK
+            }
+            dialog.Controls.Add(okButton)
+            dialog.AcceptButton = okButton
+
+            Dim cancelButton As New Button() With {
+                .Text = "取消",
+                .Location = New Point(312, 174),
+                .Size = New Size(80, 30),
+                .DialogResult = DialogResult.Cancel
+            }
+            dialog.Controls.Add(cancelButton)
+            dialog.CancelButton = cancelButton
+
+            If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
+            Return inputBox.Text.Trim()
+        End Using
+    End Function
+
+    Private Async Function ReplaceCurrentSlideWithGeneratedTextAsync(requirement As String) As Task
+        Dim originalSlide = GetCurrentSlide()
+        If originalSlide Is Nothing Then
+            MessageBox.Show("请先选中要替换的幻灯片。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        ShareRibbon.GlobalStatusStripAll.ShowProgress("正在生成替换单页内容...")
+        Dim generatedText = Await GenerateReplacementSlideTextAsync(requirement)
+        If String.IsNullOrWhiteSpace(generatedText) Then
+            MessageBox.Show("没有生成可用的替换内容。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Dim replacementSlide = InsertReplacementSlideAfter(originalSlide, generatedText)
+        DeleteOriginalSlideAfterReplacement(originalSlide, replacementSlide)
+        ApplySimpleBeautifyToSlide(replacementSlide)
+
+        ShareRibbon.GlobalStatusStripAll.ShowProgress("替换单页完成")
+        MessageBox.Show("当前页已替换。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Function
+
+    Private Async Function GenerateReplacementSlideTextAsync(requirement As String) As Task(Of String)
+        If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) OrElse
+           String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) OrElse
+           String.IsNullOrWhiteSpace(ConfigSettings.ModelName) Then
+            Throw New InvalidOperationException("请先在模型配置里填写 API 地址、API Key 和模型名称。")
+        End If
+
+        Dim systemPrompt = "你是一个专业的 PowerPoint 单页生成助手。只返回纯文本：第一行是标题，后续每行一个要点。不要解释，不要 Markdown。"
+        Dim prompt = "请根据下面要求生成一页 PPT 文案：" & vbCrLf & requirement.Trim()
+        Dim requestBody = LLMUtil.CreateLlmRequestBody(prompt, ConfigSettings.ModelName, systemPrompt, 0.35, 1000)
+        Dim response = Await LLMUtil.SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
+
+        If response.StartsWith("错误:") Then Throw New Exception(response)
+
+        Dim jObj = JObject.Parse(response)
+        Dim content = jObj("choices")(0)("message")("content")?.ToString()
+        If String.IsNullOrWhiteSpace(content) Then
+            Throw New InvalidOperationException("模型没有返回可用的替换单页内容。")
+        End If
+
+        Return content.Trim()
+    End Function
+
+    Private Function InsertReplacementSlideAfter(originalSlide As PowerPoint.Slide, generatedText As String) As PowerPoint.Slide
+        Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
+        Dim originalIndex = originalSlide.SlideIndex
+        Dim replacementSlide = presentation.Slides.Add(originalIndex + 1, PowerPoint.PpSlideLayout.ppLayoutTitleOnly)
+
+        Dim normalized = generatedText.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
+        Dim lines = normalized.Split(New String() {vbLf}, StringSplitOptions.None).
+            Select(Function(line) line.Trim()).
+            Where(Function(line) Not String.IsNullOrWhiteSpace(line)).
+            ToList()
+
+        Dim title = If(lines.Count > 0, lines(0), "新单页")
+        Dim body = If(lines.Count > 1, String.Join(vbCrLf, lines.Skip(1)), generatedText.Trim())
+
+        SetReplacementSlideText(replacementSlide, title, body)
+        Return replacementSlide
+    End Function
+
+    Private Sub SetReplacementSlideText(slide As PowerPoint.Slide, titleText As String, bodyText As String)
+        Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
+        Dim slideWidth As Single = CSng(presentation.PageSetup.SlideWidth)
+        Dim slideHeight As Single = CSng(presentation.PageSetup.SlideHeight)
+
+        Dim titleShape As PowerPoint.Shape = Nothing
+        Try
+            If slide.Shapes.HasTitle = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                titleShape = slide.Shapes.Title
+            End If
+        Catch
+        End Try
+
+        If titleShape Is Nothing Then
+            titleShape = slide.Shapes.AddTextbox(Microsoft.Office.Core.MsoTextOrientation.msoTextOrientationHorizontal, 46, 38, slideWidth - 92, 64)
+        End If
+
+        titleShape.TextFrame.TextRange.Text = titleText
+        titleShape.TextFrame.TextRange.Font.Name = "Microsoft YaHei UI"
+        titleShape.TextFrame.TextRange.Font.Size = 30
+        titleShape.TextFrame.TextRange.Font.Bold = Microsoft.Office.Core.MsoTriState.msoTrue
+
+        Dim bodyShape = slide.Shapes.AddTextbox(
+            Microsoft.Office.Core.MsoTextOrientation.msoTextOrientationHorizontal,
+            54,
+            118,
+            slideWidth - 108,
+            slideHeight - 168)
+        bodyShape.TextFrame.TextRange.Text = bodyText
+        bodyShape.TextFrame.TextRange.Font.Name = "Microsoft YaHei UI"
+        bodyShape.TextFrame.TextRange.Font.Size = 18
+        bodyShape.TextFrame.WordWrap = Microsoft.Office.Core.MsoTriState.msoTrue
+    End Sub
+
+    Private Sub DeleteOriginalSlideAfterReplacement(originalSlide As PowerPoint.Slide, replacementSlide As PowerPoint.Slide)
+        Dim targetIndex = originalSlide.SlideIndex
+        originalSlide.Delete()
+
+        Try
+            replacementSlide.Select()
+            Globals.ThisAddIn.Application.ActiveWindow.View.GotoSlide(targetIndex)
+        Catch
+        End Try
+    End Sub
+
     Private Async Function OptimizeSelectedTextAsync(modeName As String) As Task(Of Integer)
-        Dim targets = GetSelectedPptTextTargets()
+        Dim targets = GetSelectedPptTextTargets(modeName)
         If targets.Count = 0 Then
             MessageBox.Show("请先选中 PPT 里的文字或文本框。", "文本优化", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return 0
@@ -175,7 +339,7 @@ Public Class Ribbon1
         Dim changedCount = 0
 
         For Each target In targets
-            Dim optimizedText = Await RequestOptimizedTextAsync(modeName, target.OriginalText)
+            Dim optimizedText = Await RequestOptimizedTextAsync(modeName, target.OriginalText, target.SlideContextText)
             If Not String.IsNullOrWhiteSpace(optimizedText) Then
                 target.TextRange.Text = optimizedText
                 If target.Shape IsNot Nothing Then AutoFitPptTextShape(target.Shape)
@@ -187,8 +351,10 @@ Public Class Ribbon1
         Return changedCount
     End Function
 
-    Private Function GetSelectedPptTextTargets() As List(Of PptTextTarget)
+    Private Function GetSelectedPptTextTargets(modeName As String) As List(Of PptTextTarget)
         Dim targets As New List(Of PptTextTarget)()
+        Dim allowBlankTextFrame = String.Equals(modeName, "填充", StringComparison.Ordinal)
+        Dim slideContextText = GetCurrentSlideContextText()
 
         Try
             Dim sel = Globals.ThisAddIn.Application.ActiveWindow.Selection
@@ -196,7 +362,7 @@ Public Class Ribbon1
             Select Case sel.Type
                 Case PowerPoint.PpSelectionType.ppSelectionText
                     Dim text = sel.TextRange.Text
-                    If Not String.IsNullOrWhiteSpace(text) Then
+                    If allowBlankTextFrame OrElse Not String.IsNullOrWhiteSpace(text) Then
                         Dim selectedShape As PowerPoint.Shape = Nothing
                         Try
                             selectedShape = sel.ShapeRange(1)
@@ -206,13 +372,14 @@ Public Class Ribbon1
                         targets.Add(New PptTextTarget() With {
                             .TextRange = sel.TextRange,
                             .Shape = selectedShape,
-                            .OriginalText = text.Trim()
+                            .OriginalText = If(text, "").Trim(),
+                            .SlideContextText = slideContextText
                         })
                     End If
 
                 Case PowerPoint.PpSelectionType.ppSelectionShapes
                     For i = 1 To sel.ShapeRange.Count
-                        CollectShapeTextTargets(sel.ShapeRange(i), targets)
+                        CollectShapeTextTargets(sel.ShapeRange(i), targets, allowBlankTextFrame, slideContextText)
                     Next
             End Select
         Catch ex As Exception
@@ -222,11 +389,11 @@ Public Class Ribbon1
         Return targets
     End Function
 
-    Private Sub CollectShapeTextTargets(shape As PowerPoint.Shape, targets As List(Of PptTextTarget))
+    Private Sub CollectShapeTextTargets(shape As PowerPoint.Shape, targets As List(Of PptTextTarget), allowBlankTextFrame As Boolean, slideContextText As String)
         Try
             If shape.Type = Microsoft.Office.Core.MsoShapeType.msoGroup Then
                 For i = 1 To shape.GroupItems.Count
-                    CollectShapeTextTargets(shape.GroupItems(i), targets)
+                    CollectShapeTextTargets(shape.GroupItems(i), targets, allowBlankTextFrame, slideContextText)
                 Next
                 Return
             End If
@@ -236,17 +403,72 @@ Public Class Ribbon1
                 For row = 1 To table.Rows.Count
                     For col = 1 To table.Columns.Count
                         Dim cellShape = table.Cell(row, col).Shape
-                        If cellShape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
-                           cellShape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                            Dim cellText = cellShape.TextFrame.TextRange.Text
-                            If Not String.IsNullOrWhiteSpace(cellText) Then
+                        If cellShape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                            Dim cellText = ""
+                            If cellShape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                                cellText = cellShape.TextFrame.TextRange.Text
+                            End If
+
+                            If allowBlankTextFrame OrElse Not String.IsNullOrWhiteSpace(cellText) Then
                                 targets.Add(New PptTextTarget() With {
                                     .TextRange = cellShape.TextFrame.TextRange,
                                     .Shape = cellShape,
-                                    .OriginalText = cellText.Trim()
+                                    .OriginalText = If(cellText, "").Trim(),
+                                    .SlideContextText = slideContextText
                                 })
                             End If
                         End If
+                    Next
+                Next
+                Return
+            End If
+
+            If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                Dim text = shape.TextFrame.TextRange.Text
+                If allowBlankTextFrame OrElse Not String.IsNullOrWhiteSpace(text) Then
+                    targets.Add(New PptTextTarget() With {
+                        .TextRange = shape.TextFrame.TextRange,
+                        .Shape = shape,
+                        .OriginalText = text.Trim(),
+                        .SlideContextText = slideContextText
+                    })
+                End If
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("收集形状文本失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Function GetCurrentSlideContextText() As String
+        Dim slide = GetCurrentSlide()
+        If slide Is Nothing Then Return ""
+
+        Dim lines As New List(Of String)()
+        Try
+            For i = 1 To slide.Shapes.Count
+                CollectShapeContextText(slide.Shapes(i), lines)
+            Next
+        Catch ex As Exception
+            Debug.WriteLine("收集当前页上下文失败: " & ex.Message)
+        End Try
+
+        Return String.Join(vbCrLf, lines.Distinct().Take(12))
+    End Function
+
+    Private Sub CollectShapeContextText(shape As PowerPoint.Shape, lines As List(Of String))
+        Try
+            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoGroup Then
+                For i = 1 To shape.GroupItems.Count
+                    CollectShapeContextText(shape.GroupItems(i), lines)
+                Next
+                Return
+            End If
+
+            If shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                Dim table = shape.Table
+                For row = 1 To table.Rows.Count
+                    For col = 1 To table.Columns.Count
+                        CollectShapeContextText(table.Cell(row, col).Shape, lines)
                     Next
                 Next
                 Return
@@ -256,21 +478,17 @@ Public Class Ribbon1
                shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
                 Dim text = shape.TextFrame.TextRange.Text
                 If Not String.IsNullOrWhiteSpace(text) Then
-                    targets.Add(New PptTextTarget() With {
-                        .TextRange = shape.TextFrame.TextRange,
-                        .Shape = shape,
-                        .OriginalText = text.Trim()
-                    })
+                    lines.Add(text.Trim())
                 End If
             End If
         Catch ex As Exception
-            Debug.WriteLine("收集形状文本失败: " & ex.Message)
+            Debug.WriteLine("收集形状上下文失败: " & ex.Message)
         End Try
     End Sub
 
-    Private Async Function RequestOptimizedTextAsync(modeName As String, originalText As String) As Task(Of String)
+    Private Async Function RequestOptimizedTextAsync(modeName As String, originalText As String, slideContextText As String) As Task(Of String)
         Dim systemPrompt = "你是一个专业的 PowerPoint 文案优化助手。你只返回处理后的文本，不要解释，不要添加标题，不要输出 Markdown。"
-        Dim prompt = BuildTextOptimizationPrompt(modeName, originalText)
+        Dim prompt = BuildTextOptimizationPrompt(modeName, originalText, slideContextText)
         Dim requestBody = LLMUtil.CreateLlmRequestBody(prompt, ConfigSettings.ModelName, systemPrompt, 0.35, 1200)
         Dim response = Await LLMUtil.SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
 
@@ -285,27 +503,37 @@ Public Class Ribbon1
         Return content.Trim()
     End Function
 
-    Private Function BuildTextOptimizationPrompt(modeName As String, originalText As String) As String
+    Private Function BuildTextOptimizationPrompt(modeName As String, originalText As String, slideContextText As String) As String
         Dim instruction As String
+        Dim sourceText = If(originalText, "").Trim()
+        Dim contextText = If(slideContextText, "").Trim()
         Select Case modeName
             Case "扩写"
                 instruction = "在不偏离原意的前提下扩写为更适合 PPT 展示的内容，语言自然、有条理。"
             Case "精简"
                 instruction = "精简为更适合 PPT 的短句，保留核心信息，删除重复和口语化表达。"
+            Case "填充"
+                instruction = "填充当前 PPT 文本框，使内容更完整、更充实，并保持适合幻灯片展示的长度。"
             Case "补全文案"
                 instruction = "补全为一段完整、清晰、适合放在 PPT 文本框中的文案。"
             Case Else
                 instruction = "润色为更专业、更清晰、更适合 PPT 展示的表达。"
         End Select
 
+        Dim contextSection = If(String.IsNullOrWhiteSpace(contextText), "", vbCrLf & vbCrLf & "当前页其他内容：" & vbCrLf & contextText)
+
         Return $"请执行：{instruction}
 
 原文：
-{originalText}"
+{If(String.IsNullOrWhiteSpace(sourceText), "当前文本框为空，请根据当前幻灯片语境生成适合填入该文本框的内容。", sourceText)}{contextSection}"
     End Function
 
     Private Function ApplySimpleBeautifyToCurrentSlide() As Integer
         Dim slide = GetCurrentSlide()
+        Return ApplySimpleBeautifyToSlide(slide)
+    End Function
+
+    Private Function ApplySimpleBeautifyToSlide(slide As PowerPoint.Slide) As Integer
         If slide Is Nothing Then Return 0
 
         Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
@@ -575,7 +803,7 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 演示版文本优化 - 复用当前模型配置
+    ' 文本优化 - 复用当前模型配置。
     Protected Overrides Async Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
             Dim modeName = ShowTextOptimizeDialog()

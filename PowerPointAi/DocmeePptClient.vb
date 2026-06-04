@@ -2,6 +2,7 @@ Imports System.Collections.Generic
 Imports System.IO
 Imports System.Net
 Imports System.Net.Http
+Imports System.Net.Http.Headers
 Imports System.Text
 Imports System.Threading.Tasks
 Imports Newtonsoft.Json
@@ -29,14 +30,66 @@ Public Class DocmeePptInfo
 End Class
 
 Public Class DocmeePptClient
-    Private Const ApiBaseUrl As String = "https://test.docmee.cn"
-    Private Const DemoToken As String = "ak_demo"
+    Private Shared ReadOnly Property CreateTaskEndpoint As String
+        Get
+            Return BuildEndpoint("/api/ppt/v2/createTask")
+        End Get
+    End Property
 
-    Private Shared ReadOnly CreateTaskEndpoint As String = ApiBaseUrl & "/api/ppt/v2/createTask"
-    Private Shared ReadOnly GenerateContentEndpoint As String = ApiBaseUrl & "/api/ppt/v2/generateContent"
-    Private Shared ReadOnly GeneratePptxEndpoint As String = ApiBaseUrl & "/api/ppt/v2/generatePptx"
-    Private Shared ReadOnly TemplateListEndpoint As String = ApiBaseUrl & "/api/ppt/templates?lang=zh-CN"
-    Private Shared ReadOnly DownloadPptxEndpoint As String = ApiBaseUrl & "/api/ppt/downloadPptx"
+    Private Shared ReadOnly Property GenerateContentEndpoint As String
+        Get
+            Return BuildEndpoint("/api/ppt/v2/generateContent")
+        End Get
+    End Property
+
+    Private Shared ReadOnly Property GeneratePptxEndpoint As String
+        Get
+            Return BuildEndpoint("/api/ppt/v2/generatePptx")
+        End Get
+    End Property
+
+    Private Shared ReadOnly Property TemplateListEndpoint As String
+        Get
+            Return BuildEndpoint("/api/ppt/templates?lang=zh-CN")
+        End Get
+    End Property
+
+    Private Shared ReadOnly Property DownloadPptxEndpoint As String
+        Get
+            Return BuildEndpoint("/api/ppt/downloadPptx")
+        End Get
+    End Property
+
+    Private Shared ReadOnly Property UpdatePptTemplateEndpoint As String
+        Get
+            Return BuildEndpoint("/api/ppt/updatePptTemplate")
+        End Get
+    End Property
+
+    Public Shared Function GetConfiguredApiBaseUrl() As String
+        Return ShareRibbon.ConfigSettings.GetDocmeeApiBaseUrl()
+    End Function
+
+    Public Shared Function GetConfiguredToken() As String
+        Return ShareRibbon.ConfigSettings.GetDocmeeToken()
+    End Function
+
+    Private Shared Function BuildEndpoint(path As String) As String
+        Return GetConfiguredApiBaseUrl() & path
+    End Function
+
+    Private Shared Sub AddDocmeeTokenHeader(headers As HttpHeaders)
+        Dim token = GetConfiguredToken()
+        If String.IsNullOrWhiteSpace(token) Then
+            Throw New InvalidOperationException("缺少 Docmee token，请配置 " &
+                                                ShareRibbon.ConfigSettings.DocmeeTokenAppSettingKey &
+                                                " 或环境变量 " &
+                                                ShareRibbon.ConfigSettings.DocmeeTokenEnvironmentVariable & "。")
+        End If
+
+        headers.Remove("token")
+        headers.TryAddWithoutValidation("token", token)
+    End Sub
 
     Public Shared Function GetFallbackTemplates() As List(Of DocmeeTemplateInfo)
         Return New List(Of DocmeeTemplateInfo) From {
@@ -86,6 +139,20 @@ Public Class DocmeePptClient
         Return Await CreateTaskAsync(markdown, "7")
     End Function
 
+    Public Async Function CreateFileTaskAsync(filePath As String) As Task(Of String)
+        If String.IsNullOrWhiteSpace(filePath) Then
+            Throw New ArgumentException("请选择要生成 PPT 的文档。", NameOf(filePath))
+        End If
+        If Not File.Exists(filePath) Then
+            Throw New FileNotFoundException("未找到要生成 PPT 的文档。", filePath)
+        End If
+        If Not IsSupportedUploadFile(filePath) Then
+            Throw New NotSupportedException("Docmee 文档生成暂不支持该文件格式。支持格式：doc/docx/pdf/ppt/pptx/txt/md/xls/xlsx/csv/html/epub/mobi/xmind/mm。")
+        End If
+
+        Return Await CreateFileTaskAsync(filePath, GetTaskTypeForFile(filePath))
+    End Function
+
     Private Async Function CreateTaskAsync(content As String, taskType As String) As Task(Of String)
         If String.IsNullOrWhiteSpace(content) Then
             Throw New ArgumentException("请输入主题或生成要求。", NameOf(content))
@@ -95,13 +162,13 @@ Public Class DocmeePptClient
         End If
 
         Using client = CreateHttpClient()
-            client.DefaultRequestHeaders.Add("token", DemoToken)
+            AddDocmeeTokenHeader(client.DefaultRequestHeaders)
             Using form As New MultipartFormDataContent()
                 form.Add(New StringContent(taskType, Encoding.UTF8), "type")
                 form.Add(New StringContent(content.Trim(), Encoding.UTF8), "content")
 
-                Using response = Await client.PostAsync(CreateTaskEndpoint, form)
-                    Dim responseText = Await response.Content.ReadAsStringAsync()
+                Using response = Await client.PostAsync(CreateTaskEndpoint, form).ConfigureAwait(False)
+                    Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     EnsureSuccess(response, responseText)
 
                     Dim payload = JObject.Parse(responseText)
@@ -116,6 +183,67 @@ Public Class DocmeePptClient
                 End Using
             End Using
         End Using
+    End Function
+
+    Private Async Function CreateFileTaskAsync(filePath As String, taskType As String) As Task(Of String)
+        If String.IsNullOrWhiteSpace(taskType) Then
+            Throw New ArgumentException("缺少 Docmee 文件任务类型。", NameOf(taskType))
+        End If
+
+        Using client = CreateHttpClient()
+            AddDocmeeTokenHeader(client.DefaultRequestHeaders)
+            Using form As New MultipartFormDataContent()
+                form.Add(New StringContent(taskType, Encoding.UTF8), "type")
+
+                Using fileStream As New FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read)
+                    Using fileContent As New StreamContent(fileStream)
+                        fileContent.Headers.ContentType = New MediaTypeHeaderValue("application/octet-stream")
+                        form.Add(fileContent, "file", Path.GetFileName(filePath))
+
+                        Using response = Await client.PostAsync(CreateTaskEndpoint, form).ConfigureAwait(False)
+                            Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                            EnsureSuccess(response, responseText)
+
+                            Dim payload = JObject.Parse(responseText)
+                            EnsureDocmeeSuccess(payload)
+
+                            Dim taskId = TryGetString(payload.SelectToken("data.id"))
+                            If String.IsNullOrWhiteSpace(taskId) Then
+                                Throw New InvalidOperationException("Docmee 创建文档任务成功，但未返回任务 ID。")
+                            End If
+
+                            Return taskId
+                        End Using
+                    End Using
+                End Using
+            End Using
+        End Using
+    End Function
+
+    Private Shared Function GetTaskTypeForFile(filePath As String) As String
+        ' The task pane needs generateContent to produce editable Markdown.
+        ' Docmee type=4 is Word precise conversion and ignores prompt; type=2 supports uploaded documents.
+        Dim extension = Path.GetExtension(filePath)
+        If String.IsNullOrWhiteSpace(extension) Then Return "2"
+
+        Select Case extension.Trim().ToLowerInvariant()
+            Case ".xmind", ".mm"
+                Return "3"
+            Case Else
+                Return "2"
+        End Select
+    End Function
+
+    Private Shared Function IsSupportedUploadFile(filePath As String) As Boolean
+        Dim extension = Path.GetExtension(filePath)
+        If String.IsNullOrWhiteSpace(extension) Then Return False
+
+        Select Case extension.Trim().ToLowerInvariant()
+            Case ".doc", ".docx", ".pdf", ".ppt", ".pptx", ".txt", ".md", ".xls", ".xlsx", ".csv", ".html", ".epub", ".mobi", ".xmind", ".mm"
+                Return True
+            Case Else
+                Return False
+        End Select
     End Function
 
     Public Async Function GenerateContentAsync(taskId As String, Optional progressHandler As Action(Of String) = Nothing) As Task(Of JObject)
@@ -140,23 +268,25 @@ Public Class DocmeePptClient
 
         Using client = CreateHttpClient()
             Using request As New HttpRequestMessage(HttpMethod.Post, GenerateContentEndpoint)
-                request.Headers.Add("token", DemoToken)
+                AddDocmeeTokenHeader(request.Headers)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using response = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
+                Using response = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)
                     EnsureSuccess(response, "")
-                    Using responseStream = Await response.Content.ReadAsStreamAsync()
-                        Return Await ReadGeneratedOutlineStreamAsync(responseStream, progressHandler)
+                    Using responseStream = Await response.Content.ReadAsStreamAsync().ConfigureAwait(False)
+                        Return Await ReadGeneratedOutlineStreamAsync(responseStream, progressHandler).ConfigureAwait(False)
                     End Using
                 End Using
             End Using
         End Using
     End Function
 
-    Public Async Function GenerateMarkdownContentAsync(taskId As String, Optional progressHandler As Action(Of String) = Nothing) As Task(Of String)
+    Public Async Function GenerateMarkdownContentAsync(taskId As String, Optional progressHandler As Action(Of String) = Nothing, Optional promptOverride As String = Nothing) As Task(Of String)
         If String.IsNullOrWhiteSpace(taskId) Then
             Throw New ArgumentException("缺少 Docmee 任务 ID。", NameOf(taskId))
         End If
+
+        Dim promptText = NormalizeDocmeePrompt(promptOverride)
 
         Dim payload As New JObject From {
             {"id", taskId.Trim()},
@@ -168,24 +298,30 @@ Public Class DocmeePptClient
             {"scene", "产品介绍"},
             {"audience", "客户"},
             {"lang", "zh"},
-            {"prompt", "语气专业，适合演示"},
+            {"prompt", promptText},
             {"aiSearch", False},
             {"isGenImg", False}
         }
 
         Using client = CreateHttpClient()
             Using request As New HttpRequestMessage(HttpMethod.Post, GenerateContentEndpoint)
-                request.Headers.Add("token", DemoToken)
+                AddDocmeeTokenHeader(request.Headers)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using response = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
+                Using response = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)
                     EnsureSuccess(response, "")
-                    Using responseStream = Await response.Content.ReadAsStreamAsync()
-                        Return Await ReadGeneratedMarkdownStreamAsync(responseStream, progressHandler)
+                    Using responseStream = Await response.Content.ReadAsStreamAsync().ConfigureAwait(False)
+                        Return Await ReadGeneratedMarkdownStreamAsync(responseStream, progressHandler).ConfigureAwait(False)
                     End Using
                 End Using
             End Using
         End Using
+    End Function
+
+    Private Shared Function NormalizeDocmeePrompt(promptOverride As String) As String
+        Dim normalized = If(String.IsNullOrWhiteSpace(promptOverride), "语气专业，适合演示", promptOverride.Trim())
+        If normalized.Length > 49 Then normalized = normalized.Substring(0, 49)
+        Return normalized
     End Function
 
     Public Async Function ListTemplatesAsync(Optional page As Integer = 1, Optional size As Integer = 10, Optional cancellationToken As Threading.CancellationToken = Nothing) As Task(Of List(Of DocmeeTemplateInfo))
@@ -202,7 +338,7 @@ Public Class DocmeePptClient
 
         Using client = CreateHttpClient(TimeSpan.FromSeconds(12))
             Using request As New HttpRequestMessage(HttpMethod.Post, TemplateListEndpoint)
-                request.Headers.Add("token", DemoToken)
+                AddDocmeeTokenHeader(request.Headers)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
                 Using response = Await client.SendAsync(request, cancellationToken).ConfigureAwait(False)
@@ -248,7 +384,7 @@ Public Class DocmeePptClient
                 Dim currentUrl = coverUrl.Trim()
                 For redirectCount As Integer = 0 To 4
                     Using request As New HttpRequestMessage(HttpMethod.Get, currentUrl)
-                        request.Headers.TryAddWithoutValidation("token", DemoToken)
+                        AddDocmeeTokenHeader(request.Headers)
 
                         Using response = Await client.SendAsync(request, cancellationToken).ConfigureAwait(False)
                             If IsRedirectStatusCode(response.StatusCode) Then
@@ -315,11 +451,11 @@ Public Class DocmeePptClient
 
         Using client = CreateHttpClient()
             Using request As New HttpRequestMessage(HttpMethod.Post, GeneratePptxEndpoint)
-                request.Headers.Add("token", DemoToken)
+                AddDocmeeTokenHeader(request.Headers)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using response = Await client.SendAsync(request)
-                    Dim responseText = Await response.Content.ReadAsStringAsync()
+                Using response = Await client.SendAsync(request).ConfigureAwait(False)
+                    Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     EnsureSuccess(response, responseText)
 
                     Dim result = JObject.Parse(responseText)
@@ -359,11 +495,11 @@ Public Class DocmeePptClient
 
         Using client = CreateHttpClient()
             Using request As New HttpRequestMessage(HttpMethod.Post, DownloadPptxEndpoint)
-                request.Headers.Add("token", DemoToken)
+                AddDocmeeTokenHeader(request.Headers)
                 request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using response = Await client.SendAsync(request)
-                    Dim responseText = Await response.Content.ReadAsStringAsync()
+                Using response = Await client.SendAsync(request).ConfigureAwait(False)
+                    Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     EnsureSuccess(response, responseText)
 
                     Dim result = JObject.Parse(responseText)
@@ -380,6 +516,40 @@ Public Class DocmeePptClient
         End Using
     End Function
 
+    Public Async Function UpdatePptTemplateAsync(pptId As String, templateId As String, Optional sync As Boolean = False) As Task(Of String)
+        If String.IsNullOrWhiteSpace(pptId) Then
+            Throw New ArgumentException("缺少 PPT ID。", NameOf(pptId))
+        End If
+        If String.IsNullOrWhiteSpace(templateId) Then
+            Throw New ArgumentException("请选择要更换的模板。", NameOf(templateId))
+        End If
+
+        Dim payload As New JObject From {
+            {"pptId", pptId.Trim()},
+            {"templateId", templateId.Trim()},
+            {"sync", sync}
+        }
+
+        Using client = CreateHttpClient()
+            Using request As New HttpRequestMessage(HttpMethod.Post, UpdatePptTemplateEndpoint)
+                AddDocmeeTokenHeader(request.Headers)
+                request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
+
+                Using response = Await client.SendAsync(request).ConfigureAwait(False)
+                    Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                    EnsureSuccess(response, responseText)
+
+                    Dim result = JObject.Parse(responseText)
+                    EnsureDocmeeSuccess(result)
+
+                    Dim updatedPptId = TryGetString(result.SelectToken("data.pptId"))
+                    If String.IsNullOrWhiteSpace(updatedPptId) Then updatedPptId = pptId.Trim()
+                    Return updatedPptId
+                End Using
+            End Using
+        End Using
+    End Function
+
     Public Async Function DownloadPptxFileAsync(fileUrl As String, destinationPath As String) As Task
         If String.IsNullOrWhiteSpace(fileUrl) Then
             Throw New ArgumentException("缺少 PPT 下载地址。", NameOf(fileUrl))
@@ -389,10 +559,21 @@ Public Class DocmeePptClient
         End If
 
         Using client = CreateHttpClient()
-            Dim bytes = Await client.GetByteArrayAsync(fileUrl)
+            Dim bytes = Await client.GetByteArrayAsync(fileUrl).ConfigureAwait(False)
+            ValidatePptxBytes(bytes)
             File.WriteAllBytes(destinationPath, bytes)
         End Using
     End Function
+
+    Private Shared Sub ValidatePptxBytes(bytes As Byte())
+        If bytes Is Nothing OrElse bytes.Length < 4 Then
+            Throw New InvalidOperationException("Docmee PPTX 下载结果为空。")
+        End If
+
+        If bytes(0) <> &H50 OrElse bytes(1) <> &H4B Then
+            Throw New InvalidOperationException("Docmee PPTX 下载结果不是有效的 PPTX 文件。")
+        End If
+    End Sub
 
     Private Shared Function CreateHttpClient() As HttpClient
         Return CreateHttpClient(TimeSpan.FromMinutes(5))
@@ -429,7 +610,7 @@ Public Class DocmeePptClient
 
         Using reader As New StreamReader(responseStream, Encoding.UTF8)
             Do
-                Dim line = Await reader.ReadLineAsync()
+                Dim line = Await reader.ReadLineAsync().ConfigureAwait(False)
                 If line Is Nothing Then Exit Do
 
                 rawResponse.AppendLine(line)
@@ -469,7 +650,7 @@ Public Class DocmeePptClient
 
         Using reader As New StreamReader(responseStream, Encoding.UTF8)
             Do
-                Dim line = Await reader.ReadLineAsync()
+                Dim line = Await reader.ReadLineAsync().ConfigureAwait(False)
                 If line Is Nothing Then Exit Do
 
                 rawResponse.AppendLine(line)

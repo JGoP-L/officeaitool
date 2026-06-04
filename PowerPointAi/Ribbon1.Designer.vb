@@ -73,23 +73,26 @@ Partial Class Ribbon1
         Me.ContinuationButton.Image = ShareRibbon.SharedResources.Aiwrite
         Me.ContinuationButton.Label = "文本优化"
         Me.ContinuationButton.ScreenTip = "PPT文本优化"
-        Me.ContinuationButton.SuperTip = "选中文字后可润色、扩写、精简或补全文案，并替换回当前 PPT"
+        Me.ContinuationButton.SuperTip = "选中文字后可润色、扩写、精简、填充或补全文案，并替换回当前 PPT"
 
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
         Me.TranslateButton.Label = "文本翻译"
         Me.TranslateButton.ScreenTip = "PPT文本翻译"
         Me.TranslateButton.SuperTip = "翻译当前页文本并替换原文，支持多语言，翻译后自动适配文本框"
-        Me.ProofreadButton.Visible = False
+        Me.ProofreadButton.Visible = True
+        Me.ProofreadButton.Label = "替换单页"
+        Me.ProofreadButton.ScreenTip = "PPT单页替换"
+        Me.ProofreadButton.SuperTip = "根据输入要求生成新单页，并替换当前幻灯片"
         Me.ReformatButton.Visible = True
         Me.ReformatButton.Label = "美化单页"
         Me.ReformatButton.ScreenTip = "PPT单页美化"
-        Me.ReformatButton.SuperTip = "对当前页应用演示版排版美化，统一字体、颜色、标题和文本框适配"
+        Me.ReformatButton.SuperTip = "对当前页应用排版美化，统一字体、颜色、标题和文本框适配"
         Me.DataAnalysisButton.Visible = False
         Me.TemplateFormatButton.Visible = True
         Me.TemplateFormatButton.Image = ShareRibbon.SharedResources.Aiwrite
-        Me.TemplateFormatButton.Label = "主题生成PPT"
-        Me.TemplateFormatButton.ScreenTip = "主题生成PPT"
-        Me.TemplateFormatButton.SuperTip = "输入主题，调用 Docmee V2 测试接口生成大纲，并插入为简单 PPT"
+        Me.TemplateFormatButton.Label = "AI生成PPT"
+        Me.TemplateFormatButton.ScreenTip = "AI生成PPT"
+        Me.TemplateFormatButton.SuperTip = "支持标题生成、文档生成、Markdown 大纲编辑、选择模板生成和一键更换主题"
     End Sub
 
 End Class
