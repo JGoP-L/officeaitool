@@ -17,13 +17,15 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class ThemePptTaskPane
     Inherits UserControl
 
-    Private Const ThemePptPaneBuild As String = "2026.06.03.17"
+    Private Const ThemePptPaneBuild As String = "2026.06.04.5"
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
     Private Const GenerationModeTitle As String = "标题生成"
     Private Const GenerationModeDocument As String = "文档生成"
     Private Const GenerationModeMarkdown As String = "Markdown大纲"
-    Private Shared ReadOnly MarkdownPreviewPipeline As MarkdownPipeline = New MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build()
+    Private Shared ReadOnly MarkdownPreviewPipelineLock As New Object()
+    Private Shared _markdownPreviewPipeline As MarkdownPipeline
+    Private Shared _markdownPreviewPipelineInitializeError As String
 
     Private ReadOnly _pptApp As PowerPoint.Application
     Private ReadOnly _client As New DocmeePptClient()
@@ -86,8 +88,10 @@ Public Class ThemePptTaskPane
     Private _templateWebViewReady As Boolean
     Private _templateWebViewInitializing As Boolean
     Private _pendingTemplateGalleryRender As Boolean
+    Private ReadOnly _uiThreadId As Integer
 
     Public Sub New(pptApp As PowerPoint.Application)
+        _uiThreadId = Thread.CurrentThread.ManagedThreadId
         _pptApp = pptApp
         AppendThemePptLog("Pane constructing. Build=" & ThemePptPaneBuild)
         BuildLayout()
@@ -265,8 +269,8 @@ Public Class ThemePptTaskPane
         _outlineWorkspacePanel.Dock = DockStyle.Fill
         _outlineWorkspacePanel.Orientation = Orientation.Horizontal
         _outlineWorkspacePanel.SplitterWidth = 6
-        _outlineWorkspacePanel.Panel1MinSize = 120
-        _outlineWorkspacePanel.Panel2MinSize = 120
+        _outlineWorkspacePanel.Panel1MinSize = 180
+        _outlineWorkspacePanel.Panel2MinSize = 100
         _outlineWorkspacePanel.Visible = False
 
         Dim outlineEditorPanel As New TableLayoutPanel()
@@ -285,10 +289,10 @@ Public Class ThemePptTaskPane
         _outlineEditor.Dock = DockStyle.Fill
         _outlineEditor.Multiline = True
         _outlineEditor.ReadOnly = False
-        _outlineEditor.ScrollBars = ScrollBars.Both
-        _outlineEditor.WordWrap = False
+        _outlineEditor.ScrollBars = ScrollBars.Vertical
+        _outlineEditor.WordWrap = True
         _outlineEditor.AcceptsTab = True
-        _outlineEditor.Font = New Font("Consolas", 9.0F, FontStyle.Regular)
+        _outlineEditor.Font = New Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular)
         _outlineEditor.BorderStyle = BorderStyle.FixedSingle
         _outlineEditor.BackColor = Color.White
         AddHandler _outlineEditor.TextChanged, AddressOf OutlineEditor_TextChanged
@@ -518,6 +522,11 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub ShowOutlineOutput()
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() ShowOutlineOutput(), MethodInvoker))
+            Return
+        End If
+
         _outlineWorkspacePanel.Visible = False
         _templateCardPanel.Visible = False
         _templateListBox.Visible = False
@@ -528,6 +537,11 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub ShowOutlineEditor()
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() ShowOutlineEditor(), MethodInvoker))
+            Return
+        End If
+
         _templateCardPanel.Visible = False
         _templateListBox.Visible = False
         _templateWebView.Visible = False
@@ -535,6 +549,23 @@ Public Class ThemePptTaskPane
         _outputBox.Visible = False
         _outlineWorkspacePanel.Visible = True
         _outlineWorkspacePanel.BringToFront()
+        BeginInvokeIfAlive(CType(Sub() ApplyOutlineWorkspaceLayout(), MethodInvoker))
+    End Sub
+
+    Private Sub ApplyOutlineWorkspaceLayout()
+        If _outlineWorkspacePanel.IsDisposed OrElse Not _outlineWorkspacePanel.Visible Then Return
+
+        Try
+            Dim availableHeight = _outlineWorkspacePanel.Height - _outlineWorkspacePanel.SplitterWidth
+            If availableHeight <= 0 Then Return
+
+            Dim desiredEditorHeight = Math.Max(_outlineWorkspacePanel.Panel1MinSize, CInt(availableHeight * 0.62))
+            Dim maxEditorHeight = Math.Max(_outlineWorkspacePanel.Panel1MinSize, availableHeight - _outlineWorkspacePanel.Panel2MinSize)
+            desiredEditorHeight = Math.Min(desiredEditorHeight, maxEditorHeight)
+            If desiredEditorHeight > 0 Then _outlineWorkspacePanel.SplitterDistance = desiredEditorHeight
+        Catch ex As Exception
+            AppendThemePptLog("Apply outline workspace layout failed: " & ex.ToString())
+        End Try
     End Sub
 
     Private Sub ShowTemplateGallery()
@@ -753,6 +784,11 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub RefreshActionButtons()
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() RefreshActionButtons(), MethodInvoker))
+            Return
+        End If
+
         _finishOutlineEditButton.Enabled = Not String.IsNullOrWhiteSpace(GetEditedMarkdown()) AndAlso Not _isOutlineEditCompleted
         _refreshTemplatesButton.Enabled = _isOutlineEditCompleted AndAlso Not _isTemplateLoading
         _selectTemplateButton.Enabled = CanChooseTemplate()
@@ -765,9 +801,14 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub SetOutlineEditorText(markdown As String)
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() SetOutlineEditorText(markdown), MethodInvoker))
+            Return
+        End If
+
         _suppressOutlineEditorChange = True
         Try
-        _outlineEditor.Text = If(markdown, "")
+            _outlineEditor.Text = If(markdown, "")
             _outlineEditor.SelectionStart = 0
             _outlineEditor.ScrollToCaret()
         Finally
@@ -849,7 +890,7 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub ScheduleMarkdownPreviewUpdate(Optional immediate As Boolean = False)
-        If _outlinePreviewWebView.InvokeRequired Then
+        If Not IsOnPaneUiThread() Then
             BeginInvokeIfAlive(CType(Sub() ScheduleMarkdownPreviewUpdate(immediate), MethodInvoker))
             Return
         End If
@@ -858,11 +899,16 @@ Public Class ThemePptTaskPane
         _markdownPreviewRenderGeneration += 1
         _outlinePreviewDebounceTimer.Stop()
 
-        If immediate Then
-            OutlinePreviewDebounceTimer_Tick(_outlinePreviewDebounceTimer, EventArgs.Empty)
-        Else
-            _outlinePreviewDebounceTimer.Start()
-        End If
+        Try
+            If immediate Then
+                BeginInvokeIfAlive(CType(Sub() OutlinePreviewDebounceTimer_Tick(_outlinePreviewDebounceTimer, EventArgs.Empty), MethodInvoker))
+            Else
+                _outlinePreviewDebounceTimer.Start()
+            End If
+        Catch ex As Exception
+            _pendingOutlinePreviewRender = True
+            AppendThemePptLog("Schedule markdown preview failed: " & ex.ToString())
+        End Try
     End Sub
 
     Private Function BeginInvokeIfAlive(action As MethodInvoker) As Boolean
@@ -878,31 +924,92 @@ Public Class ThemePptTaskPane
         End Try
     End Function
 
+    Private Function IsOnPaneUiThread() As Boolean
+        Return Thread.CurrentThread.ManagedThreadId = _uiThreadId AndAlso Not Me.InvokeRequired
+    End Function
+
     Private Async Sub OutlinePreviewDebounceTimer_Tick(sender As Object, e As EventArgs)
-        _outlinePreviewDebounceTimer.Stop()
+        Try
+            If Not IsOnPaneUiThread() Then
+                BeginInvokeIfAlive(CType(Sub() OutlinePreviewDebounceTimer_Tick(sender, e), MethodInvoker))
+                Return
+            End If
 
-        If Not _outlinePreviewReady OrElse _outlinePreviewWebView.CoreWebView2 Is Nothing Then
+            _outlinePreviewDebounceTimer.Stop()
+
+            If Not _outlinePreviewReady OrElse _outlinePreviewWebView.CoreWebView2 Is Nothing Then
+                _pendingOutlinePreviewRender = True
+                Return
+            End If
+
+            _pendingOutlinePreviewRender = False
+            Dim renderGeneration = _markdownPreviewRenderGeneration
+            Dim markdownSnapshot = GetEditedMarkdown()
+            Dim previewHtml = Await Task.Run(Function() BuildMarkdownPreviewHtml(markdownSnapshot))
+
+            If Not IsOnPaneUiThread() Then
+                BeginInvokeIfAlive(CType(Sub() NavigateMarkdownPreview(renderGeneration, previewHtml), MethodInvoker))
+                Return
+            End If
+
+            NavigateMarkdownPreview(renderGeneration, previewHtml)
+        Catch ex As Exception
             _pendingOutlinePreviewRender = True
-            Return
-        End If
-
-        _pendingOutlinePreviewRender = False
-        Dim renderGeneration = _markdownPreviewRenderGeneration
-        Dim markdownSnapshot = GetEditedMarkdown()
-        Dim previewHtml = Await Task.Run(Function() BuildMarkdownPreviewHtml(markdownSnapshot))
-
-        If renderGeneration <> _markdownPreviewRenderGeneration Then Return
-        If _outlinePreviewWebView.IsDisposed OrElse _outlinePreviewWebView.CoreWebView2 Is Nothing Then Return
-
-        _outlinePreviewWebView.NavigateToString(previewHtml)
+            AppendThemePptLog("Markdown preview update failed: " & ex.ToString())
+        End Try
     End Sub
+
+    Private Sub NavigateMarkdownPreview(renderGeneration As Integer, previewHtml As String)
+        Try
+            If Not IsOnPaneUiThread() Then
+                BeginInvokeIfAlive(CType(Sub() NavigateMarkdownPreview(renderGeneration, previewHtml), MethodInvoker))
+                Return
+            End If
+
+            If renderGeneration <> _markdownPreviewRenderGeneration Then Return
+            If _outlinePreviewWebView.IsDisposed Then Return
+
+            If Not _outlinePreviewReady OrElse _outlinePreviewWebView.CoreWebView2 Is Nothing Then
+                _pendingOutlinePreviewRender = True
+                Return
+            End If
+
+            _outlinePreviewWebView.NavigateToString(previewHtml)
+        Catch ex As Exception
+            _pendingOutlinePreviewRender = True
+            AppendThemePptLog("Markdown preview navigate failed: " & ex.ToString())
+        End Try
+    End Sub
+
+    Private Shared Function GetMarkdownPreviewPipeline() As MarkdownPipeline
+        If _markdownPreviewPipeline IsNot Nothing Then Return _markdownPreviewPipeline
+
+        SyncLock MarkdownPreviewPipelineLock
+            If _markdownPreviewPipeline IsNot Nothing Then Return _markdownPreviewPipeline
+
+            Try
+                _markdownPreviewPipeline = New MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build()
+                _markdownPreviewPipelineInitializeError = Nothing
+            Catch ex As Exception
+                _markdownPreviewPipelineInitializeError = ex.Message
+                AppendThemePptLog("Markdown preview pipeline initialize failed: " & ex.ToString())
+            End Try
+
+            Return _markdownPreviewPipeline
+        End SyncLock
+    End Function
 
     Private Function BuildMarkdownPreviewHtml(markdown As String) As String
         Dim safeMarkdown = If(markdown, "")
         Dim renderedMarkdown As String
 
         Try
-            renderedMarkdown = Markdig.Markdown.ToHtml(safeMarkdown, MarkdownPreviewPipeline)
+            Dim previewPipeline = GetMarkdownPreviewPipeline()
+            If previewPipeline Is Nothing Then
+                Throw New InvalidOperationException("Markdown preview renderer unavailable: " & If(_markdownPreviewPipelineInitializeError, "unknown error"))
+            End If
+
+            renderedMarkdown = Markdig.Markdown.ToHtml(safeMarkdown, previewPipeline)
         Catch ex As Exception
             renderedMarkdown = "<pre class=""error"">Markdown 渲染失败：" & EscapeHtml(ex.Message) & "</pre>"
         End Try
@@ -1208,6 +1315,7 @@ Public Class ThemePptTaskPane
             ShowOutlineEditor()
             SetStatus("大纲已生成，请编辑 Markdown，完成编辑后再选择模板生成。")
         Catch ex As Exception
+            AppendThemePptLog("GenerateOutlineAsync exception: " & ex.ToString())
             SetStatus("生成失败。")
             ShowOutlineOutput()
             MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
@@ -1535,7 +1643,7 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub UpdateTemplateCoverLoadStatus(loadGeneration As Integer)
-        If Me.InvokeRequired Then
+        If Not IsOnPaneUiThread() Then
             BeginInvokeIfAlive(CType(Sub() UpdateTemplateCoverLoadStatus(loadGeneration), MethodInvoker))
             Return
         End If
@@ -1618,7 +1726,7 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub SetTemplateCoverImage(templateId As String, image As Image, loadGeneration As Integer, Optional coverVirtualUrl As String = "")
-        If Me.InvokeRequired Then
+        If Not IsOnPaneUiThread() Then
             If Not BeginInvokeIfAlive(CType(Sub() SetTemplateCoverImage(templateId, image, loadGeneration, coverVirtualUrl), MethodInvoker)) AndAlso image IsNot Nothing Then
                 image.Dispose()
             End If
@@ -1694,7 +1802,7 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub MarkTemplateCoverUnavailable(templateId As String, loadGeneration As Integer, Optional reason As String = "")
-        If Me.InvokeRequired Then
+        If Not IsOnPaneUiThread() Then
             BeginInvokeIfAlive(CType(Sub() MarkTemplateCoverUnavailable(templateId, loadGeneration, reason), MethodInvoker))
             Return
         End If
@@ -3360,6 +3468,11 @@ Public Class ThemePptTaskPane
     End Class
 
     Private Sub SetStatus(text As String)
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() SetStatus(text), MethodInvoker))
+            Return
+        End If
+
         AppendThemePptLog("Status: " & If(text, ""))
         _statusLabel.Text = text
     End Sub
