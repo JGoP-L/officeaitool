@@ -66,6 +66,7 @@ Public Class Ribbon1
 
     Protected Overrides Async Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("AI内容提效：正在启动替换单页...")
             LogInfo("[ReplaceSlide] Button clicked.")
             Dim request = ShowReplaceSlideDialog()
             LogInfo("[ReplaceSlide] Dialog closed. hasRequest=" & (request IsNot Nothing).ToString())
@@ -580,6 +581,7 @@ Public Class Ribbon1
         UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在生成美化页面...")
 
         Try
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("AI内容提效：正在启动美化当前页...")
             Dim pptxId = ResolveDocmeePptxId()
             If String.IsNullOrWhiteSpace(pptxId) Then
                 pptxId = DocmeePptClient.GetRandomNewPageTemplateId()
@@ -1019,6 +1021,7 @@ Public Class Ribbon1
     ' 文本翻译入口改为选中文本 AI 创作，使用 Docmee 流式 textOptimize 接口。
     Protected Overrides Async Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("AI内容提效：正在启动 AI创作...")
             Dim creationOptions = ShowAiCreationDialog()
             If creationOptions Is Nothing OrElse String.IsNullOrWhiteSpace(creationOptions.ModeName) Then Return
 

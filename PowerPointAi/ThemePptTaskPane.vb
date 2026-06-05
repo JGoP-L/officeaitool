@@ -779,8 +779,7 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Function CanChooseTemplate() As Boolean
-        Return _isOutlineEditCompleted AndAlso
-               Not _isTemplateLoading AndAlso
+        Return Not _isTemplateLoading AndAlso
                _templateCombo.Items.Count > 0 AndAlso
                Not String.IsNullOrWhiteSpace(GetEditedMarkdown())
     End Function
@@ -788,10 +787,8 @@ Public Class ThemePptTaskPane
     Private Function CanGenerateFromTemplate() As Boolean
         Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
         Return CanChooseTemplate() AndAlso
-               _templateConfirmedForCurrentOutline AndAlso
                selectedTemplate IsNot Nothing AndAlso
-               Not String.IsNullOrWhiteSpace(selectedTemplate.Id) AndAlso
-               String.Equals(selectedTemplate.Id, _confirmedTemplateId, StringComparison.Ordinal)
+               Not String.IsNullOrWhiteSpace(selectedTemplate.Id)
     End Function
 
     Private Sub RefreshActionButtons()
@@ -2545,19 +2542,9 @@ Public Class ThemePptTaskPane
             Return
         End Try
 
-        If Not _isOutlineEditCompleted Then
-            MessageBox.Show("请先完成 Markdown 大纲编辑。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
         Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
         If selectedTemplate Is Nothing OrElse String.IsNullOrWhiteSpace(selectedTemplate.Id) Then
             MessageBox.Show("请先选择模板。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        If Not _templateConfirmedForCurrentOutline Then
-            MessageBox.Show("请先预览并选择模板。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
@@ -2571,6 +2558,8 @@ Public Class ThemePptTaskPane
 
         Try
             _outlineMarkdown = markdown
+            _templateConfirmedForCurrentOutline = True
+            _confirmedTemplateId = selectedTemplate.Id
 
             SetStatus("正在创建模板生成任务...")
             AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)
