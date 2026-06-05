@@ -21,15 +21,10 @@ Public MustInherit Class BaseOfficeRibbon
         ' Phase 1: 后台预加载程序集（与配置加载并行）
         PhaseStartupManager.Instance.StartRequiredPhase()
 
-        ' 将文件 I/O 密集的配置加载推迟到后台线程：
-        '   ConfigManager.LoadConfig()     读取 API 配置 JSON
-        '   ConfigPromptForm.LoadConfig()  读取提示词模板 JSON
-        ' 两者均为纯文件操作，不涉及 COM/UI，在后台线程执行安全，可避免阻塞 Ribbon 渲染
+        ' 将文件 I/O 密集的模型配置加载推迟到后台线程。
         Await Task.Run(Sub()
             Dim apiConfig As New ConfigManager()
             apiConfig.LoadConfig()
-            Dim promptConfig As New ConfigPromptForm(appInfo)
-            promptConfig.LoadConfig()
         End Sub)
 
         ' Phase 2: 后台预加载 WebView2/SQLite/Resource（fire-and-forget，不阻塞）

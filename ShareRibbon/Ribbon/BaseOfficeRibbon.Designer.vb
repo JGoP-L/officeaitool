@@ -71,12 +71,11 @@ Partial Class BaseOfficeRibbon
         Me.SuspendLayout()
 
         ' ========== TabAI 布局 ==========
-        Me.TabAI.Groups.Add(Me.GroupConfig)     ' 1. 模型配置
-        Me.TabAI.Groups.Add(Me.GroupChat)       ' 2. AI对话
-        Me.TabAI.Groups.Add(Me.GroupAIContent)  ' 3. AI内容提效
-        Me.TabAI.Groups.Add(Me.GroupTools)      ' 4. 工具箱
-        Me.TabAI.Groups.Add(Me.GroupMCP)        ' 5. MCP连接
-        Me.TabAI.Groups.Add(Me.GroupAbout)      ' 6. 设置
+        Me.TabAI.Groups.Add(Me.GroupChat)       ' 1. AI创作
+        Me.TabAI.Groups.Add(Me.GroupAIContent)  ' 2. AI内容提效
+        Me.TabAI.Groups.Add(Me.GroupTools)      ' 3. 工具箱
+        Me.TabAI.Groups.Add(Me.GroupMCP)        ' 4. MCP连接
+        Me.TabAI.Groups.Add(Me.GroupAbout)      ' 5. 设置
 
         Me.TabAI.Label = "wenduoduoAI"
         Me.TabAI.Name = "TabAI"
@@ -102,9 +101,8 @@ Partial Class BaseOfficeRibbon
         Me.PromptConfigButton.SuperTip = "管理和配置AI对话的系统提示词"
 
         ' ========== Group 2: AI对话 ==========
-        Me.GroupChat.Items.Add(Me.ChatButton)
         Me.GroupChat.Items.Add(Me.TranslateButton)
-        Me.GroupChat.Label = "AI对话"
+        Me.GroupChat.Label = "AI创作"
         Me.GroupChat.Name = "GroupChat"
 
         Me.ChatButton.Label = "Chat AI"
@@ -114,15 +112,14 @@ Partial Class BaseOfficeRibbon
         Me.ChatButton.ScreenTip = "AI对话助手"
         Me.ChatButton.SuperTip = "打开AI对话面板，支持多轮对话和代码执行"
 
-        Me.TranslateButton.Label = "AI翻译"
+        Me.TranslateButton.Label = "AI创作"
         Me.TranslateButton.Name = "TranslateButton"
         Me.TranslateButton.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
         Me.TranslateButton.ShowImage = True
-        Me.TranslateButton.ScreenTip = "一键翻译文档内容"
-        Me.TranslateButton.SuperTip = "支持全文翻译、选区翻译、沉浸式翻译等多种模式"
+        Me.TranslateButton.ScreenTip = "AI创作"
+        Me.TranslateButton.SuperTip = "选中文字后可润色、扩写、缩写或翻译，并替换回当前内容"
 
         ' ========== Group 3: AI内容提效 ==========
-        Me.GroupAIContent.Items.Add(Me.ContinuationButton)
         Me.GroupAIContent.Items.Add(Me.ProofreadButton)
         Me.GroupAIContent.Items.Add(Me.ReformatButton)
         Me.GroupAIContent.Items.Add(Me.TemplateFormatButton)

@@ -1,4 +1,4 @@
-Imports System.Collections.Generic
+﻿Imports System.Collections.Generic
 Imports System.IO
 Imports System.Net
 Imports System.Net.Http
@@ -97,12 +97,6 @@ Public Class DocmeePptClient
     Private Shared ReadOnly Property DownloadPptxEndpoint As String
         Get
             Return BuildEndpoint("/api/ppt/downloadPptx")
-        End Get
-    End Property
-
-    Private Shared ReadOnly Property UpdatePptTemplateEndpoint As String
-        Get
-            Return BuildEndpoint("/api/ppt/updatePptTemplate")
         End Get
     End Property
 
@@ -574,7 +568,7 @@ Public Class DocmeePptClient
         End Using
     End Function
 
-    Public Async Function NewPageWithAiV2Async(content As String, pptxId As String, Optional progressHandler As Action(Of String) = Nothing) As Task(Of DocmeeNewPageResult)
+    Public Async Function NewPageWithAiV2Async(content As String, pptxId As String, Optional progressHandler As Action(Of String) = Nothing, Optional templateIdOverride As String = "") As Task(Of DocmeeNewPageResult)
         If String.IsNullOrWhiteSpace(content) Then
             Throw New ArgumentException("缺少新单页内容。", NameOf(content))
         End If
@@ -582,7 +576,7 @@ Public Class DocmeePptClient
             Throw New ArgumentException("缺少 Docmee PPT ID。", NameOf(pptxId))
         End If
 
-        Dim templateId = GetRandomNewPageTemplateId()
+        Dim templateId = If(String.IsNullOrWhiteSpace(templateIdOverride), GetRandomNewPageTemplateId(), templateIdOverride.Trim())
         Dim payload As New JObject From {
             {"content", content.Trim()},
             {"pptxId", pptxId.Trim()},
@@ -606,40 +600,6 @@ Public Class DocmeePptClient
                         ShareRibbon.LogInfo("[DocmeeNewPage] Response parsed. pptxId=" & If(result.PptxId, "") & ", hasFileUrl=" & Not String.IsNullOrWhiteSpace(result.FileUrl))
                         Return result
                     End Using
-                End Using
-            End Using
-        End Using
-    End Function
-
-    Public Async Function UpdatePptTemplateAsync(pptId As String, templateId As String, Optional sync As Boolean = False) As Task(Of String)
-        If String.IsNullOrWhiteSpace(pptId) Then
-            Throw New ArgumentException("缺少 PPT ID。", NameOf(pptId))
-        End If
-        If String.IsNullOrWhiteSpace(templateId) Then
-            Throw New ArgumentException("请选择要更换的模板。", NameOf(templateId))
-        End If
-
-        Dim payload As New JObject From {
-            {"pptId", pptId.Trim()},
-            {"templateId", templateId.Trim()},
-            {"sync", sync}
-        }
-
-        Using client = CreateHttpClient()
-            Using request As New HttpRequestMessage(HttpMethod.Post, UpdatePptTemplateEndpoint)
-                AddDocmeeTokenHeader(request.Headers)
-                request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
-
-                Using response = Await client.SendAsync(request).ConfigureAwait(False)
-                    Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                    EnsureSuccess(response, responseText)
-
-                    Dim result = JObject.Parse(responseText)
-                    EnsureDocmeeSuccess(result)
-
-                    Dim updatedPptId = TryGetString(result.SelectToken("data.pptId"))
-                    If String.IsNullOrWhiteSpace(updatedPptId) Then updatedPptId = pptId.Trim()
-                    Return updatedPptId
                 End Using
             End Using
         End Using
@@ -834,39 +794,45 @@ Public Class DocmeePptClient
     Private Shared Async Function ReadNewPageWithAiStreamAsync(responseStream As Stream, progressHandler As Action(Of String)) As Task(Of DocmeeNewPageResult)
         Dim rawResponse As New StringBuilder()
         Dim result As New DocmeeNewPageResult()
+        Dim streamReadException As Exception = Nothing
 
-        Using reader As New StreamReader(responseStream, Encoding.UTF8)
-            Do
-                Dim line = Await reader.ReadLineAsync().ConfigureAwait(False)
-                If line Is Nothing Then Exit Do
+        Try
+            Using reader As New StreamReader(responseStream, Encoding.UTF8)
+                Do
+                    Dim line = Await reader.ReadLineAsync().ConfigureAwait(False)
+                    If line Is Nothing Then Exit Do
 
-                rawResponse.AppendLine(line)
+                    rawResponse.AppendLine(line)
 
-                Dim trimmed = line.Trim()
-                If String.IsNullOrWhiteSpace(trimmed) Then Continue Do
+                    Dim trimmed = line.Trim()
+                    If String.IsNullOrWhiteSpace(trimmed) Then Continue Do
 
-                Dim payload As JObject = Nothing
-                If trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase) Then
-                    Dim dataText = trimmed.Substring(5).Trim()
-                    If String.IsNullOrWhiteSpace(dataText) OrElse dataText = "[DONE]" Then Continue Do
-                    If progressHandler IsNot Nothing Then progressHandler.Invoke(dataText)
-                    payload = TryParseObject(dataText)
-                Else
-                    If progressHandler IsNot Nothing Then progressHandler.Invoke(trimmed)
-                    payload = TryParseObject(trimmed)
-                End If
+                    Dim payload As JObject = Nothing
+                    If trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase) Then
+                        Dim dataText = trimmed.Substring(5).Trim()
+                        If String.IsNullOrWhiteSpace(dataText) OrElse dataText = "[DONE]" Then Continue Do
+                        If progressHandler IsNot Nothing Then progressHandler.Invoke(dataText)
+                        payload = TryParseObject(dataText)
+                    Else
+                        If progressHandler IsNot Nothing Then progressHandler.Invoke(trimmed)
+                        payload = TryParseObject(trimmed)
+                    End If
 
-                If payload Is Nothing Then Continue Do
-                EnsureDocmeeSuccess(payload)
+                    If payload Is Nothing Then Continue Do
+                    EnsureDocmeeSuccess(payload)
 
-                MergeNewPageResult(result, payload)
+                    MergeNewPageResult(result, payload)
 
-                Dim progressText = FirstNonEmpty(payload, "text", "content", "message", "msg")
-                If Not String.IsNullOrWhiteSpace(progressText) AndAlso progressHandler IsNot Nothing Then
-                    progressHandler.Invoke("message: " & progressText)
-                End If
-            Loop
-        End Using
+                    Dim progressText = FirstNonEmpty(payload, "text", "content", "message", "msg")
+                    If Not String.IsNullOrWhiteSpace(progressText) AndAlso progressHandler IsNot Nothing Then
+                        progressHandler.Invoke("message: " & progressText)
+                    End If
+                Loop
+            End Using
+        Catch ex As IOException
+            streamReadException = ex
+            ShareRibbon.LogInfo("[DocmeeNewPage] Stream closed while reading. parsedPptxId=" & If(result.PptxId, "") & ", rawLength=" & rawResponse.Length.ToString() & ", message=" & ex.Message)
+        End Try
 
         If Not String.IsNullOrWhiteSpace(result.PptxId) OrElse Not String.IsNullOrWhiteSpace(result.FileUrl) Then Return result
 
@@ -874,6 +840,12 @@ Public Class DocmeePptClient
         If directJson IsNot Nothing Then
             EnsureDocmeeSuccess(directJson)
             MergeNewPageResult(result, directJson)
+        End If
+
+        If streamReadException IsNot Nothing AndAlso
+           String.IsNullOrWhiteSpace(result.PptxId) AndAlso
+           String.IsNullOrWhiteSpace(result.FileUrl) Then
+            Throw New IOException("Docmee 流式连接已关闭，且没有返回可下载的 PPT 信息。", streamReadException)
         End If
 
         Return result

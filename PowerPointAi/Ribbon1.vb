@@ -2,7 +2,6 @@
 Imports System.Diagnostics
 Imports System.Drawing
 Imports System.IO
-Imports System.Text.RegularExpressions
 Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
@@ -15,7 +14,6 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 Public Class Ribbon1
     Inherits BaseOfficeRibbon
 
-    Private Const DemoAccentShapeName As String = "wenduoduoAI_BeautifyAccent"
     Private Const DocmeePptxIdTagName As String = "wenduoduoAI_DocmeePptxId"
 
     Private Class PptTextTarget
@@ -39,15 +37,12 @@ Public Class Ribbon1
     Private Shared _lastReplaceSlidePptxId As String = ""
 
     Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
 
     Protected Overrides Sub WebResearchButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
 
     Protected Overrides Sub SpotlightButton_Click(sender As Object, e As RibbonControlEventArgs)
-        'Globals.ThisAddIn.ShowChatTaskPane()
     End Sub
     Protected Overrides Sub DataAnalysisButton_Click(sender As Object, e As RibbonControlEventArgs)
         ' Word 特定的数据分析逻辑
@@ -66,7 +61,6 @@ Public Class Ribbon1
         ' 创建并显示MCP配置表单
         Dim mcpConfigForm As New MCPConfigForm()
         If mcpConfigForm.ShowDialog() = DialogResult.OK Then
-            ' 在需要时可以集成到ChatControl调用MCP服务
         End If
     End Sub
 
@@ -88,34 +82,13 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ''' <summary>
-    ''' 在聊天面板显示提示信息
-    ''' </summary>
-    Private Async Sub buildHtmlHint(chatCtrl As ChatControl, displayContent As String)
+    ' 美化当前页 - 使用 Docmee newPageWithAiV2 生成结果页并替换当前页。
+    Protected Overrides Async Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            Dim responseUuid As String = Guid.NewGuid().ToString()
-            Dim aiName As String = ShareRibbon.ConfigSettings.platform & " " & ShareRibbon.ConfigSettings.ModelName
-            Dim jsCreate As String = $"createChatSection('{aiName}', formatDateTime(new Date()), '{responseUuid}');"
-            Await chatCtrl.ExecuteJavaScriptAsyncJS(jsCreate)
-            Dim js = $"appendRenderer('{responseUuid}','{displayContent}');"
-            Await chatCtrl.ExecuteJavaScriptAsyncJS(js)
+            Await BeautifyCurrentSlideWithDocmeeTemplateAsync()
         Catch ex As Exception
-            Debug.WriteLine("ExecuteJavaScriptAsyncJS 调用失败: " & ex.Message)
-        End Try
-    End Sub
-
-    ' 美化当前页 - 用本地规则统一背景、字体、标题和文本框适配。
-    Protected Overrides Sub ReformatButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Try
-            Dim changedCount = ApplySimpleBeautifyToCurrentSlide()
-            If changedCount <= 0 Then
-                MessageBox.Show("当前页没有可美化的文本框。", "美化单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                Return
-            End If
-
-            MessageBox.Show($"已美化当前页，处理 {changedCount} 个文本框。", "美化单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
-        Catch ex As Exception
-            MessageBox.Show("美化单页出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            LogError("[BeautifyTemplate] Failed.", ex)
+            MessageBox.Show("美化模板出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
@@ -138,54 +111,6 @@ Public Class Ribbon1
         Catch
         End Try
         Return "文本框"
-    End Function
-
-    Private Function ShowTextOptimizeDialog() As String
-        Using dialog As New Form()
-            dialog.Text = "文本优化"
-            dialog.Size = New Size(330, 170)
-            dialog.StartPosition = FormStartPosition.CenterParent
-            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
-            dialog.MaximizeBox = False
-            dialog.MinimizeBox = False
-
-            Dim label As New Label() With {
-                .Text = "选择优化方式：",
-                .Location = New Point(18, 18),
-                .AutoSize = True
-            }
-            dialog.Controls.Add(label)
-
-            Dim modeCombo As New ComboBox() With {
-                .Location = New Point(18, 44),
-                .Size = New Size(278, 24),
-                .DropDownStyle = ComboBoxStyle.DropDownList
-            }
-            modeCombo.Items.AddRange(New Object() {"润色", "扩写", "精简", "填充", "补全文案"})
-            modeCombo.SelectedIndex = 0
-            dialog.Controls.Add(modeCombo)
-
-            Dim okButton As New Button() With {
-                .Text = "开始",
-                .Location = New Point(126, 86),
-                .Size = New Size(80, 30),
-                .DialogResult = DialogResult.OK
-            }
-            dialog.Controls.Add(okButton)
-            dialog.AcceptButton = okButton
-
-            Dim cancelButton As New Button() With {
-                .Text = "取消",
-                .Location = New Point(216, 86),
-                .Size = New Size(80, 30),
-                .DialogResult = DialogResult.Cancel
-            }
-            dialog.Controls.Add(cancelButton)
-            dialog.CancelButton = cancelButton
-
-            If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
-            Return modeCombo.SelectedItem.ToString()
-        End Using
     End Function
 
     Private Function ShowReplaceSlideDialog() As ReplaceSlideOptions
@@ -236,28 +161,6 @@ Public Class Ribbon1
                 .Content = inputBox.Text.Trim()
             }
         End Using
-    End Function
-
-    Private Async Function ReplaceCurrentSlideWithGeneratedTextAsync(requirement As String) As Task
-        Dim originalSlide = GetCurrentSlide()
-        If originalSlide Is Nothing Then
-            MessageBox.Show("请先选中要替换的幻灯片。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        ShareRibbon.GlobalStatusStripAll.ShowProgress("正在生成替换单页内容...")
-        Dim generatedText = Await GenerateReplacementSlideTextAsync(requirement)
-        If String.IsNullOrWhiteSpace(generatedText) Then
-            MessageBox.Show("没有生成可用的替换内容。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        Dim replacementSlide = InsertReplacementSlideAfter(originalSlide, generatedText)
-        DeleteOriginalSlideAfterReplacement(originalSlide, replacementSlide)
-        ApplySimpleBeautifyToSlide(replacementSlide)
-
-        ShareRibbon.GlobalStatusStripAll.ShowProgress("替换单页完成")
-        MessageBox.Show("当前页已替换。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
     End Function
 
     Private Async Function ReplaceCurrentSlideWithDocmeeAsync(request As ReplaceSlideOptions) As Task
@@ -655,120 +558,86 @@ Public Class Ribbon1
         End Using
     End Function
 
-    Private Async Function GenerateReplacementSlideTextAsync(requirement As String) As Task(Of String)
-        If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) OrElse
-           String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) OrElse
-           String.IsNullOrWhiteSpace(ConfigSettings.ModelName) Then
-            Throw New InvalidOperationException("请先在模型配置里填写 API 地址、API Key 和模型名称。")
+    Private Async Function BeautifyCurrentSlideWithDocmeeTemplateAsync() As Task
+        LogInfo("[BeautifyTemplate] Button clicked.")
+        Dim originalSlide = GetCurrentSlide()
+        If originalSlide Is Nothing Then
+            MessageBox.Show("请先选中要美化的幻灯片。", "美化模板", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
         End If
 
-        Dim systemPrompt = "你是一个专业的 PowerPoint 单页生成助手。只返回纯文本：第一行是标题，后续每行一个要点。不要解释，不要 Markdown。"
-        Dim prompt = "请根据下面要求生成一页 PPT 文案：" & vbCrLf & requirement.Trim()
-        Dim requestBody = LLMUtil.CreateLlmRequestBody(prompt, ConfigSettings.ModelName, systemPrompt, 0.35, 1000)
-        Dim response = Await LLMUtil.SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
-
-        If response.StartsWith("错误:") Then Throw New Exception(response)
-
-        Dim jObj = JObject.Parse(response)
-        Dim content = jObj("choices")(0)("message")("content")?.ToString()
-        If String.IsNullOrWhiteSpace(content) Then
-            Throw New InvalidOperationException("模型没有返回可用的替换单页内容。")
+        Dim slideContent = GetSlidePlainText(originalSlide)
+        If String.IsNullOrWhiteSpace(slideContent) Then
+            MessageBox.Show("当前页没有可用于美化的文本内容。", "美化模板", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
         End If
+        LogInfo("[BeautifyTemplate] NewPageWithAi contentLength=" & slideContent.Length.ToString())
 
-        Return content.Trim()
-    End Function
-
-    Private Function InsertReplacementSlideAfter(originalSlide As PowerPoint.Slide, generatedText As String) As PowerPoint.Slide
-        Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
-        Dim originalIndex = originalSlide.SlideIndex
-        Dim replacementSlide = presentation.Slides.Add(originalIndex + 1, PowerPoint.PpSlideLayout.ppLayoutTitleOnly)
-
-        Dim normalized = generatedText.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
-        Dim lines = normalized.Split(New String() {vbLf}, StringSplitOptions.None).
-            Select(Function(line) line.Trim()).
-            Where(Function(line) Not String.IsNullOrWhiteSpace(line)).
-            ToList()
-
-        Dim title = If(lines.Count > 0, lines(0), "新单页")
-        Dim body = If(lines.Count > 1, String.Join(vbCrLf, lines.Skip(1)), generatedText.Trim())
-
-        SetReplacementSlideText(replacementSlide, title, body)
-        Return replacementSlide
-    End Function
-
-    Private Sub SetReplacementSlideText(slide As PowerPoint.Slide, titleText As String, bodyText As String)
-        Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
-        Dim slideWidth As Single = CSng(presentation.PageSetup.SlideWidth)
-        Dim slideHeight As Single = CSng(presentation.PageSetup.SlideHeight)
-
-        Dim titleShape As PowerPoint.Shape = Nothing
-        Try
-            If slide.Shapes.HasTitle = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                titleShape = slide.Shapes.Title
-            End If
-        Catch
-        End Try
-
-        If titleShape Is Nothing Then
-            titleShape = slide.Shapes.AddTextbox(Microsoft.Office.Core.MsoTextOrientation.msoTextOrientationHorizontal, 46, 38, slideWidth - 92, 64)
-        End If
-
-        titleShape.TextFrame.TextRange.Text = titleText
-        titleShape.TextFrame.TextRange.Font.Name = "Microsoft YaHei UI"
-        titleShape.TextFrame.TextRange.Font.Size = 30
-        titleShape.TextFrame.TextRange.Font.Bold = Microsoft.Office.Core.MsoTriState.msoTrue
-
-        Dim bodyShape = slide.Shapes.AddTextbox(
-            Microsoft.Office.Core.MsoTextOrientation.msoTextOrientationHorizontal,
-            54,
-            118,
-            slideWidth - 108,
-            slideHeight - 168)
-        bodyShape.TextFrame.TextRange.Text = bodyText
-        bodyShape.TextFrame.TextRange.Font.Name = "Microsoft YaHei UI"
-        bodyShape.TextFrame.TextRange.Font.Size = 18
-        bodyShape.TextFrame.WordWrap = Microsoft.Office.Core.MsoTriState.msoTrue
-    End Sub
-
-    Private Sub DeleteOriginalSlideAfterReplacement(originalSlide As PowerPoint.Slide, replacementSlide As PowerPoint.Slide)
-        Dim targetIndex = originalSlide.SlideIndex
-        originalSlide.Delete()
+        Dim client As New DocmeePptClient()
+        Dim progressWindow = CreateReplaceProgressWindow()
+        progressWindow.Item1.Text = "正在美化当前页"
+        progressWindow.Item1.Show()
+        UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在生成美化页面...")
 
         Try
-            replacementSlide.Select()
-            Globals.ThisAddIn.Application.ActiveWindow.View.GotoSlide(targetIndex)
-        Catch
-        End Try
-    End Sub
-
-    Private Async Function OptimizeSelectedTextAsync(modeName As String) As Task(Of Integer)
-        Dim targets = GetSelectedPptTextTargets(modeName)
-        If targets.Count = 0 Then
-            MessageBox.Show("请先选中 PPT 里的文字或文本框。", "文本优化", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return 0
-        End If
-
-        If String.IsNullOrWhiteSpace(ConfigSettings.ApiUrl) OrElse
-           String.IsNullOrWhiteSpace(ConfigSettings.ApiKey) OrElse
-           String.IsNullOrWhiteSpace(ConfigSettings.ModelName) Then
-            MessageBox.Show("请先在模型配置里填写 API 地址、API Key 和模型名称。", "文本优化", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return 0
-        End If
-
-        ShareRibbon.GlobalStatusStripAll.ShowProgress($"正在{modeName}选中文本...")
-        Dim changedCount = 0
-
-        For Each target In targets
-            Dim optimizedText = Await RequestOptimizedTextAsync(modeName, target.OriginalText, target.SlideContextText)
-            If Not String.IsNullOrWhiteSpace(optimizedText) Then
-                target.TextRange.Text = optimizedText
-                If target.Shape IsNot Nothing Then AutoFitPptTextShape(target.Shape)
-                changedCount += 1
+            Dim pptxId = ResolveDocmeePptxId()
+            If String.IsNullOrWhiteSpace(pptxId) Then
+                pptxId = DocmeePptClient.GetRandomNewPageTemplateId()
+                LogInfo("[BeautifyTemplate] No presentation Docmee PPT ID, using random ID=" & pptxId)
             End If
-        Next
 
-        ShareRibbon.GlobalStatusStripAll.ShowProgress($"文本优化完成，共处理 {changedCount} 处")
-        Return changedCount
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("正在用 Docmee 美化当前页...")
+            LogInfo("[BeautifyTemplate] Calling Docmee newPageWithAiV2.")
+            Dim result = Await client.NewPageWithAiV2Async(
+                slideContent,
+                pptxId,
+                Sub(message)
+                    If Not String.IsNullOrWhiteSpace(message) Then
+                        ShareRibbon.GlobalStatusStripAll.ShowProgress("Docmee 美化生成中...")
+                        UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在生成美化页面...")
+                    End If
+                End Sub)
+
+            Dim resultPptxId = If(String.IsNullOrWhiteSpace(result.PptxId), pptxId, result.PptxId)
+            Dim fileUrl = result.FileUrl
+            LogInfo("[BeautifyTemplate] Docmee result. pptxId=" & resultPptxId & ", hasFileUrl=" & Not String.IsNullOrWhiteSpace(fileUrl))
+            If String.IsNullOrWhiteSpace(fileUrl) Then
+                UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在获取美化 PPTX...")
+                fileUrl = Await client.DownloadPptxAsync(resultPptxId, True)
+            End If
+
+            Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_beautify_{resultPptxId}_{Guid.NewGuid():N}.pptx")
+            UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在下载美化结果...")
+            Await client.DownloadPptxFileAsync(fileUrl, localPath)
+
+            UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在准备替换页面...")
+            CloseReplaceProgressWindow(progressWindow.Item1)
+
+            If Not ReplaceCurrentSlideWithSelectedSlideFromPptx(originalSlide, localPath) Then Return
+
+            _lastReplaceSlidePptxId = resultPptxId
+            SaveDocmeePptxId(resultPptxId)
+
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("美化模板完成")
+            MessageBox.Show("当前页已美化。", "美化模板", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        Finally
+            CloseReplaceProgressWindow(progressWindow.Item1)
+        End Try
+    End Function
+
+    Private Function GetSlidePlainText(slide As PowerPoint.Slide) As String
+        If slide Is Nothing Then Return ""
+
+        Dim lines As New List(Of String)()
+        Try
+            For i = 1 To slide.Shapes.Count
+                CollectShapeContextText(slide.Shapes(i), lines)
+            Next
+        Catch ex As Exception
+            Debug.WriteLine("读取当前页文本失败: " & ex.Message)
+        End Try
+
+        Return String.Join(vbCrLf, lines.Where(Function(line) Not String.IsNullOrWhiteSpace(line)).Distinct())
     End Function
 
     Private Function GetSelectedPptTextTargets(modeName As String) As List(Of PptTextTarget)
@@ -906,86 +775,6 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    Private Async Function RequestOptimizedTextAsync(modeName As String, originalText As String, slideContextText As String) As Task(Of String)
-        Dim systemPrompt = "你是一个专业的 PowerPoint 文案优化助手。你只返回处理后的文本，不要解释，不要添加标题，不要输出 Markdown。"
-        Dim prompt = BuildTextOptimizationPrompt(modeName, originalText, slideContextText)
-        Dim requestBody = LLMUtil.CreateLlmRequestBody(prompt, ConfigSettings.ModelName, systemPrompt, 0.35, 1200)
-        Dim response = Await LLMUtil.SendHttpRequest(ConfigSettings.ApiUrl, ConfigSettings.ApiKey, requestBody)
-
-        If response.StartsWith("错误:") Then
-            Throw New Exception(response)
-        End If
-
-        Dim jObj = JObject.Parse(response)
-        Dim content = jObj("choices")(0)("message")("content")?.ToString()
-        If String.IsNullOrWhiteSpace(content) Then Throw New Exception("模型返回内容为空")
-
-        Return content.Trim()
-    End Function
-
-    Private Function BuildTextOptimizationPrompt(modeName As String, originalText As String, slideContextText As String) As String
-        Dim instruction As String
-        Dim sourceText = If(originalText, "").Trim()
-        Dim contextText = If(slideContextText, "").Trim()
-        Select Case modeName
-            Case "扩写"
-                instruction = "在不偏离原意的前提下扩写为更适合 PPT 展示的内容，语言自然、有条理。"
-            Case "精简"
-                instruction = "精简为更适合 PPT 的短句，保留核心信息，删除重复和口语化表达。"
-            Case "填充"
-                instruction = "填充当前 PPT 文本框，使内容更完整、更充实，并保持适合幻灯片展示的长度。"
-            Case "补全文案"
-                instruction = "补全为一段完整、清晰、适合放在 PPT 文本框中的文案。"
-            Case Else
-                instruction = "润色为更专业、更清晰、更适合 PPT 展示的表达。"
-        End Select
-
-        Dim contextSection = If(String.IsNullOrWhiteSpace(contextText), "", vbCrLf & vbCrLf & "当前页其他内容：" & vbCrLf & contextText)
-
-        Return $"请执行：{instruction}
-
-原文：
-{If(String.IsNullOrWhiteSpace(sourceText), "当前文本框为空，请根据当前幻灯片语境生成适合填入该文本框的内容。", sourceText)}{contextSection}"
-    End Function
-
-    Private Function ApplySimpleBeautifyToCurrentSlide() As Integer
-        Dim slide = GetCurrentSlide()
-        Return ApplySimpleBeautifyToSlide(slide)
-    End Function
-
-    Private Function ApplySimpleBeautifyToSlide(slide As PowerPoint.Slide) As Integer
-        If slide Is Nothing Then Return 0
-
-        Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
-        Dim slideWidth As Single = CSng(presentation.PageSetup.SlideWidth)
-        Dim slideHeight As Single = CSng(presentation.PageSetup.SlideHeight)
-
-        RemoveDemoAccentShapes(slide)
-
-        Try
-            slide.FollowMasterBackground = Microsoft.Office.Core.MsoTriState.msoFalse
-            slide.Background.Fill.Solid()
-            slide.Background.Fill.ForeColor.RGB = RGB(248, 250, 252)
-        Catch ex As Exception
-            Debug.WriteLine("设置幻灯片背景失败: " & ex.Message)
-        End Try
-
-        Dim accent = slide.Shapes.AddShape(Microsoft.Office.Core.MsoAutoShapeType.msoShapeRectangle, 0, 0, slideWidth, 8)
-        accent.Name = DemoAccentShapeName
-        accent.Fill.ForeColor.RGB = RGB(37, 99, 235)
-        accent.Line.Visible = Microsoft.Office.Core.MsoTriState.msoFalse
-
-        Dim changedCount = 0
-        For shapeIdx = 1 To slide.Shapes.Count
-            Dim shape = slide.Shapes(shapeIdx)
-            If Not shape.Name.StartsWith(DemoAccentShapeName, StringComparison.OrdinalIgnoreCase) Then
-                changedCount += BeautifyShapeText(shape, slideWidth, slideHeight)
-            End If
-        Next
-
-        Return changedCount
-    End Function
-
     Private Function GetCurrentSlide() As PowerPoint.Slide
         Try
             Dim sel = Globals.ThisAddIn.Application.ActiveWindow.Selection
@@ -1001,100 +790,6 @@ Public Class Ribbon1
         End Try
 
         Return Nothing
-    End Function
-
-    Private Sub RemoveDemoAccentShapes(slide As PowerPoint.Slide)
-        For i = slide.Shapes.Count To 1 Step -1
-            Try
-                If slide.Shapes(i).Name.StartsWith(DemoAccentShapeName, StringComparison.OrdinalIgnoreCase) Then
-                    slide.Shapes(i).Delete()
-                End If
-            Catch
-            End Try
-        Next
-    End Sub
-
-    Private Function BeautifyShapeText(shape As PowerPoint.Shape, slideWidth As Single, slideHeight As Single) As Integer
-        Try
-            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoGroup Then
-                Dim count = 0
-                For i = 1 To shape.GroupItems.Count
-                    count += BeautifyShapeText(shape.GroupItems(i), slideWidth, slideHeight)
-                Next
-                Return count
-            End If
-
-            If shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
-                Dim count = 0
-                For row = 1 To shape.Table.Rows.Count
-                    For col = 1 To shape.Table.Columns.Count
-                        count += BeautifyShapeText(shape.Table.Cell(row, col).Shape, slideWidth, slideHeight)
-                    Next
-                Next
-                Return count
-            End If
-
-            If shape.HasTextFrame <> Microsoft.Office.Core.MsoTriState.msoTrue OrElse
-               shape.TextFrame.HasText <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return 0
-
-            Dim textRange = shape.TextFrame.TextRange
-            textRange.Text = CleanPptText(textRange.Text)
-
-            Dim isTitle = IsLikelyTitleShape(shape, slideHeight)
-            textRange.Font.Name = "Microsoft YaHei UI"
-            textRange.Font.Size = If(isTitle, 30, 18)
-            textRange.Font.Bold = If(isTitle, Microsoft.Office.Core.MsoTriState.msoTrue, Microsoft.Office.Core.MsoTriState.msoFalse)
-            textRange.Font.Color.RGB = If(isTitle, RGB(15, 23, 42), RGB(51, 65, 85))
-            textRange.ParagraphFormat.Alignment = PowerPoint.PpParagraphAlignment.ppAlignLeft
-
-            shape.TextFrame.WordWrap = Microsoft.Office.Core.MsoTriState.msoTrue
-            shape.TextFrame.AutoSize = PowerPoint.PpAutoSize.ppAutoSizeNone
-
-            If isTitle Then
-                shape.Left = 36
-                shape.Top = Math.Max(24, shape.Top)
-                shape.Width = Math.Max(120, slideWidth - 72)
-            Else
-                Try
-                    shape.Line.Visible = Microsoft.Office.Core.MsoTriState.msoTrue
-                    shape.Line.ForeColor.RGB = RGB(226, 232, 240)
-                    shape.Fill.ForeColor.RGB = RGB(255, 255, 255)
-                    shape.Fill.Transparency = 0.08F
-                Catch
-                End Try
-            End If
-
-            AutoFitPptTextShape(shape)
-            Return 1
-        Catch ex As Exception
-            Debug.WriteLine("美化文本框失败: " & ex.Message)
-            Return 0
-        End Try
-    End Function
-
-    Private Function CleanPptText(text As String) As String
-        Dim normalized = text.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
-        Dim lines = normalized.Split(New String() {vbLf}, StringSplitOptions.None).
-            Select(Function(line) Regex.Replace(line.Trim(), "\s+", " ")).
-            Where(Function(line) Not String.IsNullOrWhiteSpace(line)).
-            ToList()
-
-        Return String.Join(vbCrLf, lines)
-    End Function
-
-    Private Function IsLikelyTitleShape(shape As PowerPoint.Shape, slideHeight As Single) As Boolean
-        Try
-            If shape.PlaceholderFormat IsNot Nothing Then
-                Select Case shape.PlaceholderFormat.Type
-                    Case PowerPoint.PpPlaceholderType.ppPlaceholderTitle,
-                         PowerPoint.PpPlaceholderType.ppPlaceholderCenterTitle
-                        Return True
-                End Select
-            End If
-        Catch
-        End Try
-
-        Return shape.Top < slideHeight * 0.24F
     End Function
 
     Private Sub AutoFitPptTextShape(shape As PowerPoint.Shape)
@@ -1342,34 +1037,7 @@ Public Class Ribbon1
         End Try
     End Sub
 
-    ' 文本优化 - 复用当前模型配置。
-    Protected Overrides Async Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Try
-            Dim modeName = ShowTextOptimizeDialog()
-            If String.IsNullOrWhiteSpace(modeName) Then Return
-
-            Dim changedCount = Await OptimizeSelectedTextAsync(modeName)
-            If changedCount > 0 Then
-                MessageBox.Show($"文本优化完成，共处理 {changedCount} 处。", "文本优化", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            End If
-        Catch ex As Exception
-            MessageBox.Show("文本优化出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
-
-    ' 接受补全功能 - PowerPoint实现
-    Protected Sub AcceptCompletionButton_Click(sender As Object, e As RibbonControlEventArgs)
-        Try
-            Dim completionManager = PowerPointCompletionManager.Instance
-            If completionManager IsNot Nothing AndAlso completionManager.HasGhostText Then
-                completionManager.AcceptCurrentCompletion()
-            Else
-                ' 没有可接受的补全时，显示提示
-                MessageBox.Show("当前没有可接受的补全建议。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            End If
-        Catch ex As Exception
-            MessageBox.Show("接受补全时出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
+    Protected Overrides Sub ContinuationButton_Click(sender As Object, e As RibbonControlEventArgs)
     End Sub
 
     ' 主题生成PPT - 打开 Docmee V2 演示任务窗格

@@ -245,16 +245,8 @@
   -->
   <ItemGroup>
     <AppDesigner Include="My Project\" />
-    <Compile Include="ChatControl.Designer.vb">
-      <DependentUpon>ChatControl.vb</DependentUpon>
-    </Compile>
-    <Compile Include="ChatControl.vb">
-      <SubType>UserControl</SubType>
-    </Compile>
     <Compile Include="PowerPointTranslateService.vb" />
     <Compile Include="PowerPointDocumentTranslateService.vb" />
-    <Compile Include="PowerPointContinuationService.vb" />
-    <Compile Include="PowerPointCompletionManager.vb" />
     <Compile Include="PowerPointJsonCommandSchema.vb" />
     <Compile Include="DocmeePptClient.vb" />
     <Compile Include="TemplateSelectionForm.vb">
@@ -263,7 +255,6 @@
     <Compile Include="ThemePptTaskPane.vb">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Include="Services\PowerPointGhostTextManager.vb" />
     <Compile Include="Ribbon1.Designer.vb">
       <DependentUpon>Ribbon1.vb</DependentUpon>
     </Compile>
@@ -286,9 +277,6 @@
       <DependentUpon>ThisAddIn.Designer.xml</DependentUpon>
     </Compile>
     <Compile Include="My Project\AssemblyInfo.vb" />
-    <EmbeddedResource Include="ChatControl.resx">
-      <DependentUpon>ChatControl.vb</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="My Project\Resources.resx">
       <Generator>VbMyResourcesResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.vb</LastGenOutput>

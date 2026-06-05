@@ -1,4 +1,4 @@
-Imports System.Collections.Generic
+﻿Imports System.Collections.Generic
 Imports System.Drawing
 Imports System.Drawing.Drawing2D
 Imports System.IO
@@ -71,8 +71,6 @@ Public Class ThemePptTaskPane
     Private ReadOnly _generateButton As New Button()
     Private ReadOnly _insertButton As New Button()
     Private ReadOnly _finishOutlineEditButton As New Button()
-    Private ReadOnly _changeThemeButton As New Button()
-    Private ReadOnly _applyLocalThemeButton As New Button()
     Private ReadOnly _configureDocmeeButton As New Button()
     Private ReadOnly _templateCombo As New ComboBox()
     Private ReadOnly _refreshTemplatesButton As New Button()
@@ -216,16 +214,7 @@ Public Class ThemePptTaskPane
         _finishOutlineEditButton.Enabled = False
         AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click
 
-        _changeThemeButton.Text = "更换主题"
-        _changeThemeButton.Width = 104
-        _changeThemeButton.Height = 32
-        _changeThemeButton.Enabled = False
-        AddHandler _changeThemeButton.Click, AddressOf ChangeThemeButton_Click
 
-        _applyLocalThemeButton.Text = "当前PPT换主题"
-        _applyLocalThemeButton.Width = 128
-        _applyLocalThemeButton.Height = 32
-        AddHandler _applyLocalThemeButton.Click, AddressOf ApplyLocalThemeButton_Click
 
         _configureDocmeeButton.Text = "Docmee配置"
         _configureDocmeeButton.Width = 112
@@ -235,8 +224,6 @@ Public Class ThemePptTaskPane
         buttonPanel.Controls.Add(_generateButton)
         buttonPanel.Controls.Add(_finishOutlineEditButton)
         buttonPanel.Controls.Add(_insertButton)
-        buttonPanel.Controls.Add(_changeThemeButton)
-        buttonPanel.Controls.Add(_applyLocalThemeButton)
         buttonPanel.Controls.Add(_configureDocmeeButton)
 
         Dim templateLabel As New Label()
@@ -265,7 +252,7 @@ Public Class ThemePptTaskPane
         AddHandler _refreshTemplatesButton.Click, AddressOf RefreshTemplatesButton_Click
 
         _selectTemplateButton.Text = "预览模板"
-        _selectTemplateButton.Width = 82
+        _selectTemplateButton.Width = 96
         _selectTemplateButton.Height = 28
         _selectTemplateButton.Enabled = False
         AddHandler _selectTemplateButton.Click, AddressOf SelectTemplateButton_Click
@@ -776,6 +763,7 @@ Public Class ThemePptTaskPane
                 _templateConfirmedForCurrentOutline = True
                 _confirmedTemplateId = dialog.SelectedTemplate.Id
                 RefreshActionButtons()
+
                 Dim displayName = If(String.IsNullOrWhiteSpace(dialog.SelectedTemplate.Name),
                                      dialog.SelectedTemplate.Id,
                                      dialog.SelectedTemplate.Name)
@@ -806,16 +794,6 @@ Public Class ThemePptTaskPane
                String.Equals(selectedTemplate.Id, _confirmedTemplateId, StringComparison.Ordinal)
     End Function
 
-    Private Function CanChangeTheme() As Boolean
-        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
-        Return Not _isTemplateLoading AndAlso
-               Not String.IsNullOrWhiteSpace(_lastGeneratedPptId) AndAlso
-               _templateConfirmedForCurrentOutline AndAlso
-               selectedTemplate IsNot Nothing AndAlso
-               Not String.IsNullOrWhiteSpace(selectedTemplate.Id) AndAlso
-               String.Equals(selectedTemplate.Id, _confirmedTemplateId, StringComparison.Ordinal)
-    End Function
-
     Private Sub RefreshActionButtons()
         If Not IsOnPaneUiThread() Then
             BeginInvokeIfAlive(CType(Sub() RefreshActionButtons(), MethodInvoker))
@@ -826,7 +804,6 @@ Public Class ThemePptTaskPane
         _refreshTemplatesButton.Enabled = _isOutlineEditCompleted AndAlso Not _isTemplateLoading
         _selectTemplateButton.Enabled = CanChooseTemplate()
         _insertButton.Enabled = CanGenerateFromTemplate()
-        _changeThemeButton.Enabled = CanChangeTheme()
     End Sub
 
     Private Function GetEditedMarkdown() As String
@@ -1401,21 +1378,6 @@ Public Class ThemePptTaskPane
         ShowTemplateSelectionDialog()
     End Sub
 
-    Private Async Sub ChangeThemeButton_Click(sender As Object, e As EventArgs)
-        Await ChangeThemeForLatestPptAsync()
-    End Sub
-
-    Private Sub ApplyLocalThemeButton_Click(sender As Object, e As EventArgs)
-        Try
-            Dim changedCount = ApplyLocalThemeToCurrentPresentation()
-            SetStatus($"已为当前演示文稿应用本地主题，共处理 {changedCount} 页。")
-            MessageBox.Show($"当前 PPT 已更换主题，共处理 {changedCount} 页。", "当前PPT换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
-        Catch ex As Exception
-            SetStatus("当前 PPT 换主题失败。")
-            MessageBox.Show("当前 PPT 换主题失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        End Try
-    End Sub
-
     Private Sub ConfigureDocmeeButton_Click(sender As Object, e As EventArgs)
         ShowDocmeeSettingsDialog()
     End Sub
@@ -1529,7 +1491,6 @@ Public Class ThemePptTaskPane
         _generateButton.Enabled = False
         _insertButton.Enabled = False
         _finishOutlineEditButton.Enabled = False
-        _changeThemeButton.Enabled = False
         ShowOutlineOutput()
         _outputBox.Clear()
         _outline = Nothing
@@ -2605,7 +2566,6 @@ Public Class ThemePptTaskPane
         _finishOutlineEditButton.Enabled = False
         _refreshTemplatesButton.Enabled = False
         _selectTemplateButton.Enabled = False
-        _changeThemeButton.Enabled = False
         ShowOutlineOutput()
         ClearGeneratedPptState()
 
@@ -2674,60 +2634,6 @@ Public Class ThemePptTaskPane
         End Try
     End Sub
 
-    Private Async Function ChangeThemeForLatestPptAsync() As Task
-        If String.IsNullOrWhiteSpace(_lastGeneratedPptId) Then
-            MessageBox.Show("请先生成并导入 PPT。", "更换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
-        If selectedTemplate Is Nothing OrElse String.IsNullOrWhiteSpace(selectedTemplate.Id) Then
-            MessageBox.Show("请先选择要更换的模板。", "更换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        If Not _templateConfirmedForCurrentOutline Then
-            MessageBox.Show("请先预览并选择模板。", "更换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            Return
-        End If
-
-        _generateButton.Enabled = False
-        _insertButton.Enabled = False
-        _finishOutlineEditButton.Enabled = False
-        _refreshTemplatesButton.Enabled = False
-        _selectTemplateButton.Enabled = False
-        _changeThemeButton.Enabled = False
-        ShowOutlineOutput()
-
-        Try
-            SetStatus("正在更换 Docmee PPT 模板...")
-            AppendTaskPaneLine("更换模板ID: " & selectedTemplate.Id)
-            _lastGeneratedPptId = Await _client.UpdatePptTemplateAsync(_lastGeneratedPptId, selectedTemplate.Id, False)
-            SaveDocmeePptxIdToCurrentPresentation(_lastGeneratedPptId)
-            AppendTaskPaneLine("更新后的 PPT ID: " & _lastGeneratedPptId)
-
-            SetStatus("正在获取更换主题后的 PPTX...")
-            Dim fileUrl = Await _client.DownloadPptxAsync(_lastGeneratedPptId, True)
-            AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)
-
-            SetStatus("正在下载更换主题后的 PPTX...")
-            Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_theme_{_lastGeneratedPptId}.pptx")
-            Await _client.DownloadPptxFileAsync(fileUrl, localPath)
-
-            SetStatus("正在替换当前演示文稿中的生成页...")
-            Dim replacedCount = ReplaceImportedSlideRange(localPath)
-            AppendTaskPaneLine("已替换页数: " & replacedCount.ToString())
-            SetStatus($"主题已更换，共替换 {replacedCount} 页。")
-        Catch ex As Exception
-            SetStatus("更换主题失败。")
-            AppendTaskPaneLine("更换主题失败: " & ex.Message)
-            MessageBox.Show("更换主题失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
-        Finally
-            _generateButton.Enabled = True
-            RefreshActionButtons()
-        End Try
-    End Function
-
     Private Function ReplaceImportedSlideRange(localPath As String) As Integer
         Dim target = GetOrCreatePresentation()
         If _lastImportedSlideStartIndex <= 0 OrElse _lastImportedSlideCount <= 0 Then
@@ -2756,91 +2662,6 @@ Public Class ThemePptTaskPane
         RestoreActiveSlide(target, originalStart)
         Return insertedCount
     End Function
-
-    Private Function ApplyLocalThemeToCurrentPresentation() As Integer
-        Dim presentation = GetOrCreatePresentation()
-        If presentation.Slides.Count = 0 Then
-            Throw New InvalidOperationException("当前演示文稿没有可换主题的幻灯片。")
-        End If
-
-        Dim changedCount = 0
-        For slideIndex As Integer = 1 To presentation.Slides.Count
-            changedCount += ApplyLocalThemeToSlide(presentation.Slides(slideIndex), presentation, slideIndex = 1)
-        Next
-
-        Return changedCount
-    End Function
-
-    Private Function ApplyLocalThemeToSlide(slide As PowerPoint.Slide, presentation As PowerPoint.Presentation, isCover As Boolean) As Integer
-        If slide Is Nothing Then Return 0
-
-        slide.FollowMasterBackground = MsoTriState.msoFalse
-        slide.Background.Fill.Solid()
-        slide.Background.Fill.ForeColor.RGB = If(isCover, RGB(241, 247, 255), RGB(248, 250, 252))
-
-        RemoveLocalThemeAccentShapes(slide)
-
-        Dim slideHeight = CSng(presentation.PageSetup.SlideHeight)
-        Dim accent = slide.Shapes.AddShape(MsoAutoShapeType.msoShapeRectangle, 0, 0, 9, slideHeight)
-        accent.Name = "wenduoduoAI_LocalThemeAccent"
-        accent.Fill.ForeColor.RGB = RGB(26, 115, 232)
-        accent.Line.Visible = MsoTriState.msoFalse
-
-        Dim textShapeIndex = 0
-        For shapeIndex As Integer = 1 To slide.Shapes.Count
-            Dim shape = slide.Shapes(shapeIndex)
-            If ShapeHasText(shape) Then
-                textShapeIndex += 1
-                ApplyLocalThemeTextStyle(shape, textShapeIndex = 1)
-            End If
-        Next
-
-        Return 1
-    End Function
-
-    Private Sub RemoveLocalThemeAccentShapes(slide As PowerPoint.Slide)
-        For shapeIndex As Integer = slide.Shapes.Count To 1 Step -1
-            Try
-                Dim shape = slide.Shapes(shapeIndex)
-                If String.Equals(shape.Name, "wenduoduoAI_LocalThemeAccent", StringComparison.Ordinal) Then
-                    shape.Delete()
-                End If
-            Catch
-            End Try
-        Next
-    End Sub
-
-    Private Function ShapeHasText(shape As PowerPoint.Shape) As Boolean
-        If shape Is Nothing Then Return False
-
-        Try
-            Return shape.HasTextFrame = MsoTriState.msoTrue AndAlso
-                   shape.TextFrame.HasText = MsoTriState.msoTrue AndAlso
-                   Not String.IsNullOrWhiteSpace(shape.TextFrame.TextRange.Text)
-        Catch
-            Return False
-        End Try
-    End Function
-
-    Private Sub ApplyLocalThemeTextStyle(shape As PowerPoint.Shape, isTitle As Boolean)
-        Try
-            Dim textRange = shape.TextFrame.TextRange
-            textRange.Font.Name = "微软雅黑"
-            textRange.Font.Color.RGB = If(isTitle, RGB(22, 32, 48), RGB(45, 52, 64))
-            textRange.Font.Bold = If(isTitle, MsoTriState.msoTrue, MsoTriState.msoFalse)
-
-            If isTitle Then
-                If textRange.Font.Size < 24 Then textRange.Font.Size = 26
-            Else
-                If textRange.Font.Size < 14 Then textRange.Font.Size = 16
-            End If
-
-            shape.TextFrame.MarginLeft = Math.Max(shape.TextFrame.MarginLeft, 8)
-            shape.TextFrame.MarginRight = Math.Max(shape.TextFrame.MarginRight, 8)
-            shape.TextFrame.WordWrap = MsoTriState.msoTrue
-        Catch
-        End Try
-    End Sub
 
     Private Sub AppendTemplateLoadFailure(ex As Exception)
         If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return

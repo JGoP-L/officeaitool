@@ -74,11 +74,12 @@ Partial Class Ribbon1
         Me.ContinuationButton.Label = "文本优化"
         Me.ContinuationButton.ScreenTip = "PPT文本优化"
         Me.ContinuationButton.SuperTip = "选中文字后可润色、扩写、精简、填充或补全文案，并替换回当前 PPT"
+        Me.ContinuationButton.Visible = False
 
         Me.TranslateButton.Image = ShareRibbon.SharedResources.Translate
-        Me.TranslateButton.Label = "文本翻译"
-        Me.TranslateButton.ScreenTip = "PPT文本翻译"
-        Me.TranslateButton.SuperTip = "翻译当前页文本并替换原文，支持多语言，翻译后自动适配文本框"
+        Me.TranslateButton.Label = "AI创作"
+        Me.TranslateButton.ScreenTip = "PPT AI创作"
+        Me.TranslateButton.SuperTip = "选中文字后可润色、扩写、缩写或翻译，并替换回当前 PPT"
         Me.ProofreadButton.Visible = True
         Me.ProofreadButton.Label = "替换单页"
         Me.ProofreadButton.ScreenTip = "PPT单页替换"
