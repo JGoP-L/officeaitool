@@ -1,0 +1,120 @@
+name: Package Windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Build VSTO installer
+    runs-on: windows-2022
+
+    env:
+      Configuration: Release
+      ProjectPlatform: AnyCPU
+      SolutionPlatform: Any CPU
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Show build tools
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          & $vswhere -products * -format table
+          msbuild -version
+          nuget help | Select-Object -First 5
+
+      - name: Restore NuGet packages
+        run: nuget restore AiHelper.sln
+
+      - name: Build VSTO projects
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build-logs | Out-Null
+
+          function Invoke-ProjectBuild {
+            param(
+              [Parameter(Mandatory = $true)]
+              [string] $ProjectPath,
+              [Parameter(Mandatory = $true)]
+              [string] $LogName
+            )
+
+            $logPath = Join-Path "build-logs" $LogName
+            $arguments = @(
+              $ProjectPath,
+              "/m",
+              "/p:Configuration=$env:Configuration",
+              "/p:Platform=$env:ProjectPlatform",
+              "/bl:build-logs\$($LogName).binlog"
+            )
+
+            Write-Host "Building $ProjectPath"
+            & msbuild @arguments 2>&1 | Tee-Object -FilePath $logPath
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "MSBuild failed for $ProjectPath. See $logPath"
+            }
+          }
+
+          Invoke-ProjectBuild "ShareRibbon/ShareRibbon.vbproj" "ShareRibbon.log"
+          Invoke-ProjectBuild "ExcelAi/ExcelAi.vbproj" "ExcelAi.log"
+          Invoke-ProjectBuild "WordAi/WordAi.vbproj" "WordAi.log"
+          Invoke-ProjectBuild "PowerPointAi/PowerPointAi.vbproj" "PowerPointAi.log"
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build-logs | Out-Null
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Component.VSInstallerProjects2022 -property installationPath
+          if (-not $vs) {
+            throw "Visual Studio Installer Projects support was not found on this runner."
+          }
+
+          $devenv = Join-Path $vs "Common7\IDE\devenv.com"
+          $disableOutOfProcBuildDir = Join-Path $vs "Common7\IDE\CommonExtensions\Microsoft\VSI\DisableOutOfProcBuild"
+          $disableOutOfProcBuild = Join-Path $disableOutOfProcBuildDir "DisableOutOfProcBuild.exe"
+
+          if (Test-Path $disableOutOfProcBuild) {
+            Push-Location $disableOutOfProcBuildDir
+            try {
+              & ".\DisableOutOfProcBuild.exe"
+              if ($LASTEXITCODE -ne 0) {
+                throw "DisableOutOfProcBuild.exe failed with exit code $LASTEXITCODE."
+              }
+            }
+            finally {
+              Pop-Location
+            }
+          }
+
+          & $devenv AiHelper.sln /Build "$env:Configuration|$env:SolutionPlatform" /Project OfficeAgent /ProjectConfig "$env:Configuration" /Out "build-logs\devenv-installer.log"
+
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path "build-logs\devenv-installer.log") {
+              Get-Content "build-logs\devenv-installer.log"
+            }
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OfficeAI-Windows-Package
+          if-no-files-found: warn
+          path: |
+            OfficeAgent/Release/**
+            ExcelAi/bin/Release/**
+            WordAi/bin/Release/**
+            PowerPointAi/bin/Release/**
+            build-logs/**
