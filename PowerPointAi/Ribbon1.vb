@@ -1,6 +1,7 @@
 ﻿' PowerPointAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Drawing
+Imports System.IO
 Imports System.Text.RegularExpressions
 Imports System.Threading
 Imports System.Threading.Tasks
@@ -15,6 +16,7 @@ Public Class Ribbon1
     Inherits BaseOfficeRibbon
 
     Private Const DemoAccentShapeName As String = "wenduoduoAI_BeautifyAccent"
+    Private Const DocmeePptxIdTagName As String = "wenduoduoAI_DocmeePptxId"
 
     Private Class PptTextTarget
         Public Property TextRange As PowerPoint.TextRange
@@ -28,6 +30,13 @@ Public Class Ribbon1
         Public Property TargetLanguageName As String
         Public Property TargetLanguageCode As String
     End Class
+
+    Private Class ReplaceSlideOptions
+        Public Property Content As String
+        Public Property PptxId As String
+    End Class
+
+    Private Shared _lastReplaceSlidePptxId As String = ""
 
     Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Globals.ThisAddIn.ShowChatTaskPane()
@@ -63,11 +72,18 @@ Public Class Ribbon1
 
     Protected Overrides Async Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            Dim requirement = ShowReplaceSlideDialog()
-            If String.IsNullOrWhiteSpace(requirement) Then Return
+            LogInfo("[ReplaceSlide] Button clicked.")
+            Dim request = ShowReplaceSlideDialog()
+            LogInfo("[ReplaceSlide] Dialog closed. hasRequest=" & (request IsNot Nothing).ToString())
+            If request Is Nothing OrElse
+               String.IsNullOrWhiteSpace(request.Content) Then
+                LogInfo("[ReplaceSlide] Canceled or empty content.")
+                Return
+            End If
 
-            Await ReplaceCurrentSlideWithGeneratedTextAsync(requirement)
+            Await ReplaceCurrentSlideWithDocmeeAsync(request)
         Catch ex As Exception
+            LogError("[ReplaceSlide] Failed in button handler.", ex)
             MessageBox.Show("替换单页出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
@@ -172,7 +188,7 @@ Public Class Ribbon1
         End Using
     End Function
 
-    Private Function ShowReplaceSlideDialog() As String
+    Private Function ShowReplaceSlideDialog() As ReplaceSlideOptions
         Using dialog As New Form()
             dialog.Text = "替换单页"
             dialog.Size = New Size(430, 250)
@@ -193,7 +209,7 @@ Public Class Ribbon1
                 .Size = New Size(374, 118),
                 .Multiline = True,
                 .ScrollBars = ScrollBars.Vertical,
-                .Text = "生成一页关于核心结论的汇报页，包含标题和 3 个要点。"
+                .Text = "工作与生活失衡的现状与代价"
             }
             dialog.Controls.Add(inputBox)
 
@@ -216,7 +232,9 @@ Public Class Ribbon1
             dialog.CancelButton = cancelButton
 
             If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
-            Return inputBox.Text.Trim()
+            Return New ReplaceSlideOptions() With {
+                .Content = inputBox.Text.Trim()
+            }
         End Using
     End Function
 
@@ -240,6 +258,401 @@ Public Class Ribbon1
 
         ShareRibbon.GlobalStatusStripAll.ShowProgress("替换单页完成")
         MessageBox.Show("当前页已替换。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Function
+
+    Private Async Function ReplaceCurrentSlideWithDocmeeAsync(request As ReplaceSlideOptions) As Task
+        LogInfo("[ReplaceSlide] Start Docmee replace. contentLength=" & If(request?.Content, "").Length.ToString())
+        Dim originalSlide = GetCurrentSlide()
+        If originalSlide Is Nothing Then
+            LogInfo("[ReplaceSlide] No current slide.")
+            MessageBox.Show("请先选中要替换的幻灯片。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+        LogInfo("[ReplaceSlide] Current slide index=" & originalSlide.SlideIndex.ToString())
+
+        request.PptxId = ResolveDocmeePptxId()
+        LogInfo("[ReplaceSlide] Resolved Docmee PPT ID=" & If(request.PptxId, ""))
+        If String.IsNullOrWhiteSpace(request.PptxId) Then
+            request.PptxId = DocmeePptClient.GetRandomNewPageTemplateId()
+            LogInfo("[ReplaceSlide] No presentation Docmee PPT ID, using random ID=" & request.PptxId)
+        End If
+
+        Dim client As New DocmeePptClient()
+        ShareRibbon.GlobalStatusStripAll.ShowProgress("正在用 Docmee 生成新单页...")
+        LogInfo("[ReplaceSlide] Calling Docmee newPageWithAiV2.")
+        Dim progressWindow = CreateReplaceProgressWindow()
+        progressWindow.Item1.Show()
+        UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在分析当前页内容...")
+
+        Dim result As DocmeeNewPageResult = Nothing
+        Try
+            result = Await client.NewPageWithAiV2Async(
+                request.Content,
+                request.PptxId,
+                Sub(message)
+                    If Not String.IsNullOrWhiteSpace(message) Then
+                        ShareRibbon.GlobalStatusStripAll.ShowProgress("Docmee 单页生成中...")
+                        UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在生成候选页面...")
+                    End If
+                End Sub)
+
+            Dim pptxId = If(String.IsNullOrWhiteSpace(result.PptxId), request.PptxId, result.PptxId)
+            Dim fileUrl = result.FileUrl
+            LogInfo("[ReplaceSlide] Docmee result. pptxId=" & pptxId & ", hasFileUrl=" & Not String.IsNullOrWhiteSpace(fileUrl))
+            If String.IsNullOrWhiteSpace(fileUrl) Then
+                ShareRibbon.GlobalStatusStripAll.ShowProgress("正在获取替换单页 PPTX...")
+                UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在整理页面结构...")
+                LogInfo("[ReplaceSlide] Download URL missing, calling downloadPptx.")
+                fileUrl = Await client.DownloadPptxAsync(pptxId, True)
+            End If
+
+            Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_newpage_{pptxId}_{Guid.NewGuid():N}.pptx")
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("正在下载替换单页 PPTX...")
+            UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在下载候选页面...")
+            LogInfo("[ReplaceSlide] Downloading PPTX to " & localPath)
+            Await client.DownloadPptxFileAsync(fileUrl, localPath)
+
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("请选择要替换的单页...")
+            UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在准备选择界面...")
+            LogInfo("[ReplaceSlide] Selecting replacement slide from downloaded PPTX.")
+            CloseReplaceProgressWindow(progressWindow.Item1)
+            If Not ReplaceCurrentSlideWithSelectedSlideFromPptx(originalSlide, localPath) Then Return
+
+            _lastReplaceSlidePptxId = pptxId
+            SaveDocmeePptxId(pptxId)
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("替换单页完成")
+            LogInfo("[ReplaceSlide] Completed.")
+            MessageBox.Show("当前页已替换。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+        Finally
+            CloseReplaceProgressWindow(progressWindow.Item1)
+        End Try
+    End Function
+
+    Private Function CreateReplaceProgressWindow() As Tuple(Of Form, Label)
+        Dim dialog As New Form()
+        dialog.Text = "正在生成替换页"
+        dialog.Size = New Size(420, 150)
+        dialog.StartPosition = FormStartPosition.CenterParent
+        dialog.FormBorderStyle = FormBorderStyle.FixedDialog
+        dialog.MaximizeBox = False
+        dialog.MinimizeBox = False
+        dialog.ControlBox = False
+
+        Dim label As New Label() With {
+            .Text = "正在分析当前页内容...",
+            .Location = New Point(18, 18),
+            .Size = New Size(370, 24),
+            .AutoEllipsis = True
+        }
+        dialog.Controls.Add(label)
+
+        Dim progressBar As New ProgressBar() With {
+            .Location = New Point(18, 58),
+            .Size = New Size(370, 18),
+            .Style = ProgressBarStyle.Marquee,
+            .MarqueeAnimationSpeed = 30
+        }
+        dialog.Controls.Add(progressBar)
+
+        Return Tuple.Create(dialog, label)
+    End Function
+
+    Private Sub UpdateReplaceProgressWindow(dialog As Form, label As Label, message As String)
+        If dialog Is Nothing OrElse dialog.IsDisposed OrElse label Is Nothing OrElse label.IsDisposed Then Return
+
+        If dialog.InvokeRequired Then
+            dialog.BeginInvoke(CType(Sub() UpdateReplaceProgressWindow(dialog, label, message), MethodInvoker))
+            Return
+        End If
+
+        label.Text = message
+        label.Refresh()
+        dialog.Refresh()
+    End Sub
+
+    Private Sub CloseReplaceProgressWindow(dialog As Form)
+        If dialog Is Nothing OrElse dialog.IsDisposed Then Return
+
+        If dialog.InvokeRequired Then
+            dialog.BeginInvoke(CType(Sub() CloseReplaceProgressWindow(dialog), MethodInvoker))
+            Return
+        End If
+
+        dialog.Close()
+        dialog.Dispose()
+    End Sub
+
+    Private Function ResolveDocmeePptxId() As String
+        Try
+            Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
+            If presentation IsNot Nothing Then
+                Dim taggedId = ""
+                Try
+                    taggedId = presentation.Tags.Item(DocmeePptxIdTagName)
+                Catch
+                End Try
+
+                If Not String.IsNullOrWhiteSpace(taggedId) Then Return taggedId.Trim()
+            End If
+        Catch
+        End Try
+
+        Return If(_lastReplaceSlidePptxId, "").Trim()
+    End Function
+
+    Private Sub SaveDocmeePptxId(pptxId As String)
+        If String.IsNullOrWhiteSpace(pptxId) Then Return
+
+        _lastReplaceSlidePptxId = pptxId.Trim()
+        Try
+            Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
+            If presentation Is Nothing Then Return
+
+            Try
+                presentation.Tags.Delete(DocmeePptxIdTagName)
+            Catch
+            End Try
+
+            presentation.Tags.Add(DocmeePptxIdTagName, pptxId.Trim())
+        Catch ex As Exception
+            Debug.WriteLine("保存 Docmee PPT ID 失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Class PptxSlideChoice
+        Public Property SlideIndex As Integer
+        Public Property Title As String
+        Public Property PptxPath As String
+        Public Property PreviewPath As String
+
+        Public Overrides Function ToString() As String
+            Dim displayTitle = If(String.IsNullOrWhiteSpace(Title), "未命名页面", Title.Trim())
+            Return $"第 {SlideIndex} 页 - {displayTitle}"
+        End Function
+    End Class
+
+    Private Function ReplaceCurrentSlideWithSelectedSlideFromPptx(originalSlide As PowerPoint.Slide, pptxPath As String) As Boolean
+        If originalSlide Is Nothing Then Throw New ArgumentNullException(NameOf(originalSlide))
+        If String.IsNullOrWhiteSpace(pptxPath) OrElse Not File.Exists(pptxPath) Then
+            Throw New FileNotFoundException("未找到 Docmee 生成的 PPTX 文件。", pptxPath)
+        End If
+
+        Dim presentation = Globals.ThisAddIn.Application.ActivePresentation
+        Dim originalIndex = originalSlide.SlideIndex
+        Dim choices = GetPptxSlideChoices(pptxPath)
+        If choices.Count = 0 Then Throw New InvalidOperationException("Docmee 生成的 PPTX 中没有可导入的幻灯片。")
+
+        Dim selectedSlideIndex = choices(choices.Count - 1).SlideIndex
+        If choices.Count > 1 Then
+            Dim selectedChoice = ShowReplacementSlideChoiceDialog(choices)
+            If selectedChoice Is Nothing Then
+                LogInfo("[ReplaceSlide] User canceled replacement slide selection.")
+                Return False
+            End If
+            selectedSlideIndex = selectedChoice.SlideIndex
+        End If
+
+        LogInfo("[ReplaceSlide] Import selected slide index=" & selectedSlideIndex.ToString())
+        Dim insertedCount = presentation.Slides.InsertFromFile(pptxPath, originalIndex, selectedSlideIndex, selectedSlideIndex)
+        If insertedCount <= 0 Then Throw New InvalidOperationException("导入 Docmee 单页失败。")
+
+        originalSlide.Delete()
+
+        Try
+            Dim targetIndex = Math.Max(1, Math.Min(originalIndex, presentation.Slides.Count))
+            presentation.Slides(targetIndex).Select()
+            Globals.ThisAddIn.Application.ActiveWindow.View.GotoSlide(targetIndex)
+        Catch
+        End Try
+
+        Return True
+    End Function
+
+    Private Function GetPptxSlideChoices(pptxPath As String) As List(Of PptxSlideChoice)
+        Dim sourcePresentation As PowerPoint.Presentation = Nothing
+        Dim choices As New List(Of PptxSlideChoice)()
+        Try
+            sourcePresentation = Globals.ThisAddIn.Application.Presentations.Open(
+                pptxPath,
+                ReadOnly:=Microsoft.Office.Core.MsoTriState.msoTrue,
+                Untitled:=Microsoft.Office.Core.MsoTriState.msoFalse,
+                WithWindow:=Microsoft.Office.Core.MsoTriState.msoFalse)
+
+            For slideIndex As Integer = 1 To sourcePresentation.Slides.Count
+                choices.Add(New PptxSlideChoice() With {
+                    .SlideIndex = slideIndex,
+                    .Title = GetSlideTitleText(sourcePresentation.Slides(slideIndex)),
+                    .PptxPath = pptxPath
+                })
+            Next
+        Finally
+            If sourcePresentation IsNot Nothing Then
+                sourcePresentation.Close()
+            End If
+        End Try
+
+        Return choices
+    End Function
+
+    Private Function GetSlideTitleText(slide As PowerPoint.Slide) As String
+        If slide Is Nothing Then Return ""
+
+        Try
+            If slide.Shapes.HasTitle = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                Dim titleText = slide.Shapes.Title.TextFrame.TextRange.Text
+                If Not String.IsNullOrWhiteSpace(titleText) Then Return titleText.Trim()
+            End If
+        Catch
+        End Try
+
+        Try
+            For shapeIndex As Integer = 1 To slide.Shapes.Count
+                Dim shape = slide.Shapes(shapeIndex)
+                If shape.HasTextFrame = Microsoft.Office.Core.MsoTriState.msoTrue AndAlso
+                   shape.TextFrame.HasText = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                    Dim text = shape.TextFrame.TextRange.Text
+                    If Not String.IsNullOrWhiteSpace(text) Then Return text.Trim()
+                End If
+            Next
+        Catch
+        End Try
+
+        Return ""
+    End Function
+
+    Private Function EnsureSlidePreview(choice As PptxSlideChoice) As String
+        If choice Is Nothing Then Return ""
+        If Not String.IsNullOrWhiteSpace(choice.PreviewPath) AndAlso File.Exists(choice.PreviewPath) Then Return choice.PreviewPath
+        If String.IsNullOrWhiteSpace(choice.PptxPath) OrElse Not File.Exists(choice.PptxPath) Then Return ""
+
+        Dim sourcePresentation As PowerPoint.Presentation = Nothing
+        Try
+            sourcePresentation = Globals.ThisAddIn.Application.Presentations.Open(
+                choice.PptxPath,
+                ReadOnly:=Microsoft.Office.Core.MsoTriState.msoTrue,
+                Untitled:=Microsoft.Office.Core.MsoTriState.msoFalse,
+                WithWindow:=Microsoft.Office.Core.MsoTriState.msoFalse)
+
+            Dim previewPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_newpage_preview_{Guid.NewGuid():N}_{choice.SlideIndex}.png")
+            sourcePresentation.Slides(choice.SlideIndex).Export(previewPath, "PNG", 960, 540)
+            choice.PreviewPath = previewPath
+            Return previewPath
+        Catch ex As Exception
+            LogInfo("[ReplaceSlide] Export preview failed. slideIndex=" & choice.SlideIndex.ToString() & ", message=" & ex.Message)
+            Return ""
+        Finally
+            If sourcePresentation IsNot Nothing Then
+                sourcePresentation.Close()
+            End If
+        End Try
+    End Function
+
+    Private Function ShowReplacementSlideChoiceDialog(choices As List(Of PptxSlideChoice)) As PptxSlideChoice
+        Using dialog As New Form()
+            dialog.Text = "选择替换页"
+            dialog.Size = New Size(980, 640)
+            dialog.StartPosition = FormStartPosition.CenterParent
+            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
+            dialog.MaximizeBox = False
+            dialog.MinimizeBox = False
+
+            Dim label As New Label() With {
+                .Text = "Docmee 生成了多页，请选择用于替换当前页的页面：",
+                .Location = New Point(14, 14),
+                .AutoSize = True
+            }
+            dialog.Controls.Add(label)
+
+            Dim listBox As New ListBox() With {
+                .Location = New Point(14, 42),
+                .Size = New Size(300, 500)
+            }
+            For Each choice In choices
+                listBox.Items.Add(choice)
+            Next
+            dialog.Controls.Add(listBox)
+
+            Dim previewBox As New PictureBox() With {
+                .Location = New Point(330, 42),
+                .Size = New Size(620, 349),
+                .BackColor = Color.White,
+                .BorderStyle = BorderStyle.FixedSingle,
+                .SizeMode = PictureBoxSizeMode.Zoom
+            }
+            dialog.Controls.Add(previewBox)
+
+            Dim titleLabel As New Label() With {
+                .Location = New Point(330, 406),
+                .Size = New Size(620, 64),
+                .AutoEllipsis = True
+            }
+            dialog.Controls.Add(titleLabel)
+
+            Dim setPreview As MethodInvoker =
+                Sub()
+                    Dim choice = TryCast(listBox.SelectedItem, PptxSlideChoice)
+                    If previewBox.Image IsNot Nothing Then
+                        Dim oldImage = previewBox.Image
+                        previewBox.Image = Nothing
+                        oldImage.Dispose()
+                    End If
+
+                    If choice Is Nothing Then
+                        titleLabel.Text = ""
+                        Return
+                    End If
+
+                    titleLabel.Text = choice.ToString() & "    正在生成预览..."
+                    dialog.Cursor = Cursors.WaitCursor
+                    previewBox.Refresh()
+                    titleLabel.Refresh()
+                    Application.DoEvents()
+
+                    Dim previewPath = EnsureSlidePreview(choice)
+                    titleLabel.Text = choice.ToString()
+                    dialog.Cursor = Cursors.Default
+                    If Not String.IsNullOrWhiteSpace(previewPath) AndAlso File.Exists(previewPath) Then
+                        Using previewImage = Image.FromFile(previewPath)
+                            previewBox.Image = New Bitmap(previewImage)
+                        End Using
+                    Else
+                        titleLabel.Text = choice.ToString() & "    预览图生成失败"
+                    End If
+                End Sub
+
+            AddHandler listBox.SelectedIndexChanged, Sub() setPreview.Invoke()
+            AddHandler dialog.FormClosed,
+                Sub()
+                    If previewBox.Image IsNot Nothing Then
+                        Dim oldImage = previewBox.Image
+                        previewBox.Image = Nothing
+                        oldImage.Dispose()
+                    End If
+                End Sub
+
+            listBox.SelectedIndex = Math.Max(0, choices.Count - 1)
+
+            Dim okButton As New Button() With {
+                .Text = "使用此页",
+                .Location = New Point(774, 552),
+                .Size = New Size(86, 30),
+                .DialogResult = DialogResult.OK
+            }
+            dialog.Controls.Add(okButton)
+            dialog.AcceptButton = okButton
+
+            Dim cancelButton As New Button() With {
+                .Text = "取消",
+                .Location = New Point(870, 552),
+                .Size = New Size(80, 30),
+                .DialogResult = DialogResult.Cancel
+            }
+            dialog.Controls.Add(cancelButton)
+            dialog.CancelButton = cancelButton
+
+            If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
+            Return TryCast(listBox.SelectedItem, PptxSlideChoice)
+        End Using
     End Function
 
     Private Async Function GenerateReplacementSlideTextAsync(requirement As String) As Task(Of String)

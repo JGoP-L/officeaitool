@@ -22,6 +22,7 @@ Public Class ThemePptTaskPane
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
     Private Const TemplatePageSize As Integer = 20
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
+    Private Const DocmeePptxIdTagName As String = "wenduoduoAI_DocmeePptxId"
     Private Const WM_SETREDRAW As Integer = &HB
     Private Const EM_LINESCROLL As Integer = &HB6
     Private Const EM_GETFIRSTVISIBLELINE As Integer = &HCE
@@ -2628,6 +2629,7 @@ Public Class ThemePptTaskPane
                 Throw New InvalidOperationException($"Docmee 返回的模板ID与所选模板不一致。所选: {selectedTemplate.Id}，返回: {pptInfo.TemplateId}")
             End If
             _lastGeneratedPptId = pptInfo.Id
+            SaveDocmeePptxIdToCurrentPresentation(_lastGeneratedPptId)
 
             SetStatus("正在获取 PPTX 下载地址...")
             Dim fileUrl = Await _client.DownloadPptxAsync(pptInfo.Id, True)
@@ -2653,6 +2655,24 @@ Public Class ThemePptTaskPane
             RefreshActionButtons()
         End Try
     End Function
+
+    Private Sub SaveDocmeePptxIdToCurrentPresentation(pptxId As String)
+        If String.IsNullOrWhiteSpace(pptxId) Then Return
+
+        Try
+            Dim presentation = GetOrCreatePresentation()
+            If presentation Is Nothing Then Return
+
+            Try
+                presentation.Tags.Delete(DocmeePptxIdTagName)
+            Catch
+            End Try
+
+            presentation.Tags.Add(DocmeePptxIdTagName, pptxId.Trim())
+        Catch ex As Exception
+            AppendThemePptLog("Save Docmee PPT ID failed: " & ex.Message)
+        End Try
+    End Sub
 
     Private Async Function ChangeThemeForLatestPptAsync() As Task
         If String.IsNullOrWhiteSpace(_lastGeneratedPptId) Then
@@ -2683,6 +2703,7 @@ Public Class ThemePptTaskPane
             SetStatus("正在更换 Docmee PPT 模板...")
             AppendTaskPaneLine("更换模板ID: " & selectedTemplate.Id)
             _lastGeneratedPptId = Await _client.UpdatePptTemplateAsync(_lastGeneratedPptId, selectedTemplate.Id, False)
+            SaveDocmeePptxIdToCurrentPresentation(_lastGeneratedPptId)
             AppendTaskPaneLine("更新后的 PPT ID: " & _lastGeneratedPptId)
 
             SetStatus("正在获取更换主题后的 PPTX...")

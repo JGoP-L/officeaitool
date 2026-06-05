@@ -29,7 +29,47 @@ Public Class DocmeePptInfo
     Public Property CoverUrl As String
 End Class
 
+Public Class DocmeeNewPageResult
+    Public Property PptxId As String
+    Public Property FileUrl As String
+End Class
+
 Public Class DocmeePptClient
+    Private Shared ReadOnly NewPageTemplateIds As String() = {
+        "1804885538940116992",
+        "1804889500284084224",
+        "1804893649646116864",
+        "1804898801006403584",
+        "1804901831135191040",
+        "1804902366068334592",
+        "1804904403862544384",
+        "1804905770857521152",
+        "1804906177663066112",
+        "1805081814809960448",
+        "1806268304982269952",
+        "1806271593098502144",
+        "1806279004165234688",
+        "1806280891782389760",
+        "1806285286083387392",
+        "1806287200204349440",
+        "1806290661188820992",
+        "1806291734771261440",
+        "1806297030256222208",
+        "1806297660265848832",
+        "1806299845762473984",
+        "1806301544875024384",
+        "1806303058985213952",
+        "1806304212762746880",
+        "1806506174552727552",
+        "1807601742553276416",
+        "1807617227806203904",
+        "1807655586138152960",
+        "1807658348435464192",
+        "1807659875694796800"
+    }
+    Private Shared ReadOnly NewPageTemplateRandom As New Random()
+    Private Shared ReadOnly NewPageTemplateRandomLock As New Object()
+
     Private Shared ReadOnly Property CreateTaskEndpoint As String
         Get
             Return BuildEndpoint("/api/ppt/v2/createTask")
@@ -72,12 +112,24 @@ Public Class DocmeePptClient
         End Get
     End Property
 
+    Private Shared ReadOnly Property NewPageWithAiV2Endpoint As String
+        Get
+            Return BuildEndpoint("/api/ppt/v2/newPageWithAiV2")
+        End Get
+    End Property
+
     Public Shared Function GetConfiguredApiBaseUrl() As String
         Return ShareRibbon.ConfigSettings.GetDocmeeApiBaseUrl()
     End Function
 
     Public Shared Function GetConfiguredToken() As String
         Return ShareRibbon.ConfigSettings.GetDocmeeToken()
+    End Function
+
+    Public Shared Function GetRandomNewPageTemplateId() As String
+        SyncLock NewPageTemplateRandomLock
+            Return NewPageTemplateIds(NewPageTemplateRandom.Next(NewPageTemplateIds.Length))
+        End SyncLock
     End Function
 
     Private Shared Function BuildEndpoint(path As String) As String
@@ -522,6 +574,43 @@ Public Class DocmeePptClient
         End Using
     End Function
 
+    Public Async Function NewPageWithAiV2Async(content As String, pptxId As String, Optional progressHandler As Action(Of String) = Nothing) As Task(Of DocmeeNewPageResult)
+        If String.IsNullOrWhiteSpace(content) Then
+            Throw New ArgumentException("缺少新单页内容。", NameOf(content))
+        End If
+        If String.IsNullOrWhiteSpace(pptxId) Then
+            Throw New ArgumentException("缺少 Docmee PPT ID。", NameOf(pptxId))
+        End If
+
+        Dim templateId = GetRandomNewPageTemplateId()
+        Dim payload As New JObject From {
+            {"content", content.Trim()},
+            {"pptxId", pptxId.Trim()},
+            {"templateId", templateId},
+            {"stream", True},
+            {"lang", "zh"}
+        }
+        ShareRibbon.LogInfo("[DocmeeNewPage] Request. pptxId=" & pptxId.Trim() & ", templateId=" & templateId & ", contentLength=" & content.Trim().Length.ToString())
+
+        Using client = CreateHttpClient()
+            Using request As New HttpRequestMessage(HttpMethod.Post, NewPageWithAiV2Endpoint)
+                AddDocmeeTokenHeader(request.Headers)
+                request.Headers.TryAddWithoutValidation("lang", "zh")
+                request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
+
+                Using response = Await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(False)
+                    EnsureSuccess(response, "")
+                    Using responseStream = Await response.Content.ReadAsStreamAsync().ConfigureAwait(False)
+                        Dim result = Await ReadNewPageWithAiStreamAsync(responseStream, progressHandler).ConfigureAwait(False)
+                        If String.IsNullOrWhiteSpace(result.PptxId) Then result.PptxId = pptxId.Trim()
+                        ShareRibbon.LogInfo("[DocmeeNewPage] Response parsed. pptxId=" & If(result.PptxId, "") & ", hasFileUrl=" & Not String.IsNullOrWhiteSpace(result.FileUrl))
+                        Return result
+                    End Using
+                End Using
+            End Using
+        End Using
+    End Function
+
     Public Async Function UpdatePptTemplateAsync(pptId As String, templateId As String, Optional sync As Boolean = False) As Task(Of String)
         If String.IsNullOrWhiteSpace(pptId) Then
             Throw New ArgumentException("缺少 PPT ID。", NameOf(pptId))
@@ -741,6 +830,71 @@ Public Class DocmeePptClient
         If markdownBuilder.Length > 0 Then Return markdownBuilder.ToString().Trim()
         Return ExtractGeneratedMarkdown(rawResponse.ToString())
     End Function
+
+    Private Shared Async Function ReadNewPageWithAiStreamAsync(responseStream As Stream, progressHandler As Action(Of String)) As Task(Of DocmeeNewPageResult)
+        Dim rawResponse As New StringBuilder()
+        Dim result As New DocmeeNewPageResult()
+
+        Using reader As New StreamReader(responseStream, Encoding.UTF8)
+            Do
+                Dim line = Await reader.ReadLineAsync().ConfigureAwait(False)
+                If line Is Nothing Then Exit Do
+
+                rawResponse.AppendLine(line)
+
+                Dim trimmed = line.Trim()
+                If String.IsNullOrWhiteSpace(trimmed) Then Continue Do
+
+                Dim payload As JObject = Nothing
+                If trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase) Then
+                    Dim dataText = trimmed.Substring(5).Trim()
+                    If String.IsNullOrWhiteSpace(dataText) OrElse dataText = "[DONE]" Then Continue Do
+                    If progressHandler IsNot Nothing Then progressHandler.Invoke(dataText)
+                    payload = TryParseObject(dataText)
+                Else
+                    If progressHandler IsNot Nothing Then progressHandler.Invoke(trimmed)
+                    payload = TryParseObject(trimmed)
+                End If
+
+                If payload Is Nothing Then Continue Do
+                EnsureDocmeeSuccess(payload)
+
+                MergeNewPageResult(result, payload)
+
+                Dim progressText = FirstNonEmpty(payload, "text", "content", "message", "msg")
+                If Not String.IsNullOrWhiteSpace(progressText) AndAlso progressHandler IsNot Nothing Then
+                    progressHandler.Invoke("message: " & progressText)
+                End If
+            Loop
+        End Using
+
+        If Not String.IsNullOrWhiteSpace(result.PptxId) OrElse Not String.IsNullOrWhiteSpace(result.FileUrl) Then Return result
+
+        Dim directJson = TryParseObject(rawResponse.ToString())
+        If directJson IsNot Nothing Then
+            EnsureDocmeeSuccess(directJson)
+            MergeNewPageResult(result, directJson)
+        End If
+
+        Return result
+    End Function
+
+    Private Shared Sub MergeNewPageResult(result As DocmeeNewPageResult, payload As JObject)
+        If result Is Nothing OrElse payload Is Nothing Then Return
+
+        Dim pptxId = FirstNonEmpty(payload, "pptxId", "pptId", "id")
+        If String.IsNullOrWhiteSpace(pptxId) Then pptxId = TryGetString(payload.SelectToken("data.pptxId"))
+        If String.IsNullOrWhiteSpace(pptxId) Then pptxId = TryGetString(payload.SelectToken("data.pptId"))
+        If String.IsNullOrWhiteSpace(pptxId) Then pptxId = TryGetString(payload.SelectToken("data.id"))
+        If String.IsNullOrWhiteSpace(pptxId) Then pptxId = TryGetString(payload.SelectToken("data.pptInfo.id"))
+        If Not String.IsNullOrWhiteSpace(pptxId) Then result.PptxId = pptxId
+
+        Dim fileUrl = FirstNonEmpty(payload, "fileUrl", "url", "downloadUrl")
+        If String.IsNullOrWhiteSpace(fileUrl) Then fileUrl = TryGetString(payload.SelectToken("data.fileUrl"))
+        If String.IsNullOrWhiteSpace(fileUrl) Then fileUrl = TryGetString(payload.SelectToken("data.url"))
+        If String.IsNullOrWhiteSpace(fileUrl) Then fileUrl = TryGetString(payload.SelectToken("data.downloadUrl"))
+        If Not String.IsNullOrWhiteSpace(fileUrl) Then result.FileUrl = fileUrl
+    End Sub
 
     Private Shared Async Function ReadTextOptimizeStreamAsync(responseStream As Stream, progressHandler As Action(Of String)) As Task(Of String)
         Dim rawResponse As New StringBuilder()
