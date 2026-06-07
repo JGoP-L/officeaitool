@@ -4,6 +4,7 @@ Imports System.IO
 Imports System.Net.Http
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
+Imports ShareRibbon
 
 Public Class TemplateSelectionForm
     Inherits Form
@@ -60,72 +61,78 @@ Public Class TemplateSelectionForm
     End Sub
 
     Private Sub BuildLayout()
-        Text = "预览模板"
-        StartPosition = FormStartPosition.CenterParent
-        FormBorderStyle = FormBorderStyle.FixedDialog
-        MaximizeBox = False
-        MinimizeBox = False
-        ClientSize = New Size(980, 640)
+        OfficeAIStyleHelper.StyleFormDialog(Me)
+        Text = "选择模板"
+        ClientSize = New Size(960, 580)
+        BackColor = OfficeAIStyleHelper.BgPage
 
-        Dim hintLabel As New Label() With {
-            .Text = "请选择用于生成 PPT 的模板：",
-            .Location = New Point(14, 14),
-            .AutoSize = True
-        }
-        Controls.Add(hintLabel)
+        ' 品牌色标题栏
+        Dim header = OfficeAIStyleHelper.CreateFormHeader("🎨 请选择用于生成 PPT 的模板", 960)
+        Controls.Add(header)
 
-        _listBox.Location = New Point(14, 42)
-        _listBox.Size = New Size(300, 490)
+        Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingSm
+
+        _listBox.Location = New Point(OfficeAIStyleHelper.SpacingSm, contentY)
+        _listBox.Size = New Size(280, 420)
         _listBox.DrawMode = DrawMode.OwnerDrawFixed
         _listBox.ItemHeight = 76
         _listBox.IntegralHeight = False
+        _listBox.BackColor = OfficeAIStyleHelper.BgSurface
+        _listBox.BorderStyle = BorderStyle.FixedSingle
+        _listBox.Font = OfficeAIStyleHelper.FontUi
         AddHandler _listBox.SelectedIndexChanged, AddressOf ListBox_SelectedIndexChanged
         AddHandler _listBox.DrawItem, AddressOf ListBox_DrawItem
         Controls.Add(_listBox)
 
-        _previewBox.Location = New Point(330, 42)
-        _previewBox.Size = New Size(620, 349)
-        _previewBox.BackColor = Color.White
+        _previewBox.Location = New Point(306, contentY)
+        _previewBox.Size = New Size(630, 354)
+        _previewBox.BackColor = OfficeAIStyleHelper.BgSurface
         _previewBox.BorderStyle = BorderStyle.FixedSingle
         _previewBox.SizeMode = PictureBoxSizeMode.Zoom
         Controls.Add(_previewBox)
 
-        _titleLabel.Location = New Point(330, 406)
-        _titleLabel.Size = New Size(620, 84)
+        _titleLabel.Location = New Point(306, _previewBox.Bottom + OfficeAIStyleHelper.SpacingSm)
+        _titleLabel.Size = New Size(630, 50)
         _titleLabel.AutoEllipsis = True
+        OfficeAIStyleHelper.StyleLabelBody(_titleLabel)
         Controls.Add(_titleLabel)
 
-        _prevButton.Text = "上一页"
-        _prevButton.Location = New Point(14, 548)
-        _prevButton.Size = New Size(86, 28)
+        _prevButton.Text = "◀ 上一页"
+        _prevButton.Location = New Point(OfficeAIStyleHelper.SpacingSm, contentY + 436)
+        _prevButton.Size = New Size(86, OfficeAIStyleHelper.ButtonHeightSmall)
         AddHandler _prevButton.Click, AddressOf PrevButton_Click
+        OfficeAIStyleHelper.StyleButtonSmall(_prevButton)
         Controls.Add(_prevButton)
 
-        _pageLabel.Location = New Point(112, 550)
-        _pageLabel.Size = New Size(104, 24)
+        _pageLabel.Location = New Point(108, contentY + 438)
+        _pageLabel.Size = New Size(88, 22)
         _pageLabel.TextAlign = ContentAlignment.MiddleCenter
+        OfficeAIStyleHelper.StyleLabelHint(_pageLabel)
         Controls.Add(_pageLabel)
 
-        _nextButton.Text = "下一页"
-        _nextButton.Location = New Point(228, 548)
-        _nextButton.Size = New Size(86, 28)
+        _nextButton.Text = "下一页 ▶"
+        _nextButton.Location = New Point(202, contentY + 436)
+        _nextButton.Size = New Size(86, OfficeAIStyleHelper.ButtonHeightSmall)
         AddHandler _nextButton.Click, AddressOf NextButton_Click
+        OfficeAIStyleHelper.StyleButtonSmall(_nextButton)
         Controls.Add(_nextButton)
 
         _okButton.Text = "使用模板"
-        _okButton.Location = New Point(754, 552)
-        _okButton.Size = New Size(106, 30)
+        _okButton.Location = New Point(730, _titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm)
+        _okButton.Size = New Size(106, OfficeAIStyleHelper.ButtonHeight)
         _okButton.DialogResult = DialogResult.OK
         AddHandler _okButton.Click, AddressOf OkButton_Click
+        OfficeAIStyleHelper.StyleButtonPrimary(_okButton)
         Controls.Add(_okButton)
         AcceptButton = _okButton
 
         Dim cancelButton As New Button() With {
             .Text = "取消",
-            .Location = New Point(870, 552),
-            .Size = New Size(80, 30),
+            .Location = New Point(844, _titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm),
+            .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
             .DialogResult = DialogResult.Cancel
         }
+        OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
         Controls.Add(cancelButton)
         CancelButton = cancelButton
 
@@ -180,20 +187,27 @@ Public Class TemplateSelectionForm
         If template Is Nothing Then Return
 
         Dim selected = (e.State And DrawItemState.Selected) = DrawItemState.Selected
-        Using backBrush As New SolidBrush(If(selected, Color.FromArgb(255, 245, 235), Color.White))
+        Using backBrush As New SolidBrush(If(selected, OfficeAIStyleHelper.BrandPrimaryLight, OfficeAIStyleHelper.BgSurface))
             e.Graphics.FillRectangle(backBrush, e.Bounds)
         End Using
+
+        ' 选中态左侧指示条
+        If selected Then
+            Using accentBrush As New SolidBrush(OfficeAIStyleHelper.BrandPrimary)
+                e.Graphics.FillRectangle(accentBrush, e.Bounds.Left, e.Bounds.Top, 3, e.Bounds.Height)
+            End Using
+        End If
 
         Dim title = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
         Dim meta = BuildMetaText(template)
         Using titleFont As New Font(Font.FontFamily, 9.0F, FontStyle.Bold),
               metaFont As New Font(Font.FontFamily, 8.0F),
-              titleBrush As New SolidBrush(Color.FromArgb(39, 45, 55)),
-              metaBrush As New SolidBrush(Color.FromArgb(86, 94, 108))
-            Dim titleRect = New Rectangle(e.Bounds.Left + 8, e.Bounds.Top + 10, e.Bounds.Width - 16, 24)
-            Dim metaRect = New Rectangle(e.Bounds.Left + 8, e.Bounds.Top + 38, e.Bounds.Width - 16, 24)
-            TextRenderer.DrawText(e.Graphics, title, titleFont, titleRect, Color.FromArgb(39, 45, 55), TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
-            TextRenderer.DrawText(e.Graphics, meta, metaFont, metaRect, Color.FromArgb(86, 94, 108), TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
+              titleBrush As New SolidBrush(OfficeAIStyleHelper.TextPrimary),
+              metaBrush As New SolidBrush(OfficeAIStyleHelper.TextSecondary)
+            Dim titleRect = New Rectangle(e.Bounds.Left + 12, e.Bounds.Top + 10, e.Bounds.Width - 20, 24)
+            Dim metaRect = New Rectangle(e.Bounds.Left + 12, e.Bounds.Top + 38, e.Bounds.Width - 20, 24)
+            TextRenderer.DrawText(e.Graphics, title, titleFont, titleRect, OfficeAIStyleHelper.TextPrimary, TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
+            TextRenderer.DrawText(e.Graphics, meta, metaFont, metaRect, OfficeAIStyleHelper.TextSecondary, TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
         End Using
     End Sub
 
@@ -294,18 +308,18 @@ Public Class TemplateSelectionForm
         Dim bitmap As New Bitmap(620, 349)
         Using graphics As Graphics = Graphics.FromImage(bitmap)
             graphics.SmoothingMode = SmoothingMode.AntiAlias
-            graphics.Clear(Color.White)
-            Using borderPen As New Pen(Color.FromArgb(226, 232, 240)),
-                  accentBrush As New SolidBrush(Color.FromArgb(234, 88, 12)),
+            graphics.Clear(OfficeAIStyleHelper.BgSurface)
+            Using borderPen As New Pen(OfficeAIStyleHelper.BorderLight),
+                  accentBrush As New SolidBrush(OfficeAIStyleHelper.BrandPrimary),
                   titleFont As New Font(Font.FontFamily, 18.0F, FontStyle.Bold),
                   statusFont As New Font(Font.FontFamily, 11.0F),
-                  titleBrush As New SolidBrush(Color.FromArgb(39, 45, 55)),
-                  statusBrush As New SolidBrush(Color.FromArgb(86, 94, 108))
+                  titleBrush As New SolidBrush(OfficeAIStyleHelper.TextPrimary),
+                  statusBrush As New SolidBrush(OfficeAIStyleHelper.TextSecondary)
                 graphics.DrawRectangle(borderPen, 0, 0, bitmap.Width - 1, bitmap.Height - 1)
                 graphics.FillRectangle(accentBrush, 0, 0, 8, bitmap.Height)
                 Dim title = If(template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Name), "模板预览", template.Name)
-                TextRenderer.DrawText(graphics, title, titleFont, New Rectangle(34, 112, 552, 58), Color.FromArgb(39, 45, 55), TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
-                TextRenderer.DrawText(graphics, statusText, statusFont, New Rectangle(34, 184, 552, 54), Color.FromArgb(86, 94, 108), TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+                TextRenderer.DrawText(graphics, title, titleFont, New Rectangle(34, 112, 552, 58), OfficeAIStyleHelper.TextPrimary, TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
+                TextRenderer.DrawText(graphics, statusText, statusFont, New Rectangle(34, 184, 552, 54), OfficeAIStyleHelper.TextSecondary, TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
             End Using
         End Using
         Return bitmap

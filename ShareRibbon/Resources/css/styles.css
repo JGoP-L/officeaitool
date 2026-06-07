@@ -117,7 +117,7 @@ code {
 
 .code-toggle-label {
     cursor: pointer;
-    color: #4a6fa5;
+    color: #4F46E5;
     padding: 4px 8px;
     font-size: 12px;
     background: #edf2f7;
@@ -165,7 +165,7 @@ pre.collapsible.collapsed {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background-color: #4a6fa5;
+    background-color: #4F46E5;
     color: white;
     display: flex;
     align-items: center;
@@ -223,7 +223,7 @@ pre.collapsible.collapsed {
     background: #f0f4f8;
     padding: 2px 6px;
     border-radius: 4px;
-    color: #4a6fa5;
+    color: #4F46E5;
 }
 
 /* ====== 推理容器样式 ====== */
@@ -264,7 +264,7 @@ pre.collapsible.collapsed {
 
 .reasoning-title {
     font-weight: 500;
-    color: #4a6fa5;
+    color: #4F46E5;
     display: flex;
     align-items: center;
 }
@@ -273,13 +273,13 @@ pre.collapsible.collapsed {
     width: 16px;
     height: 16px;
     margin-right: 6px;
-    fill: #4a6fa5;
+    fill: #4F46E5;
 }
 
 .reasoning-toggle svg {
     width: 16px;
     height: 16px;
-    fill: #4a6fa5;
+    fill: #4F46E5;
     transition: transform 0.2s ease;
 }
 
@@ -377,7 +377,7 @@ pre.collapsible.collapsed {
 }
 
 #chat-input:focus {
-    border: 1.5px solid #4a6fa5;
+    border: 1.5px solid #4F46E5;
 }
 
 #chat-input-actions {
@@ -402,7 +402,7 @@ pre.collapsible.collapsed {
 }
 
 #chat-input-actions button:hover {
-    color: #4a6fa5;
+    color: #4F46E5;
     background-color: #f0f0f0;
 }
 
@@ -467,7 +467,7 @@ pre.collapsible.collapsed {
 }
 
 #settings-button:hover {
-    color: #4a6fa5;
+    color: #4F46E5;
 }
 
 .settings-dialog {
@@ -541,13 +541,13 @@ pre.collapsible.collapsed {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #4a6fa5;
+    background: #4F46E5;
     cursor: pointer;
     transition: background .15s ease-in-out;
 }
 
 .slider::-webkit-slider-thumb:hover {
-    background: #3d5a7c;
+    background: #3730A3;
 }
 
 .slider-value {
@@ -582,12 +582,12 @@ pre.collapsible.collapsed {
 }
 
 .save-button {
-    background: #4a6fa5;
+    background: #4F46E5;
     color: white;
 }
 
 .save-button:hover {
-    background: #3d5a7c;
+    background: #3730A3;
 }
 
 .overlay {
@@ -868,7 +868,7 @@ pre.collapsible.collapsed {
 }
 
 #history-toggle-btn:hover {
-    color: #4a6fa5;
+    color: #4F46E5;
     background-color: #f0f0f0;
 }
 
@@ -886,7 +886,7 @@ pre.collapsible.collapsed {
 }
 
 #mcp-toggle-btn:hover {
-    color: #4a6fa5;
+    color: #4F46E5;
     background-color: #f0f0f0;
 }
 
@@ -995,7 +995,7 @@ pre.collapsible.collapsed {
 }
 
 input:checked + .mcp-toggle-slider {
-    background-color: #4a6fa5;
+    background-color: #4F46E5;
 }
 
 input:checked + .mcp-toggle-slider:before {
@@ -1009,7 +1009,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 .mcp-save-btn {
-    background-color: #4a6fa5;
+    background-color: #4F46E5;
     color: white;
     border: none;
     padding: 8px 16px;
@@ -1018,7 +1018,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 .mcp-save-btn:hover {
-    background-color: #3d5a7c;
+    background-color: #3730A3;
 }
 
 /* ====== 校对、排版样式 ====== */
@@ -1133,7 +1133,7 @@ input:checked + .mcp-toggle-slider:before {
     transition: transform 0.2s ease-in-out;
     margin-right: 8px;
     font-size: 10px;
-    color: #4a6fa5;
+    color: #4F46E5;
 }
 
 .chat-message-references.collapsed .chat-message-reference-arrow {
@@ -1147,7 +1147,7 @@ input:checked + .mcp-toggle-slider:before {
 .chat-message-reference-label {
     font-weight: 500;
     font-size: 13px;
-    color: #4a6fa5;
+    color: #4F46E5;
 }
 
 .chat-message-reference-content {
@@ -1183,7 +1183,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 #case-header {
-    background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%);
+    background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
     padding: 5px 25px;
     color: white;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -1217,7 +1217,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 #case-info a {
-    color: #4a6fa5;
+    color: #4F46E5;
     text-decoration: none;
     font-weight: 500;
     position: relative;
@@ -1226,7 +1226,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 #case-info a:hover {
-    color: #3d5a7c;
+    color: #3730A3;
     text-decoration: none;
 }
 
@@ -1235,7 +1235,7 @@ input:checked + .mcp-toggle-slider:before {
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.8em;
-    color: #4a6fa5;
+    color: #4F46E5;
     font-weight: 500;
 }
 
@@ -1370,7 +1370,7 @@ input:checked + .mcp-toggle-slider:before {
     justify-content: space-between;
     align-items: center;
     padding: 6px 10px;
-    background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%);
+    background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
     color: white;
     font-size: 11px;
     font-weight: 500;
@@ -1432,7 +1432,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 .autocomplete-item.selected .completion-hint {
-    background: #4a6fa5;
+    background: #4F46E5;
     color: white;
 }
 
@@ -1451,7 +1451,7 @@ input:checked + .mcp-toggle-slider:before {
     height: 12px;
     margin-left: 8px;
     border: 2px solid #ccc;
-    border-top-color: #4a6fa5;
+    border-top-color: #4F46E5;
     border-radius: 50%;
     animation: autocomplete-spin 0.8s linear infinite;
 }
@@ -1567,7 +1567,7 @@ input:checked + .mcp-toggle-slider:before {
 .intent-preview-title {
     font-size: 13px;
     font-weight: 600;
-    color: #4a6fa5;
+    color: #4F46E5;
 }
 
 .intent-preview-description {
@@ -1577,7 +1577,7 @@ input:checked + .mcp-toggle-slider:before {
     background: #f0f7ff;
     border-radius: 6px;
     margin-bottom: 10px;
-    border-left: 3px solid #4a6fa5;
+    border-left: 3px solid #4F46E5;
 }
 
 .intent-preview-plan {
@@ -1609,7 +1609,7 @@ input:checked + .mcp-toggle-slider:before {
 .execution-step .step-number {
     width: 18px;
     height: 18px;
-    background: #4a6fa5;
+    background: #4F46E5;
     color: white;
     border-radius: 50%;
     display: flex;
@@ -1670,12 +1670,12 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 .intent-btn-confirm {
-    background: #4a6fa5;
+    background: #4F46E5;
     color: white;
 }
 
 .intent-btn-confirm:hover {
-    background: #3d5a7c;
+    background: #3730A3;
 }
 
 .intent-btn-edit {
@@ -1716,7 +1716,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 .execution-plan-container .plan-header {
-    background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%);
+    background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
     color: white;
     padding: 8px 10px;
     font-size: 12px;
@@ -1746,7 +1746,7 @@ input:checked + .mcp-toggle-slider:before {
 .execution-plan-container .step-badge {
     width: 20px;
     height: 20px;
-    background: #4a6fa5;
+    background: #4F46E5;
     color: white;
     border-radius: 50%;
     display: flex;
@@ -1845,7 +1845,7 @@ input:checked + .mcp-toggle-slider:before {
 /* ====== 文件拖拽区域样式 ====== */
 #chat-container.drag-over {
     background-color: #e3f2fd;
-    border: 2px dashed #4a6fa5;
+    border: 2px dashed #4F46E5;
 }
 
 #chat-container.drag-over::before {
@@ -1873,7 +1873,7 @@ input:checked + .mcp-toggle-slider:before {
     color: #6b7280;
     background: #f8f9fc;
     border-radius: 6px;
-    border-left: 3px solid #4a6fa5;
+    border-left: 3px solid #4F46E5;
 }
 .context-hint-item { white-space: nowrap; }
 
@@ -1892,7 +1892,7 @@ input:checked + .mcp-toggle-slider:before {
 }
 
 #attach-file-btn:hover {
-    color: #4a6fa5;
+    color: #4F46E5;
     background-color: #f0f0f0;
 }
 
@@ -3132,7 +3132,7 @@ input:checked + .mcp-toggle-slider:before {
     content: '# 快捷问题';
     display: block;
     padding: 10px 14px;
-    background: linear-gradient(135deg, #4a6fa5 0%, #6c8fc4 100%);
+    background: linear-gradient(135deg, #4F46E5 0%, #6c8fc4 100%);
     color: white;
     font-size: 12px;
     font-weight: 500;
@@ -3259,7 +3259,7 @@ input:checked + .mcp-toggle-slider:before {
     font-size: 12px;
     font-weight: 500;
     transition: all 0.2s;
-    background: #4a6fa5;
+    background: #4F46E5;
     color: white;
 }
 
@@ -3341,7 +3341,6 @@ input:checked + .mcp-toggle-slider:before {
     color: white;
     border-color: transparent;
     box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
-}
 }
 
 .template-action-btn.small-btn svg {
@@ -3519,7 +3518,7 @@ input:checked + .mcp-toggle-slider:before {
     flex-shrink: 0;
 }
 
-.template-manage-btn.edit-btn { background: linear-gradient(135deg, #4a6fa5 0%, #5b82b8 100%); }
+.template-manage-btn.edit-btn { background: linear-gradient(135deg, #4F46E5 0%, #5b82b8 100%); }
 .template-manage-btn.copy-btn { background: linear-gradient(135deg, #2563eb 0%, #60a5fa 100%); }
 .template-manage-btn.delete-btn { background: linear-gradient(135deg, #e53935 0%, #ef5350 100%); }
 .template-manage-btn.export-btn { background: linear-gradient(135deg, #43a047 0%, #66bb6a 100%); }
@@ -3941,7 +3940,7 @@ input:checked + .mcp-toggle-slider:before {
     flex-shrink: 0;
 }
 
-.template-manage-btn.edit-btn { background: #4a6fa5; }
+.template-manage-btn.edit-btn { background: #4F46E5; }
 .template-manage-btn.copy-btn { background: #2563eb; }
 .template-manage-btn.delete-btn { background: #e53935; }
 .template-manage-btn.export-btn { background: #43a047; }
@@ -4035,7 +4034,7 @@ input:checked + .mcp-toggle-slider:before {
     font-size: 13px;
     font-weight: 500;
     transition: all 0.2s;
-    background: #4a6fa5;
+    background: #4F46E5;
     color: white;
 }
 
@@ -4804,7 +4803,7 @@ input:checked + .mcp-toggle-slider:before {
 
 /* ====== 配置面板（阶段二：场景/Skills、记忆管理） ====== */
 .config-entry-btn {
-    background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%);
+    background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%);
     color: white;
     border: none;
     padding: 6px 14px;
@@ -4874,7 +4873,7 @@ input:checked + .mcp-toggle-slider:before {
     margin-bottom: -1px;
 }
 .config-tab:hover { color: #374151; }
-.config-tab.active { color: #4a6fa5; border-bottom-color: #4a6fa5; font-weight: 600; }
+.config-tab.active { color: #4F46E5; border-bottom-color: #4F46E5; font-weight: 600; }
 .config-tab-content {
     flex: 1;
     overflow-y: auto;
@@ -4948,7 +4947,7 @@ input:checked + .mcp-toggle-slider:before {
     font-size: 13px;
 }
 .config-editor-actions button:hover { background: #f3f4f6; }
-.config-editor-actions .config-btn-primary { background: #4a6fa5; color: white; border-color: #4a6fa5; }
+.config-editor-actions .config-btn-primary { background: #4F46E5; color: white; border-color: #4F46E5; }
 .config-editor-actions .config-btn-primary:hover { background: #3d5d8a; }
 .config-memory-section { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid #f3f4f6; }
 .config-memory-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
@@ -4960,7 +4959,7 @@ input:checked + .mcp-toggle-slider:before {
 #config-memory-profile-save,
 #config-memory-profile-clear { margin-top: 8px; margin-right: 8px; padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
 #config-memory-atomic-delete { background: #e9525f; color: white; border-color: #e9525f; }
-#config-memory-profile-save { background: #4a6fa5; color: white; border-color: #4a6fa5; }
+#config-memory-profile-save { background: #4F46E5; color: white; border-color: #4F46E5; }
 
 /* ====== AgentCard ReAct 迭代与审批样式 ====== */
 .react-iteration {
@@ -4968,7 +4967,7 @@ input:checked + .mcp-toggle-slider:before {
     padding: 10px 12px;
     background: #f8f9fa;
     border-radius: 8px;
-    border-left: 3px solid #4a6fa5;
+    border-left: 3px solid #4F46E5;
     font-size: 12px;
 }
 
@@ -4987,7 +4986,7 @@ input:checked + .mcp-toggle-slider:before {
 .iteration-label {
     display: inline-block;
     font-weight: 600;
-    color: #4a6fa5;
+    color: #4F46E5;
     margin-bottom: 2px;
 }
 

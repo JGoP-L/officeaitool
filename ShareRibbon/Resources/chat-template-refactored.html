@@ -14,7 +14,7 @@
 </head>
 <body>
     <div id="case-container">
-        <div id="case-header" style="position:relative; background: linear-gradient(135deg, #4a6fa5 0%, #3d5a7c 100%); padding: 5px 25px; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); cursor:pointer;">
+        <div id="case-header" style="position:relative; background: linear-gradient(135deg, #4F46E5 0%, #3730A3 100%); padding: 5px 25px; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); cursor:pointer;">
             <h3 style="margin:0; font-size:1.3em; font-weight:400; letter-spacing:0.5px;">智能聊天模式说明</h3>
             <!-- 等待动画提示 -->
             <div id="loading-indicator" style="display:none; position:absolute; right:50px; top:50%; transform:translateY(-50%); align-items:center; gap:6px;">
@@ -49,7 +49,7 @@
     </div>
 
     <!-- Agent 模式指示器 -->
-    <div id="agent-mode-indicator" style="display:none; padding: 6px 16px; background: linear-gradient(90deg, #4a6fa5 0%, #3d5a7c 100%); color: white; font-size: 12px; align-items: center; gap: 8px;">
+    <div id="agent-mode-indicator" style="display:none; padding: 6px 16px; background: linear-gradient(90deg, #4F46E5 0%, #3730A3 100%); color: white; font-size: 12px; align-items: center; gap: 8px;">
         <span class="agent-dot" style="width: 8px; height: 8px; background: #4ade80; border-radius: 50%; display: inline-block; animation: pulse 2s infinite;"></span>
         <span>Agent 模式运行中</span>
         <style>
@@ -204,7 +204,7 @@
                         </svg>
                     </button>
 
-                    <span class="input-option" id="smart-mode-indicator" style="display:flex; align-items:center; gap:6px; padding:6px 12px; background:linear-gradient(90deg, #4a6fa5 0%, #3d5a7c 100%); color:white; border-radius:6px; font-size:12px; font-weight:500;">
+                    <span class="input-option" id="smart-mode-indicator" style="display:flex; align-items:center; gap:6px; padding:6px 12px; background:linear-gradient(90deg, #4F46E5 0%, #3730A3 100%); color:white; border-radius:6px; font-size:12px; font-weight:500;">
                         <span style="width:8px; height:8px; background:#4ade80; border-radius:50%; display:inline-block; animation:pulse 2s infinite;"></span>
                         智能模式
                     </span>
@@ -290,7 +290,7 @@
     <div id="history-sidebar" class="sidebar-hidden">
         <div class="sidebar-header">
             <h3>历史会话</h3>
-            <button id="new-session-btn" type="button" title="新会话" style="margin-right:8px; padding:4px 10px; background:#4a6fa5; color:white; border:none; border-radius:4px; cursor:pointer;">新会话</button>
+            <button id="new-session-btn" type="button" title="新会话" style="margin-right:8px; padding:4px 10px; background:#4F46E5; color:white; border:none; border-radius:4px; cursor:pointer;">新会话</button>
             <button id="close-sidebar-btn" title="关闭">×</button>
         </div>
         <div class="sidebar-content">
@@ -398,7 +398,7 @@
     <div id="clear-or-delete-actions" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:999;">
         <div style="background:white; border-radius:8px; box-shadow:0 2px 12px rgba(0,0,0,0.12); padding:18px 18px;">
             <div style="font-size:15px; margin-bottom:16px;">选择你要进行的操作：</div>
-            <button id="action-clear-context" style="background: #4a6fa5; color: white; border: none; padding: 5px 5px; border-radius: 6px; margin-right: 10px; margin-bottom: 2px;">清空聊天上下文记忆</button>
+            <button id="action-clear-context" style="background: #4F46E5; color: white; border: none; padding: 5px 5px; border-radius: 6px; margin-right: 10px; margin-bottom: 2px;">清空聊天上下文记忆</button>
             <button id="action-delete-chat" style="background: #e9525f; color: white; border: none; padding: 5px 5px; border-radius: 6px; margin-right: 10px; margin-bottom: 2px; ">批量删除聊天记录</button>
             <button id="action-cancel" style="background:#f5f5f5;color:#333;border:none;padding:5px 10px;border-radius:6px;">我可能点错了</button>
         </div>

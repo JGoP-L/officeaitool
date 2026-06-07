@@ -75,6 +75,8 @@ Public Class ThemePptTaskPane
     Private ReadOnly _templateCombo As New ComboBox()
     Private ReadOnly _refreshTemplatesButton As New Button()
     Private ReadOnly _selectTemplateButton As New Button()
+    Private ReadOnly _templateSectionLabel As New Label()
+    Private ReadOnly _templateSectionPanel As New TableLayoutPanel()
     Private ReadOnly _outputBox As New TextBox()
     Private ReadOnly _contentPanel As New Panel()
     Private ReadOnly _outlineWorkspacePanel As New SplitContainer()
@@ -111,16 +113,49 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub BuildLayout()
-        Me.BackColor = Color.White
-        Me.Padding = New Padding(14)
+        Me.BackColor = OfficeAIStyleHelper.BgPage
+        Me.Padding = New Padding(0)
+
+        ' 顶部品牌色标题栏
+        Dim headerPanel As New Panel()
+        headerPanel.Dock = DockStyle.Top
+        headerPanel.Height = 48
+        headerPanel.BackColor = OfficeAIStyleHelper.BrandPrimary
+        headerPanel.Padding = New Padding(OfficeAIStyleHelper.SpacingLg, 0, OfficeAIStyleHelper.SpacingLg, 0)
+
+        Dim headerTitle As New Label()
+        headerTitle.Text = "AI 生成 PPT"
+        headerTitle.Font = New Font("Microsoft YaHei UI", 12.0!, FontStyle.Bold)
+        headerTitle.ForeColor = Color.White
+        headerTitle.AutoSize = True
+        headerTitle.Location = New Point(OfficeAIStyleHelper.SpacingLg, 11)
+        headerPanel.Controls.Add(headerTitle)
+
+        Dim headerVersion As New Label()
+        headerVersion.Text = "v" & ThemePptPaneBuild
+        headerVersion.Font = New Font("Microsoft YaHei UI", 8.0!, FontStyle.Regular)
+        headerVersion.ForeColor = Color.FromArgb(180, 180, 255)
+        headerVersion.AutoSize = True
+        headerVersion.Location = New Point(headerTitle.Right + 8, 18)
+        headerPanel.Controls.Add(headerVersion)
+
+        Me.Controls.Add(headerPanel)
+
+        ' 主体滚动区域
+        Dim scrollPanel As New Panel()
+        scrollPanel.Dock = DockStyle.Fill
+        scrollPanel.AutoScroll = True
+        scrollPanel.Padding = New Padding(OfficeAIStyleHelper.SpacingLg)
+        scrollPanel.BackColor = OfficeAIStyleHelper.BgPage
 
         Dim layout As New TableLayoutPanel()
         layout.Dock = DockStyle.Fill
+        layout.AutoSize = False
         layout.ColumnCount = 1
         layout.RowCount = 10
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 96.0F))
+        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 200.0F))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
@@ -128,150 +163,186 @@ Public Class ThemePptTaskPane
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        layout.BackColor = Color.Transparent
 
-        Dim titleLabel As New Label()
-        titleLabel.AutoSize = True
-        titleLabel.Font = New Font(Me.Font.FontFamily, 12.0F, FontStyle.Bold)
-        titleLabel.Text = "AI生成PPT"
-        titleLabel.Margin = New Padding(0, 0, 0, 8)
-
-        Dim modePanel As New TableLayoutPanel()
-        modePanel.Dock = DockStyle.Fill
-        modePanel.ColumnCount = 2
-        modePanel.RowCount = 1
-        modePanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
-        modePanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        modePanel.Margin = New Padding(0, 0, 0, 8)
-
+        ' --- 生成方式选择器（Segmented Control 风格）---
         Dim modeLabel As New Label()
-        modeLabel.AutoSize = True
+        OfficeAIStyleHelper.StyleLabelHeading(modeLabel)
         modeLabel.Text = "生成方式"
-        modeLabel.Margin = New Padding(0, 4, 10, 0)
+        modeLabel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
 
-        _generationModeCombo.Dock = DockStyle.Fill
-        _generationModeCombo.DropDownStyle = ComboBoxStyle.DropDownList
-        _generationModeCombo.Items.AddRange(New Object() {GenerationModeTitle, GenerationModeDocument, GenerationModeMarkdown})
-        _generationModeCombo.SelectedIndex = 0
-        AddHandler _generationModeCombo.SelectedIndexChanged, AddressOf GenerationModeCombo_SelectedIndexChanged
+        Dim modeSegmentedPanel As New Panel()
+        modeSegmentedPanel.Height = 36
+        modeSegmentedPanel.Width = 400
+        modeSegmentedPanel.BackColor = OfficeAIStyleHelper.BorderLight
+        modeSegmentedPanel.Padding = New Padding(1)
+        modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
 
-        modePanel.Controls.Add(modeLabel, 0, 0)
-        modePanel.Controls.Add(_generationModeCombo, 1, 0)
+        ' 三个模式按钮作为 Segmented Control
+        Dim modes() As String = {GenerationModeTitle, GenerationModeDocument, GenerationModeMarkdown}
+        Dim modeBtnWidth As Integer = 98
+        For i As Integer = 0 To modes.Length - 1
+            Dim modeBtn As New Button()
+            modeBtn.Text = modes(i)
+            modeBtn.FlatStyle = FlatStyle.Flat
+            modeBtn.FlatAppearance.BorderSize = 0
+            modeBtn.FlatAppearance.MouseOverBackColor = Color.Transparent
+            modeBtn.FlatAppearance.MouseDownBackColor = Color.Transparent
+            modeBtn.UseVisualStyleBackColor = False
+            modeBtn.Height = 34
+            modeBtn.Width = modeBtnWidth
+            modeBtn.Left = 1 + i * (modeBtnWidth + 1)
+            modeBtn.Top = 1
+            modeBtn.Font = OfficeAIStyleHelper.FontUi
+            modeBtn.Cursor = Cursors.Hand
+            modeBtn.TextAlign = ContentAlignment.MiddleCenter
+            modeBtn.Tag = i
+            Dim captured As Button = modeBtn
+            AddHandler modeBtn.Click, Sub(s, e)
+                                          _generationModeCombo.SelectedIndex = CInt(captured.Tag)
+                                      End Sub
+            modeSegmentedPanel.Controls.Add(modeBtn)
+        Next
+        ' 事件只绑定一次
+        AddHandler _generationModeCombo.SelectedIndexChanged, Sub(s, e)
+                                                                 UpdateModeButtonsStyle(modeSegmentedPanel, _generationModeCombo.SelectedIndex)
+                                                             End Sub
+        UpdateModeButtonsStyle(modeSegmentedPanel, 0)
 
+        ' --- 主题输入框 ---
         _topicBox.Dock = DockStyle.Fill
         _topicBox.Multiline = True
         _topicBox.ScrollBars = ScrollBars.Vertical
         _topicBox.Text = "AI 办公趋势"
-        _topicBox.Margin = New Padding(0, 0, 0, 10)
+        _topicBox.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        OfficeAIStyleHelper.StyleTextBoxMultiline(_topicBox)
 
+        ' --- 文档选择面板 ---
         _documentPanel.Dock = DockStyle.Fill
         _documentPanel.ColumnCount = 3
         _documentPanel.RowCount = 1
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
-        _documentPanel.Margin = New Padding(0, 0, 0, 10)
+        _documentPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
         _documentPanel.Visible = False
+        _documentPanel.BackColor = Color.Transparent
 
         Dim documentLabel As New Label()
-        documentLabel.AutoSize = True
+        OfficeAIStyleHelper.StyleLabelBody(documentLabel)
         documentLabel.Text = "文档"
         documentLabel.Margin = New Padding(0, 6, 10, 0)
 
         _documentPathBox.Dock = DockStyle.Fill
         _documentPathBox.ReadOnly = True
-        _documentPathBox.BorderStyle = BorderStyle.FixedSingle
+        OfficeAIStyleHelper.StyleTextBox(_documentPathBox)
 
         _chooseDocumentButton.Text = "选择"
         _chooseDocumentButton.Width = 66
-        _chooseDocumentButton.Height = 28
         AddHandler _chooseDocumentButton.Click, AddressOf ChooseDocumentButton_Click
+        OfficeAIStyleHelper.StyleButtonSmall(_chooseDocumentButton)
 
         _documentPanel.Controls.Add(documentLabel, 0, 0)
         _documentPanel.Controls.Add(_documentPathBox, 1, 0)
         _documentPanel.Controls.Add(_chooseDocumentButton, 2, 0)
 
+        ' --- 按钮组 ---
         Dim buttonPanel As New FlowLayoutPanel()
         buttonPanel.AutoSize = True
         buttonPanel.Dock = DockStyle.Fill
         buttonPanel.FlowDirection = FlowDirection.LeftToRight
         buttonPanel.WrapContents = True
-        buttonPanel.Margin = New Padding(0, 0, 0, 10)
+        buttonPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        OfficeAIStyleHelper.StyleFlowPanel(buttonPanel)
 
         _generateButton.Text = "生成大纲"
-        _generateButton.Width = 104
-        _generateButton.Height = 32
+        _generateButton.Width = 88
+        _generateButton.Height = OfficeAIStyleHelper.ButtonHeight
         AddHandler _generateButton.Click, AddressOf GenerateButton_Click
-
-        _insertButton.Text = "生成并导入"
-        _insertButton.Width = 118
-        _insertButton.Height = 32
-        _insertButton.Enabled = False
-        AddHandler _insertButton.Click, AddressOf InsertButton_Click
+        OfficeAIStyleHelper.StyleButtonPrimary(_generateButton)
 
         _finishOutlineEditButton.Text = "完成编辑"
-        _finishOutlineEditButton.Width = 104
-        _finishOutlineEditButton.Height = 32
+        _finishOutlineEditButton.Width = 88
+        _finishOutlineEditButton.Height = OfficeAIStyleHelper.ButtonHeight
         _finishOutlineEditButton.Enabled = False
         AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click
+        OfficeAIStyleHelper.StyleButtonSecondary(_finishOutlineEditButton)
 
+        _insertButton.Text = "生成并导入"
+        _insertButton.Width = 104
+        _insertButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _insertButton.Enabled = False
+        AddHandler _insertButton.Click, AddressOf InsertButton_Click
+        OfficeAIStyleHelper.StyleButtonAccent(_insertButton)
 
-
-        _configureDocmeeButton.Text = "Docmee配置"
-        _configureDocmeeButton.Width = 112
-        _configureDocmeeButton.Height = 32
+        _configureDocmeeButton.Text = "配置"
+        _configureDocmeeButton.Width = 66
+        _configureDocmeeButton.Height = OfficeAIStyleHelper.ButtonHeight
         AddHandler _configureDocmeeButton.Click, AddressOf ConfigureDocmeeButton_Click
+        OfficeAIStyleHelper.StyleButtonSecondary(_configureDocmeeButton)
 
         buttonPanel.Controls.Add(_generateButton)
         buttonPanel.Controls.Add(_finishOutlineEditButton)
         buttonPanel.Controls.Add(_insertButton)
         buttonPanel.Controls.Add(_configureDocmeeButton)
 
-        Dim templateLabel As New Label()
-        templateLabel.AutoSize = True
-        templateLabel.Text = "模板"
-        templateLabel.Margin = New Padding(0, 0, 0, 4)
+        ' --- 模板选择区 ---
+        Dim templateSectionLabel = _templateSectionLabel
+        OfficeAIStyleHelper.StyleLabelHeading(templateSectionLabel)
+        templateSectionLabel.Text = "选择模板"
+        templateSectionLabel.Margin = New Padding(0, OfficeAIStyleHelper.SpacingSm, 0, OfficeAIStyleHelper.SpacingSm)
+        templateSectionLabel.Visible = False
 
-        Dim templatePanel As New TableLayoutPanel()
+        Dim templatePanel = _templateSectionPanel
         templatePanel.Dock = DockStyle.Fill
         templatePanel.ColumnCount = 3
         templatePanel.RowCount = 1
         templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
         templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
         templatePanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
-        templatePanel.Margin = New Padding(0, 0, 0, 10)
+        templatePanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        templatePanel.BackColor = Color.Transparent
 
         _templateCombo.Dock = DockStyle.Fill
         _templateCombo.DropDownStyle = ComboBoxStyle.DropDownList
         _templateCombo.Enabled = False
+        OfficeAIStyleHelper.StyleComboBox(_templateCombo)
         AddHandler _templateCombo.SelectedIndexChanged, AddressOf TemplateCombo_SelectedIndexChanged
 
         _refreshTemplatesButton.Text = "刷新"
         _refreshTemplatesButton.Width = 66
-        _refreshTemplatesButton.Height = 28
         _refreshTemplatesButton.Enabled = False
         AddHandler _refreshTemplatesButton.Click, AddressOf RefreshTemplatesButton_Click
+        OfficeAIStyleHelper.StyleButtonSmall(_refreshTemplatesButton)
 
         _selectTemplateButton.Text = "预览模板"
         _selectTemplateButton.Width = 96
-        _selectTemplateButton.Height = 28
         _selectTemplateButton.Enabled = False
         AddHandler _selectTemplateButton.Click, AddressOf SelectTemplateButton_Click
+        OfficeAIStyleHelper.StyleButtonSecondary(_selectTemplateButton)
 
         templatePanel.Controls.Add(_templateCombo, 0, 0)
         templatePanel.Controls.Add(_refreshTemplatesButton, 1, 0)
         templatePanel.Controls.Add(_selectTemplateButton, 2, 0)
+        templatePanel.Visible = False
 
-        _statusLabel.AutoSize = True
-        _statusLabel.ForeColor = Color.FromArgb(86, 94, 108)
+        ' --- 状态栏 ---
+        _statusLabel.AutoSize = False
+        _statusLabel.Height = 24
+        _statusLabel.ForeColor = OfficeAIStyleHelper.TextSecondary
+        _statusLabel.Font = OfficeAIStyleHelper.FontUiSmall
         _statusLabel.Text = "选择来源生成 Markdown 大纲，编辑完成后再选择模板生成 PPT。"
-        _statusLabel.Margin = New Padding(0, 0, 0, 8)
+        _statusLabel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        _statusLabel.TextAlign = ContentAlignment.MiddleLeft
 
+        ' --- 内容区域（大纲编辑/预览/模板卡片/输出）---
         _outlineWorkspacePanel.Dock = DockStyle.Fill
         _outlineWorkspacePanel.Orientation = Orientation.Horizontal
         _outlineWorkspacePanel.SplitterWidth = 6
         _outlineWorkspacePanel.Panel1MinSize = 180
         _outlineWorkspacePanel.Panel2MinSize = 100
         _outlineWorkspacePanel.Visible = False
+        _outlineWorkspacePanel.BackColor = OfficeAIStyleHelper.BgPage
 
         Dim outlineEditorPanel As New TableLayoutPanel()
         outlineEditorPanel.Dock = DockStyle.Fill
@@ -279,11 +350,11 @@ Public Class ThemePptTaskPane
         outlineEditorPanel.RowCount = 2
         outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        outlineEditorPanel.BackColor = Color.Transparent
 
         Dim outlineEditorLabel As New Label()
-        outlineEditorLabel.AutoSize = True
+        OfficeAIStyleHelper.StyleLabelHeading(outlineEditorLabel)
         outlineEditorLabel.Text = "Markdown 源码"
-        outlineEditorLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
         outlineEditorLabel.Margin = New Padding(0, 0, 0, 4)
 
         _outlineEditor.Dock = DockStyle.Fill
@@ -292,12 +363,7 @@ Public Class ThemePptTaskPane
         _outlineEditor.ScrollBars = RichTextBoxScrollBars.Vertical
         _outlineEditor.WordWrap = True
         _outlineEditor.AcceptsTab = True
-        _outlineEditor.Font = New Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular)
-        _outlineEditor.BorderStyle = BorderStyle.FixedSingle
-        _outlineEditor.BackColor = Color.White
-        _outlineEditor.ForeColor = Color.FromArgb(31, 41, 55)
-        _outlineEditor.DetectUrls = False
-        _outlineEditor.HideSelection = False
+        OfficeAIStyleHelper.StyleRichTextBox(_outlineEditor)
         AddHandler _outlineEditor.TextChanged, AddressOf OutlineEditor_TextChanged
 
         outlineEditorPanel.Controls.Add(outlineEditorLabel, 0, 0)
@@ -309,15 +375,15 @@ Public Class ThemePptTaskPane
         outlinePreviewPanel.RowCount = 2
         outlinePreviewPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         outlinePreviewPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        outlinePreviewPanel.BackColor = Color.Transparent
 
         Dim outlinePreviewLabel As New Label()
-        outlinePreviewLabel.AutoSize = True
+        OfficeAIStyleHelper.StyleLabelHeading(outlinePreviewLabel)
         outlinePreviewLabel.Text = "Markdown 预览"
-        outlinePreviewLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
-        outlinePreviewLabel.Margin = New Padding(0, 8, 0, 4)
+        outlinePreviewLabel.Margin = New Padding(0, 0, 0, 4)
 
         _outlinePreviewWebView.Dock = DockStyle.Fill
-        _outlinePreviewWebView.DefaultBackgroundColor = Color.White
+        _outlinePreviewWebView.DefaultBackgroundColor = OfficeAIStyleHelper.BgSurface
 
         _outlinePreviewDebounceTimer.Interval = 350
         AddHandler _outlinePreviewDebounceTimer.Tick, AddressOf OutlinePreviewDebounceTimer_Tick
@@ -332,19 +398,18 @@ Public Class ThemePptTaskPane
         _outputBox.Multiline = True
         _outputBox.ReadOnly = True
         _outputBox.ScrollBars = ScrollBars.Vertical
-        _outputBox.BackColor = Color.FromArgb(248, 250, 252)
-        _outputBox.BorderStyle = BorderStyle.FixedSingle
-        _outputBox.Margin = New Padding(0, 0, 0, 10)
         _outputBox.Visible = True
+        OfficeAIStyleHelper.StyleTextBox(_outputBox)
+        _outputBox.BackColor = OfficeAIStyleHelper.BgSurface
 
         _contentPanel.Dock = DockStyle.Fill
-        _contentPanel.Margin = New Padding(0, 0, 0, 10)
+        _contentPanel.Margin = New Padding(0, 0, 0, 0)
 
         _templateCardPanel.Dock = DockStyle.Fill
         _templateCardPanel.AutoScroll = True
         _templateCardPanel.FlowDirection = FlowDirection.TopDown
         _templateCardPanel.WrapContents = False
-        _templateCardPanel.BackColor = Color.White
+        _templateCardPanel.BackColor = OfficeAIStyleHelper.BgSurface
         _templateCardPanel.Visible = False
         AddHandler _templateCardPanel.Resize, AddressOf TemplateCardPanel_Resize
 
@@ -353,18 +418,18 @@ Public Class ThemePptTaskPane
         _templateListBox.ItemHeight = 182
         _templateListBox.IntegralHeight = False
         _templateListBox.BorderStyle = BorderStyle.FixedSingle
-        _templateListBox.BackColor = Color.White
+        _templateListBox.BackColor = OfficeAIStyleHelper.BgSurface
         _templateListBox.Visible = False
         AddHandler _templateListBox.DrawItem, AddressOf TemplateListBox_DrawItem
         AddHandler _templateListBox.SelectedIndexChanged, AddressOf TemplateListBox_SelectedIndexChanged
 
         _templateWebView.Dock = DockStyle.Fill
         _templateWebView.Visible = False
-        _templateWebView.DefaultBackgroundColor = Color.White
+        _templateWebView.DefaultBackgroundColor = OfficeAIStyleHelper.BgSurface
 
         _templatePaintGallery.Dock = DockStyle.Fill
         _templatePaintGallery.Visible = False
-        _templatePaintGallery.BackColor = Color.White
+        _templatePaintGallery.BackColor = OfficeAIStyleHelper.BgSurface
         AddHandler _templatePaintGallery.TemplateSelected, AddressOf TemplatePaintGallery_TemplateSelected
 
         _contentPanel.Controls.Add(_templateListBox)
@@ -372,26 +437,71 @@ Public Class ThemePptTaskPane
         _contentPanel.Controls.Add(_outlineWorkspacePanel)
         _contentPanel.Controls.Add(_outputBox)
 
+        ' 底部提示
         Dim hintLabel As New Label()
         hintLabel.AutoSize = False
         hintLabel.Dock = DockStyle.Fill
-        hintLabel.Height = 42
-        hintLabel.ForeColor = Color.FromArgb(86, 94, 108)
-        hintLabel.Text = "版本 " & ThemePptPaneBuild & " | Docmee 地址和 token 可配置，未配置时使用测试默认值，生成的 PPTX 会下载到临时目录并导入当前演示文稿。"
+        hintLabel.Height = 36
+        OfficeAIStyleHelper.StyleLabelHint(hintLabel)
+        hintLabel.TextAlign = ContentAlignment.MiddleLeft
+        hintLabel.Text = "版本 " & ThemePptPaneBuild & " | Docmee 地址和 token 可配置"
 
-        layout.Controls.Add(titleLabel, 0, 0)
-        layout.Controls.Add(modePanel, 0, 1)
+        ' --- 组装布局 ---
+        layout.Controls.Add(modeLabel, 0, 0)
+        layout.Controls.Add(modeSegmentedPanel, 0, 1)
         layout.Controls.Add(_topicBox, 0, 2)
         layout.Controls.Add(_documentPanel, 0, 3)
         layout.Controls.Add(buttonPanel, 0, 4)
-        layout.Controls.Add(templateLabel, 0, 5)
+        layout.Controls.Add(templateSectionLabel, 0, 5)
         layout.Controls.Add(templatePanel, 0, 6)
         layout.Controls.Add(_statusLabel, 0, 7)
         layout.Controls.Add(_contentPanel, 0, 8)
         layout.Controls.Add(hintLabel, 0, 9)
 
-        Me.Controls.Add(layout)
+        scrollPanel.Controls.Add(layout)
+        Me.Controls.Add(scrollPanel)
+
+        ' 初始化隐藏的 ComboBox（作为模式数据源）
+        _generationModeCombo.Visible = False
+        _generationModeCombo.DropDownStyle = ComboBoxStyle.DropDownList
+        _generationModeCombo.Items.AddRange(New Object() {GenerationModeTitle, GenerationModeDocument, GenerationModeMarkdown})
+        _generationModeCombo.SelectedIndex = 0
+        AddHandler _generationModeCombo.SelectedIndexChanged, AddressOf GenerationModeCombo_SelectedIndexChanged
+        Me.Controls.Add(_generationModeCombo)
+
         UpdateGenerationModeUi()
+    End Sub
+
+    ''' <summary>更新 Segmented Control 按钮样式</summary>
+    Private Sub UpdateModeButtonsStyle(container As Panel, selectedIndex As Integer)
+        For Each ctrl As Control In container.Controls
+            Dim btn = TryCast(ctrl, Button)
+            If btn Is Nothing Then Continue For
+            Dim idx = CInt(btn.Tag)
+            If idx = selectedIndex Then
+                btn.BackColor = OfficeAIStyleHelper.BgSurface
+                btn.ForeColor = OfficeAIStyleHelper.BrandPrimary
+                btn.Font = OfficeAIStyleHelper.FontUiBold
+            Else
+                btn.BackColor = Color.Transparent
+                btn.ForeColor = OfficeAIStyleHelper.TextSecondary
+                btn.Font = OfficeAIStyleHelper.FontUi
+            End If
+        Next
+    End Sub
+
+    ''' <summary>控制主题输入框可见性并折叠所在行</summary>
+    Private Sub SetTopicBoxVisible(visible As Boolean)
+        _topicBox.Visible = visible
+        Dim layout = TryCast(_topicBox.Parent, TableLayoutPanel)
+        If layout Is Nothing OrElse layout.RowCount <= 2 Then Return
+        layout.RowStyles(2).Height = If(visible, 200.0F, 0)
+    End Sub
+
+    ''' <summary>控制模板选择区域可见性</summary>
+    Private Sub SetTemplateSectionVisible(visible As Boolean)
+        _templateSectionLabel.Visible = visible
+        _templateSectionPanel.Visible = visible
     End Sub
 
     Private Async Sub ThemePptTaskPane_Load(sender As Object, e As EventArgs)
@@ -1060,6 +1170,7 @@ Public Class ThemePptTaskPane
         _isOutlineEditCompleted = True
         _templateConfirmedForCurrentOutline = False
         _confirmedTemplateId = ""
+        SetTemplateSectionVisible(True)
         RefreshActionButtons()
     End Sub
 
@@ -1498,6 +1609,7 @@ Public Class ThemePptTaskPane
         _confirmedTemplateId = ""
         ClearGeneratedPptState()
         RefreshActionButtons()
+        SetTopicBoxVisible(False)
 
         Try
             Select Case mode
@@ -1530,6 +1642,7 @@ Public Class ThemePptTaskPane
             AppendThemePptLog("GenerateOutlineAsync exception: " & ex.ToString())
             SetStatus("生成失败。")
             ShowOutlineOutput()
+            SetTopicBoxVisible(True)
             MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             _generateButton.Enabled = True
@@ -2757,6 +2870,7 @@ Public Class ThemePptTaskPane
         End If
 
         FixInsertedSlideReadability(importedSlides)
+        RestoreImportedSlideBackgrounds(downloadPath, importedSlides)
         Return importedSlides.Count
     End Function
 
@@ -2921,6 +3035,7 @@ Public Class ThemePptTaskPane
     Private Sub FixInsertedSlideReadability(importedSlides As List(Of PowerPoint.Slide))
         For Each slide As PowerPoint.Slide In importedSlides
             Dim slideBackgroundLuminance = GetSlideBackgroundLuminance(slide)
+            If slideBackgroundLuminance < 0 Then Continue For
 
             For Each shape As PowerPoint.Shape In slide.Shapes
                 FixShapeTextReadability(shape, slideBackgroundLuminance)
@@ -2969,10 +3084,13 @@ Public Class ThemePptTaskPane
 
     Private Function GetSlideBackgroundLuminance(slide As PowerPoint.Slide) As Double
         Try
-            Return GetColorLuminance(slide.Background.Fill.ForeColor.RGB)
+            Dim fill = slide.Background.Fill
+            If fill IsNot Nothing AndAlso fill.Type = MsoFillType.msoFillSolid Then
+                Return GetColorLuminance(fill.ForeColor.RGB)
+            End If
         Catch
-            Return 245.0R
         End Try
+        Return -1.0R
     End Function
 
     Private Function GetShapeBackgroundLuminance(shape As PowerPoint.Shape, fallbackLuminance As Double) As Double
@@ -2993,6 +3111,84 @@ Public Class ThemePptTaskPane
 
         Return (0.299R * red) + (0.587R * green) + (0.114R * blue)
     End Function
+
+    ''' <summary>从源PPTX复制背景到已导入的幻灯片</summary>
+    Private Sub RestoreImportedSlideBackgrounds(sourcePath As String, importedSlides As List(Of PowerPoint.Slide))
+        If importedSlides.Count = 0 Then Return
+        If String.IsNullOrWhiteSpace(sourcePath) OrElse Not File.Exists(sourcePath) Then Return
+
+        Dim sourcePres As PowerPoint.Presentation = Nothing
+        Try
+            sourcePres = _pptApp.Presentations.Open(sourcePath,
+                ReadOnly:=MsoTriState.msoTrue,
+                Untitled:=MsoTriState.msoFalse,
+                WithWindow:=MsoTriState.msoFalse)
+
+            Dim maxCount = Math.Min(importedSlides.Count, sourcePres.Slides.Count)
+            For i As Integer = 0 To maxCount - 1
+                Try
+                    CopySlideBackground(sourcePres.Slides(i + 1), importedSlides(i))
+                Catch
+                End Try
+            Next
+        Catch ex As Exception
+            AppendThemePptLog("Restore backgrounds failed: " & ex.Message)
+        Finally
+            If sourcePres IsNot Nothing Then
+                sourcePres.Close()
+            End If
+        End Try
+    End Sub
+
+    ''' <summary>将源幻灯片的背景复制到目标幻灯片</summary>
+    Private Sub CopySlideBackground(source As PowerPoint.Slide, dest As PowerPoint.Slide)
+        If source Is Nothing OrElse dest Is Nothing Then Return
+
+        Try
+            ' 如果源幻灯片使用母版背景，目标也已继承，无需处理
+            If source.FollowMasterBackground = MsoTriState.msoTrue Then Return
+
+            dest.FollowMasterBackground = MsoTriState.msoFalse
+
+            Dim srcFill = source.Background.Fill
+            Dim dstFill = dest.Background.Fill
+
+            Select Case srcFill.Type
+                Case MsoFillType.msoFillSolid
+                    dstFill.ForeColor.RGB = srcFill.ForeColor.RGB
+                    dstFill.BackColor.RGB = srcFill.BackColor.RGB
+                    dstFill.Visible = MsoTriState.msoTrue
+
+                Case MsoFillType.msoFillGradient
+                    dstFill.ForeColor.RGB = srcFill.ForeColor.RGB
+                    dstFill.BackColor.RGB = srcFill.BackColor.RGB
+                    dstFill.Visible = MsoTriState.msoTrue
+
+                Case Else
+                    ' 图片/纹理/图案背景：导出源幻灯片无形状版本作为背景图
+                    Dim tempSlide = source.Duplicate()(1)
+                    Try
+                        While tempSlide.Shapes.Count > 0
+                            tempSlide.Shapes(1).Delete()
+                        End While
+
+                        Dim bgPath = Path.Combine(Path.GetTempPath(), $"pptbgb_{Guid.NewGuid():N}.png")
+                        tempSlide.Export(bgPath, "PNG")
+
+                        dstFill.UserPicture(bgPath)
+                        dstFill.Visible = MsoTriState.msoTrue
+
+                        Try
+                            File.Delete(bgPath)
+                        Catch
+                        End Try
+                    Finally
+                        tempSlide.Delete()
+                    End Try
+            End Select
+        Catch
+        End Try
+    End Sub
 
     Private Function GetOrCreatePresentation() As PowerPoint.Presentation
         Try
@@ -3081,7 +3277,7 @@ Public Class ThemePptTaskPane
             Return topic
         End If
 
-        Return $"请生成一份关于 {topic} 的产品介绍 PPT"
+        Return $"请生成一份关于 {topic} 的详细PPT，每个章节包含3-5个要点，内容充实具体，包含数据、案例和实践建议。"
     End Function
 
     Private Function RenderOutlineText(outline As JObject) As String

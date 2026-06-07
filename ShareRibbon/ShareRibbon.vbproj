@@ -238,6 +238,7 @@
     <Compile Include="Config\SemanticStyleMapping.vb" />
     <Compile Include="Config\SemanticTagRegistry.vb" />
     <Compile Include="Config\SemanticMappingManager.vb" />
+    <Compile Include="Config\OfficeAIStyleHelper.vb" />
     <Compile Include="Services\Reformat\LegacyTemplateConverter.vb" />
     <Compile Include="Services\Reformat\SemanticRenderingEngine.vb" />
     <Compile Include="Services\Reformat\FormatMirrorService.vb" />

@@ -116,44 +116,52 @@ Public Class Ribbon1
 
     Private Function ShowReplaceSlideDialog() As ReplaceSlideOptions
         Using dialog As New Form()
+            OfficeAIStyleHelper.StyleFormDialog(dialog)
             dialog.Text = "替换单页"
-            dialog.Size = New Size(430, 250)
-            dialog.StartPosition = FormStartPosition.CenterParent
-            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
-            dialog.MaximizeBox = False
-            dialog.MinimizeBox = False
+            dialog.ClientSize = New Size(420, 220)
+            dialog.BackColor = OfficeAIStyleHelper.BgPage
+
+            ' 品牌色标题栏
+            Dim header = OfficeAIStyleHelper.CreateFormHeader("替换单页", 420)
+            dialog.Controls.Add(header)
+
+            Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingMd
 
             Dim label As New Label() With {
                 .Text = "输入新单页要求：",
-                .Location = New Point(18, 16),
+                .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY),
                 .AutoSize = True
             }
+            OfficeAIStyleHelper.StyleLabelBody(label)
             dialog.Controls.Add(label)
 
             Dim inputBox As New TextBox() With {
-                .Location = New Point(18, 42),
-                .Size = New Size(374, 118),
+                .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY + 26),
+                .Size = New Size(386, 80),
                 .Multiline = True,
                 .ScrollBars = ScrollBars.Vertical,
                 .Text = "工作与生活失衡的现状与代价"
             }
+            OfficeAIStyleHelper.StyleTextBoxMultiline(inputBox)
             dialog.Controls.Add(inputBox)
 
             Dim okButton As New Button() With {
                 .Text = "替换",
-                .Location = New Point(222, 174),
-                .Size = New Size(80, 30),
+                .Location = New Point(224, inputBox.Bottom + OfficeAIStyleHelper.SpacingMd),
+                .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.OK
             }
+            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
             dialog.Controls.Add(okButton)
             dialog.AcceptButton = okButton
 
             Dim cancelButton As New Button() With {
                 .Text = "取消",
-                .Location = New Point(312, 174),
-                .Size = New Size(80, 30),
+                .Location = New Point(318, inputBox.Bottom + OfficeAIStyleHelper.SpacingMd),
+                .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.Cancel
             }
+            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
             dialog.Controls.Add(cancelButton)
             dialog.CancelButton = cancelButton
 
@@ -226,7 +234,6 @@ Public Class Ribbon1
             SaveDocmeePptxId(pptxId)
             ShareRibbon.GlobalStatusStripAll.ShowProgress("替换单页完成")
             LogInfo("[ReplaceSlide] Completed.")
-            MessageBox.Show("当前页已替换。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
         Finally
             CloseReplaceProgressWindow(progressWindow.Item1)
         End Try
@@ -234,25 +241,30 @@ Public Class Ribbon1
 
     Private Function CreateReplaceProgressWindow() As Tuple(Of Form, Label)
         Dim dialog As New Form()
-        dialog.Text = "正在生成替换页"
-        dialog.Size = New Size(420, 150)
-        dialog.StartPosition = FormStartPosition.CenterParent
-        dialog.FormBorderStyle = FormBorderStyle.FixedDialog
-        dialog.MaximizeBox = False
-        dialog.MinimizeBox = False
+        OfficeAIStyleHelper.StyleFormDialog(dialog)
+        dialog.Text = "正在生成"
+        dialog.ClientSize = New Size(380, 130)
         dialog.ControlBox = False
+        dialog.BackColor = OfficeAIStyleHelper.BgPage
+
+        ' 品牌色标题栏
+        Dim header = OfficeAIStyleHelper.CreateFormHeader("正在生成替换页", 380)
+        dialog.Controls.Add(header)
+
+        Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingMd
 
         Dim label As New Label() With {
             .Text = "正在分析当前页内容...",
-            .Location = New Point(18, 18),
-            .Size = New Size(370, 24),
+            .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY),
+            .Size = New Size(350, 20),
             .AutoEllipsis = True
         }
+        OfficeAIStyleHelper.StyleLabelBody(label)
         dialog.Controls.Add(label)
 
         Dim progressBar As New ProgressBar() With {
-            .Location = New Point(18, 58),
-            .Size = New Size(370, 18),
+            .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY + 28),
+            .Size = New Size(350, 8),
             .Style = ProgressBarStyle.Marquee,
             .MarqueeAnimationSpeed = 30
         }
@@ -453,43 +465,44 @@ Public Class Ribbon1
 
     Private Function ShowReplacementSlideChoiceDialog(choices As List(Of PptxSlideChoice)) As PptxSlideChoice
         Using dialog As New Form()
+            OfficeAIStyleHelper.StyleFormDialog(dialog)
             dialog.Text = "选择替换页"
-            dialog.Size = New Size(980, 640)
-            dialog.StartPosition = FormStartPosition.CenterParent
-            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
-            dialog.MaximizeBox = False
-            dialog.MinimizeBox = False
+            dialog.ClientSize = New Size(960, 580)
+            dialog.BackColor = OfficeAIStyleHelper.BgPage
 
-            Dim label As New Label() With {
-                .Text = "Docmee 生成了多页，请选择用于替换当前页的页面：",
-                .Location = New Point(14, 14),
-                .AutoSize = True
-            }
-            dialog.Controls.Add(label)
+            ' 品牌色标题栏
+            Dim header = OfficeAIStyleHelper.CreateFormHeader("选择替换页 - Docmee 生成了多页，请选择用于替换的页面", 960)
+            dialog.Controls.Add(header)
+
+            Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingSm
 
             Dim listBox As New ListBox() With {
-                .Location = New Point(14, 42),
-                .Size = New Size(300, 500)
+                .Location = New Point(OfficeAIStyleHelper.SpacingSm, contentY),
+                .Size = New Size(280, 420)
             }
+            listBox.BackColor = OfficeAIStyleHelper.BgSurface
+            listBox.BorderStyle = BorderStyle.FixedSingle
+            listBox.Font = OfficeAIStyleHelper.FontUi
             For Each choice In choices
                 listBox.Items.Add(choice)
             Next
             dialog.Controls.Add(listBox)
 
             Dim previewBox As New PictureBox() With {
-                .Location = New Point(330, 42),
-                .Size = New Size(620, 349),
-                .BackColor = Color.White,
+                .Location = New Point(306, contentY),
+                .Size = New Size(630, 354),
+                .BackColor = OfficeAIStyleHelper.BgSurface,
                 .BorderStyle = BorderStyle.FixedSingle,
                 .SizeMode = PictureBoxSizeMode.Zoom
             }
             dialog.Controls.Add(previewBox)
 
             Dim titleLabel As New Label() With {
-                .Location = New Point(330, 406),
-                .Size = New Size(620, 64),
+                .Location = New Point(306, previewBox.Bottom + OfficeAIStyleHelper.SpacingSm),
+                .Size = New Size(630, 40),
                 .AutoEllipsis = True
             }
+            OfficeAIStyleHelper.StyleLabelBody(titleLabel)
             dialog.Controls.Add(titleLabel)
 
             Dim setPreview As MethodInvoker =
@@ -538,19 +551,21 @@ Public Class Ribbon1
 
             Dim okButton As New Button() With {
                 .Text = "使用此页",
-                .Location = New Point(774, 552),
-                .Size = New Size(86, 30),
+                .Location = New Point(750, titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm),
+                .Size = New Size(96, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.OK
             }
+            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
             dialog.Controls.Add(okButton)
             dialog.AcceptButton = okButton
 
             Dim cancelButton As New Button() With {
                 .Text = "取消",
-                .Location = New Point(870, 552),
-                .Size = New Size(80, 30),
+                .Location = New Point(854, titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm),
+                .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.Cancel
             }
+            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
             dialog.Controls.Add(cancelButton)
             dialog.CancelButton = cancelButton
 
@@ -621,7 +636,6 @@ Public Class Ribbon1
             SaveDocmeePptxId(resultPptxId)
 
             ShareRibbon.GlobalStatusStripAll.ShowProgress("美化模板完成")
-            MessageBox.Show("当前页已美化。", "美化模板", MessageBoxButtons.OK, MessageBoxIcon.Information)
         Finally
             CloseReplaceProgressWindow(progressWindow.Item1)
         End Try
@@ -834,85 +848,116 @@ Public Class Ribbon1
 
     Private Function ShowAiCreationDialog() As AiCreationOptions
         Using dialog As New Form()
+            OfficeAIStyleHelper.StyleFormDialog(dialog)
             dialog.Text = "AI创作"
-            dialog.Size = New Size(330, 222)
-            dialog.StartPosition = FormStartPosition.CenterParent
-            dialog.FormBorderStyle = FormBorderStyle.FixedDialog
-            dialog.MaximizeBox = False
-            dialog.MinimizeBox = False
+            dialog.ClientSize = New Size(420, 380)
+            dialog.BackColor = OfficeAIStyleHelper.BgPage
 
+            ' 品牌色标题栏
+            Dim header = OfficeAIStyleHelper.CreateFormHeader("AI 创作", 420)
+            dialog.Controls.Add(header)
+
+            Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingLg
+
+            ' 提示标签
             Dim label As New Label() With {
                 .Text = "选择 AI 创作方式：",
-                .Location = New Point(18, 18),
+                .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY),
                 .AutoSize = True
             }
+            OfficeAIStyleHelper.StyleLabelBody(label)
             dialog.Controls.Add(label)
 
-            Dim modeCombo As New ComboBox() With {
-                .Location = New Point(18, 44),
-                .Size = New Size(278, 24),
-                .DropDownStyle = ComboBoxStyle.DropDownList
+            ' 卡片式模式选择 (2x2 网格)
+            Dim cardY As Integer = contentY + 26
+            Dim cardW As Integer = 186
+            Dim col1X As Integer = OfficeAIStyleHelper.SpacingLg
+            Dim col2X As Integer = col1X + cardW + OfficeAIStyleHelper.SpacingSm
+
+            Dim cardPolish = OfficeAIStyleHelper.CreateOptionCard("✨", "润色", "优化表达，提升文采", cardW)
+            cardPolish.Location = New Point(col1X, cardY)
+            Dim cardExpand = OfficeAIStyleHelper.CreateOptionCard("⬆", "扩写", "丰富细节，充实内容", cardW)
+            cardExpand.Location = New Point(col2X, cardY)
+            Dim cardShorten = OfficeAIStyleHelper.CreateOptionCard("⬇", "缩写", "精简文字，突出重点", cardW)
+            cardShorten.Location = New Point(col1X, cardY + 80)
+            Dim cardTranslate = OfficeAIStyleHelper.CreateOptionCard("文", "翻译", "多语言互译，跨越障碍", cardW)
+            cardTranslate.Location = New Point(col2X, cardY + 80)
+
+            ' 卡片点击事件 - 使用 Dictionary 映射卡片到模式名
+            Dim allCards = {cardPolish, cardExpand, cardShorten, cardTranslate}
+            Dim cardModes As New Dictionary(Of Panel, String) From {
+                {cardPolish, "润色"}, {cardExpand, "扩写"}, {cardShorten, "缩写"}, {cardTranslate, "翻译"}
             }
-            modeCombo.Items.AddRange(New Object() {"润色", "扩写", "缩写", "翻译"})
-            modeCombo.SelectedIndex = 0
-            dialog.Controls.Add(modeCombo)
+            Dim selectedMode As String = "润色"
+            OfficeAIStyleHelper.SetCardSelected(cardPolish, True)
+
+            ' 目标语言选择行 (仅翻译时可见) - 必须在卡片点击事件之前声明
+            Dim langY As Integer = cardY + 168
 
             Dim languageLabel As New Label() With {
                 .Text = "目标语言：",
-                .Location = New Point(18, 78),
+                .Location = New Point(OfficeAIStyleHelper.SpacingLg, langY + 4),
                 .AutoSize = True,
                 .Visible = False
             }
+            OfficeAIStyleHelper.StyleLabelBody(languageLabel)
             dialog.Controls.Add(languageLabel)
 
             Dim languageCombo As New ComboBox() With {
-                .Location = New Point(88, 74),
-                .Size = New Size(208, 24),
+                .Location = New Point(96, langY),
+                .Size = New Size(300, OfficeAIStyleHelper.InputHeight),
                 .DropDownStyle = ComboBoxStyle.DropDownList,
                 .Visible = False
             }
             languageCombo.Items.AddRange(New Object() {
-                "英语",
-                "中文",
-                "日语",
-                "韩语",
-                "法语",
-                "德语",
-                "西班牙语",
-                "葡萄牙语",
-                "俄语",
-                "意大利语"
+                "英语", "中文", "日语", "韩语", "法语",
+                "德语", "西班牙语", "葡萄牙语", "俄语", "意大利语"
             })
             languageCombo.SelectedIndex = 0
+            OfficeAIStyleHelper.StyleComboBox(languageCombo)
             dialog.Controls.Add(languageCombo)
 
-            AddHandler modeCombo.SelectedIndexChanged,
-                Sub()
-                    Dim isTranslate = String.Equals(modeCombo.SelectedItem.ToString(), "翻译", StringComparison.Ordinal)
+            For Each card In allCards
+                AddHandler card.Click, Sub(s, e)
+                    Dim clickedCard = DirectCast(s, Panel)
+                    For Each c In allCards
+                        OfficeAIStyleHelper.SetCardSelected(c, c Is clickedCard)
+                    Next
+                    selectedMode = cardModes(clickedCard)
+                    Dim isTranslate = String.Equals(selectedMode, "翻译", StringComparison.Ordinal)
                     languageLabel.Visible = isTranslate
                     languageCombo.Visible = isTranslate
                 End Sub
+                dialog.Controls.Add(card)
+            Next
+
+            ' 底部按钮
+            Dim btnY As Integer = dialog.ClientSize.Height - OfficeAIStyleHelper.ButtonHeight - OfficeAIStyleHelper.SpacingLg - 8
+            Dim sepHorizontal = OfficeAIStyleHelper.CreateSeparator(386)
+            sepHorizontal.Location = New Point(OfficeAIStyleHelper.SpacingLg, btnY - OfficeAIStyleHelper.SpacingSm)
+            dialog.Controls.Add(sepHorizontal)
 
             Dim okButton As New Button() With {
-                .Text = "开始",
-                .Location = New Point(126, 132),
-                .Size = New Size(80, 30),
+                .Text = "开始创作",
+                .Location = New Point(212, btnY),
+                .Size = New Size(110, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.OK
             }
+            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
             dialog.Controls.Add(okButton)
             dialog.AcceptButton = okButton
 
             Dim cancelButton As New Button() With {
                 .Text = "取消",
-                .Location = New Point(216, 132),
-                .Size = New Size(80, 30),
+                .Location = New Point(330, btnY),
+                .Size = New Size(74, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.Cancel
             }
+            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
             dialog.Controls.Add(cancelButton)
             dialog.CancelButton = cancelButton
 
             If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
-            Dim selectedMode = modeCombo.SelectedItem.ToString()
             Dim selectedLanguage = If(String.Equals(selectedMode, "翻译", StringComparison.Ordinal), languageCombo.SelectedItem.ToString(), "")
             Return New AiCreationOptions() With {
                 .ModeName = selectedMode,
@@ -1032,9 +1077,7 @@ Public Class Ribbon1
             End If
 
             Dim changedCount = Await OptimizeSelectedTextWithDocmeeAsync(targets, creationOptions)
-            If changedCount > 0 Then
-                MessageBox.Show($"AI创作完成，共处理 {changedCount} 处。", "AI创作", MessageBoxButtons.OK, MessageBoxIcon.Information)
-            End If
+            ' 结果已通过状态栏提示，无需弹窗打断用户操作
         Catch ex As Exception
             MessageBox.Show("AI创作出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
