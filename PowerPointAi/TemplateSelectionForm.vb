@@ -25,6 +25,7 @@ Public Class TemplateSelectionForm
 
     Public Property SelectedTemplate As DocmeeTemplateInfo
     Public Property CurrentPage As Integer
+    Public Property ShouldGenerateAndImport As Boolean
     Public ReadOnly Property HasNextPage As Boolean
         Get
             Return _hasNextPage
@@ -117,18 +118,18 @@ Public Class TemplateSelectionForm
         OfficeAIStyleHelper.StyleButtonSmall(_nextButton)
         Controls.Add(_nextButton)
 
-        _okButton.Text = "使用模板"
-        _okButton.Location = New Point(730, _titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm)
-        _okButton.Size = New Size(106, OfficeAIStyleHelper.ButtonHeight)
+        _okButton.Text = "生成并导入"
+        _okButton.Location = New Point(610, _titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm)
+        _okButton.Size = New Size(120, OfficeAIStyleHelper.ButtonHeight)
         _okButton.DialogResult = DialogResult.OK
-        AddHandler _okButton.Click, AddressOf OkButton_Click
-        OfficeAIStyleHelper.StyleButtonPrimary(_okButton)
+        AddHandler _okButton.Click, AddressOf GenerateAndImportButton_Click
+        OfficeAIStyleHelper.StyleButtonAccent(_okButton)
         Controls.Add(_okButton)
         AcceptButton = _okButton
 
         Dim cancelButton As New Button() With {
             .Text = "取消",
-            .Location = New Point(844, _titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm),
+            .Location = New Point(742, _titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm),
             .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
             .DialogResult = DialogResult.Cancel
         }
@@ -171,7 +172,8 @@ Public Class TemplateSelectionForm
         _pageLabel.Text = $"第 {CurrentPage} 页"
         _prevButton.Enabled = CurrentPage > 1 AndAlso _pageLoader IsNot Nothing
         _nextButton.Enabled = _hasNextPage AndAlso _pageLoader IsNot Nothing
-        _okButton.Enabled = _listBox.SelectedItem IsNot Nothing
+        Dim hasSelection = _listBox.SelectedItem IsNot Nothing
+        _okButton.Enabled = hasSelection
     End Sub
 
     Private Sub ListBox_SelectedIndexChanged(sender As Object, e As EventArgs)
@@ -288,12 +290,16 @@ Public Class TemplateSelectionForm
         End Try
     End Sub
 
-    Private Sub OkButton_Click(sender As Object, e As EventArgs)
+    Private Sub GenerateAndImportButton_Click(sender As Object, e As EventArgs)
         SelectedTemplate = TryCast(_listBox.SelectedItem, DocmeeTemplateInfo)
         If SelectedTemplate Is Nothing Then
             DialogResult = DialogResult.None
             MessageBox.Show("请先选择模板。", "预览模板", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
         End If
+        ShouldGenerateAndImport = True
+        DialogResult = DialogResult.OK
+        Close()
     End Sub
 
     Private Sub ClearPreviewImage()

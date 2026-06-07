@@ -271,7 +271,6 @@ Public Class ThemePptTaskPane
         _insertButton.Text = "生成并导入"
         _insertButton.Width = 104
         _insertButton.Height = OfficeAIStyleHelper.ButtonHeight
-        _insertButton.Enabled = False
         AddHandler _insertButton.Click, AddressOf InsertButton_Click
         OfficeAIStyleHelper.StyleButtonAccent(_insertButton)
 
@@ -283,7 +282,6 @@ Public Class ThemePptTaskPane
 
         buttonPanel.Controls.Add(_generateButton)
         buttonPanel.Controls.Add(_finishOutlineEditButton)
-        buttonPanel.Controls.Add(_insertButton)
         buttonPanel.Controls.Add(_configureDocmeeButton)
 
         ' --- 模板选择区 ---
@@ -878,6 +876,11 @@ Public Class ThemePptTaskPane
                                      dialog.SelectedTemplate.Id,
                                      dialog.SelectedTemplate.Name)
                 SetStatus("已选择模板：" & displayName)
+
+                ' 用户点击了"生成并导入"，直接触发生成流程
+                If dialog.ShouldGenerateAndImport Then
+                    Call GenerateAndImportPptxAsync()
+                End If
             End If
         End Using
     End Sub
@@ -910,7 +913,6 @@ Public Class ThemePptTaskPane
         _finishOutlineEditButton.Enabled = Not String.IsNullOrWhiteSpace(GetEditedMarkdown()) AndAlso Not _isOutlineEditCompleted
         _refreshTemplatesButton.Enabled = _isOutlineEditCompleted AndAlso Not _isTemplateLoading
         _selectTemplateButton.Enabled = CanChooseTemplate()
-        _insertButton.Enabled = CanGenerateFromTemplate()
     End Sub
 
     Private Function GetEditedMarkdown() As String
@@ -1597,7 +1599,6 @@ Public Class ThemePptTaskPane
         Dim mode = GetSelectedGenerationMode()
 
         _generateButton.Enabled = False
-        _insertButton.Enabled = False
         _finishOutlineEditButton.Enabled = False
         ShowOutlineOutput()
         _outputBox.Clear()
@@ -2662,7 +2663,6 @@ Public Class ThemePptTaskPane
         End If
 
         _generateButton.Enabled = False
-        _insertButton.Enabled = False
         _finishOutlineEditButton.Enabled = False
         _refreshTemplatesButton.Enabled = False
         _selectTemplateButton.Enabled = False
