@@ -20,7 +20,7 @@ Public Class ThemePptTaskPane
 
     Private Const ThemePptPaneBuild As String = "2026.06.04.9"
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
-    Private Const TemplatePageSize As Integer = 20
+    Private Const TemplatePageSize As Integer = 8
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
     Private Const DocmeePptxIdTagName As String = "wenduoduoAI_DocmeePptxId"
     Private Const WM_SETREDRAW As Integer = &HB
@@ -83,7 +83,12 @@ Public Class ThemePptTaskPane
     Private ReadOnly _outlineEditor As New RichTextBox()
     Private ReadOnly _outlinePreviewWebView As New WebView2()
     Private ReadOnly _outlinePreviewDebounceTimer As New System.Windows.Forms.Timer()
+    Private ReadOnly _templateGalleryPanel As New TableLayoutPanel()
     Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
+    Private ReadOnly _templatePagerPanel As New FlowLayoutPanel()
+    Private ReadOnly _templatePrevPageButton As New Button()
+    Private ReadOnly _templateNextPageButton As New Button()
+    Private ReadOnly _templatePageLabel As New Label()
     Private ReadOnly _templateListBox As New ListBox()
     Private ReadOnly _templateWebView As New WebView2()
     Private ReadOnly _templatePaintGallery As New TemplateGalleryPaintControl()
@@ -173,14 +178,14 @@ Public Class ThemePptTaskPane
 
         Dim modeSegmentedPanel As New Panel()
         modeSegmentedPanel.Height = 36
-        modeSegmentedPanel.Width = 400
         modeSegmentedPanel.BackColor = OfficeAIStyleHelper.BorderLight
         modeSegmentedPanel.Padding = New Padding(1)
         modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
 
-        ' 三个模式按钮作为 Segmented Control
+        ' 模式按钮作为 Segmented Control
         Dim modes() As String = {GenerationModeTitle, GenerationModeDocument}
         Dim modeBtnWidth As Integer = 110
+        modeSegmentedPanel.Width = 2 + modes.Length * modeBtnWidth + Math.Max(0, modes.Length - 1)
         For i As Integer = 0 To modes.Length - 1
             Dim modeBtn As New Button()
             modeBtn.Text = modes(i)
@@ -276,14 +281,16 @@ Public Class ThemePptTaskPane
         AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click
         OfficeAIStyleHelper.StyleButtonSecondary(_finishOutlineEditButton)
 
-        _insertButton.Text = "生成并导入"
-        _insertButton.Width = 104
+        _insertButton.Text = "导入PPT"
+        _insertButton.Width = 96
         _insertButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _insertButton.Enabled = False
         AddHandler _insertButton.Click, AddressOf InsertButton_Click
         OfficeAIStyleHelper.StyleButtonAccent(_insertButton)
 
         buttonPanel.Controls.Add(_generateButton)
         buttonPanel.Controls.Add(_finishOutlineEditButton)
+        buttonPanel.Controls.Add(_insertButton)
 
         ' --- 模板选择区 ---
         Dim templateSectionLabel = _templateSectionLabel
@@ -314,7 +321,7 @@ Public Class ThemePptTaskPane
         AddHandler _refreshTemplatesButton.Click, AddressOf RefreshTemplatesButton_Click
         OfficeAIStyleHelper.StyleButtonSmall(_refreshTemplatesButton)
 
-        _selectTemplateButton.Text = "预览模板"
+        _selectTemplateButton.Text = "模板库"
         _selectTemplateButton.Width = 96
         _selectTemplateButton.Enabled = False
         AddHandler _selectTemplateButton.Click, AddressOf SelectTemplateButton_Click
@@ -404,13 +411,57 @@ Public Class ThemePptTaskPane
         _contentPanel.Dock = DockStyle.Fill
         _contentPanel.Margin = New Padding(0, 0, 0, 0)
 
+        _templateGalleryPanel.Dock = DockStyle.Fill
+        _templateGalleryPanel.ColumnCount = 1
+        _templateGalleryPanel.RowCount = 2
+        _templateGalleryPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 38.0F))
+        _templateGalleryPanel.BackColor = OfficeAIStyleHelper.BgSurface
+        _templateGalleryPanel.Visible = False
+
         _templateCardPanel.Dock = DockStyle.Fill
         _templateCardPanel.AutoScroll = True
-        _templateCardPanel.FlowDirection = FlowDirection.TopDown
-        _templateCardPanel.WrapContents = False
+        _templateCardPanel.FlowDirection = FlowDirection.LeftToRight
+        _templateCardPanel.WrapContents = True
+        _templateCardPanel.Padding = New Padding(8, 8, 0, 8)
         _templateCardPanel.BackColor = OfficeAIStyleHelper.BgSurface
-        _templateCardPanel.Visible = False
         AddHandler _templateCardPanel.Resize, AddressOf TemplateCardPanel_Resize
+
+        _templatePagerPanel.Dock = DockStyle.Fill
+        _templatePagerPanel.FlowDirection = FlowDirection.RightToLeft
+        _templatePagerPanel.WrapContents = False
+        _templatePagerPanel.Padding = New Padding(8, 5, 8, 4)
+        _templatePagerPanel.Margin = New Padding(0)
+        _templatePagerPanel.BackColor = OfficeAIStyleHelper.BgSurface
+
+        _templateNextPageButton.Text = "下一页"
+        _templateNextPageButton.Width = 72
+        _templateNextPageButton.Height = 28
+        _templateNextPageButton.Enabled = False
+        AddHandler _templateNextPageButton.Click, AddressOf TemplateNextPageButton_Click
+        OfficeAIStyleHelper.StyleButtonSmall(_templateNextPageButton)
+
+        _templatePageLabel.AutoSize = False
+        _templatePageLabel.Width = 104
+        _templatePageLabel.Height = 28
+        _templatePageLabel.TextAlign = ContentAlignment.MiddleCenter
+        _templatePageLabel.ForeColor = OfficeAIStyleHelper.TextSecondary
+        _templatePageLabel.Font = OfficeAIStyleHelper.FontUiSmall
+        _templatePageLabel.Text = "第 1 页"
+
+        _templatePrevPageButton.Text = "上一页"
+        _templatePrevPageButton.Width = 72
+        _templatePrevPageButton.Height = 28
+        _templatePrevPageButton.Enabled = False
+        AddHandler _templatePrevPageButton.Click, AddressOf TemplatePrevPageButton_Click
+        OfficeAIStyleHelper.StyleButtonSmall(_templatePrevPageButton)
+
+        _templatePagerPanel.Controls.Add(_templateNextPageButton)
+        _templatePagerPanel.Controls.Add(_templatePageLabel)
+        _templatePagerPanel.Controls.Add(_templatePrevPageButton)
+        _templateGalleryPanel.Controls.Add(_templateCardPanel, 0, 0)
+        _templateGalleryPanel.Controls.Add(_templatePagerPanel, 0, 1)
 
         _templateListBox.Dock = DockStyle.Fill
         _templateListBox.DrawMode = DrawMode.OwnerDrawFixed
@@ -432,7 +483,7 @@ Public Class ThemePptTaskPane
         AddHandler _templatePaintGallery.TemplateSelected, AddressOf TemplatePaintGallery_TemplateSelected
 
         _contentPanel.Controls.Add(_templateListBox)
-        _contentPanel.Controls.Add(_templateCardPanel)
+        _contentPanel.Controls.Add(_templateGalleryPanel)
         _contentPanel.Controls.Add(_outlineWorkspacePanel)
         _contentPanel.Controls.Add(_outputBox)
 
@@ -640,7 +691,7 @@ Public Class ThemePptTaskPane
         End If
 
         _outlineWorkspacePanel.Visible = False
-        _templateCardPanel.Visible = False
+        _templateGalleryPanel.Visible = False
         _templateListBox.Visible = False
         _templateWebView.Visible = False
         _templatePaintGallery.Visible = False
@@ -654,7 +705,7 @@ Public Class ThemePptTaskPane
             Return
         End If
 
-        _templateCardPanel.Visible = False
+        _templateGalleryPanel.Visible = False
         _templateListBox.Visible = False
         _templateWebView.Visible = False
         _templatePaintGallery.Visible = False
@@ -686,8 +737,21 @@ Public Class ThemePptTaskPane
             Return
         End If
 
-        ShowOutlineEditor()
-        AppendThemePptLog("ShowTemplateGallery skipped in task pane; use WebView2 dialog. count=" &
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() ShowTemplateGallery(), MethodInvoker))
+            Return
+        End If
+
+        _outlineWorkspacePanel.Visible = False
+        _templateListBox.Visible = False
+        _templateWebView.Visible = False
+        _templatePaintGallery.Visible = False
+        _outputBox.Visible = False
+        _templateGalleryPanel.Visible = True
+        _templateGalleryPanel.BringToFront()
+        RefreshTemplatePager()
+        ResizeTemplateCards()
+        AppendThemePptLog("ShowTemplateGallery in task pane. count=" &
                           _templateCombo.Items.Count.ToString() & ", selected=" & GetSelectedTemplateId())
     End Sub
 
@@ -892,6 +956,36 @@ Public Class ThemePptTaskPane
         Return LoadTemplatesInBackgroundAsync(safePage, CancellationToken.None).GetAwaiter().GetResult()
     End Function
 
+    Private Async Sub TemplatePrevPageButton_Click(sender As Object, e As EventArgs)
+        If _isTemplateLoading OrElse _templatePage <= 1 Then Return
+        Await LoadTemplatesAsync(_templatePage - 1)
+    End Sub
+
+    Private Async Sub TemplateNextPageButton_Click(sender As Object, e As EventArgs)
+        If _isTemplateLoading OrElse Not _templateHasNextPage Then Return
+        Await LoadTemplatesAsync(_templatePage + 1)
+    End Sub
+
+    Private Sub RefreshTemplatePager()
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() RefreshTemplatePager(), MethodInvoker))
+            Return
+        End If
+
+        If _lastTemplateLoadUsedFallback Then
+            _templatePageLabel.Text = "内置模板"
+        Else
+            _templatePageLabel.Text = "第 " & Math.Max(1, _templatePage).ToString() & " 页"
+        End If
+
+        _templatePrevPageButton.Enabled = Not _isTemplateLoading AndAlso
+                                          Not _lastTemplateLoadUsedFallback AndAlso
+                                          _templatePage > 1
+        _templateNextPageButton.Enabled = Not _isTemplateLoading AndAlso
+                                          Not _lastTemplateLoadUsedFallback AndAlso
+                                          _templateHasNextPage
+    End Sub
+
     Private Function CanChooseTemplate() As Boolean
         Return Not _isTemplateLoading AndAlso
                _templateCombo.Items.Count > 0 AndAlso
@@ -914,6 +1008,8 @@ Public Class ThemePptTaskPane
         _finishOutlineEditButton.Enabled = Not String.IsNullOrWhiteSpace(GetEditedMarkdown()) AndAlso Not _isOutlineEditCompleted
         _refreshTemplatesButton.Enabled = _isOutlineEditCompleted AndAlso Not _isTemplateLoading
         _selectTemplateButton.Enabled = CanChooseTemplate()
+        _insertButton.Enabled = CanGenerateFromTemplate()
+        RefreshTemplatePager()
     End Sub
 
     Private Function GetEditedMarkdown() As String
@@ -953,8 +1049,132 @@ Public Class ThemePptTaskPane
         value = System.Text.RegularExpressions.Regex.Replace(value, "([^\n])\s+(\d{1,2}[\.\)]\s+)", "$1" & vbLf & "$2")
         value = System.Text.RegularExpressions.Regex.Replace(value, "\n{3,}", vbLf & vbLf)
         value = NormalizeGeneratedMarkdownHeadingBodies(value)
+        value = NormalizeDocmeeMarkdownStructure(value)
 
         Return value.Trim().Replace(vbLf, Environment.NewLine)
+    End Function
+
+    Private Function PrepareEditedMarkdownForDocmee(markdown As String) As String
+        Dim value = NormalizeMarkdownForEditing(markdown)
+        value = NormalizeDocmeeMarkdownStructure(value)
+        Return value.Trim().Replace(vbLf, Environment.NewLine)
+    End Function
+
+    Private Function NormalizeDocmeeMarkdownStructure(markdown As String) As String
+        Dim value = If(markdown, "").Trim()
+        If String.IsNullOrWhiteSpace(value) Then Return ""
+
+        value = value.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
+        Dim lines = value.Split(New String() {vbLf}, StringSplitOptions.None)
+        Dim h1Count = 0
+        Dim h2Count = 0
+        Dim minNestedHeadingLevel = Integer.MaxValue
+        Dim firstHeadingText As String = Nothing
+
+        For Each rawLine In lines
+            Dim level As Integer = 0
+            Dim headingText As String = Nothing
+            If Not TryParseMarkdownHeading(rawLine, level, headingText) Then Continue For
+
+            If String.IsNullOrWhiteSpace(firstHeadingText) Then firstHeadingText = headingText
+            If level = 1 Then h1Count += 1
+            If level = 2 Then h2Count += 1
+            If level > 1 AndAlso level < minNestedHeadingLevel Then minNestedHeadingLevel = level
+        Next
+
+        Dim nestedHeadingShift = 0
+        If h2Count = 0 AndAlso minNestedHeadingLevel <> Integer.MaxValue AndAlso minNestedHeadingLevel > 2 Then
+            nestedHeadingShift = minNestedHeadingLevel - 2
+        End If
+
+        Dim builder As New StringBuilder()
+        Dim hasWrittenH1 = False
+        Dim hasWrittenH2 = False
+
+        If h1Count = 0 Then
+            builder.AppendLine("# " & BuildFallbackMarkdownTitle(firstHeadingText, value))
+            builder.AppendLine()
+            hasWrittenH1 = True
+        End If
+
+        For Each rawLine In lines
+            Dim line = If(rawLine, "").TrimEnd()
+            Dim level As Integer = 0
+            Dim headingText As String = Nothing
+
+            If TryParseMarkdownHeading(line, level, headingText) Then
+                If String.IsNullOrWhiteSpace(headingText) Then
+                    builder.AppendLine(line)
+                    Continue For
+                End If
+
+                If level = 1 Then
+                    If Not hasWrittenH1 AndAlso h1Count > 0 Then
+                        builder.AppendLine("# " & headingText.Trim())
+                        hasWrittenH1 = True
+                    Else
+                        builder.AppendLine("## " & headingText.Trim())
+                        hasWrittenH2 = True
+                    End If
+                Else
+                    Dim normalizedLevel = Math.Max(2, Math.Min(6, level - nestedHeadingShift))
+                    If normalizedLevel = 2 Then hasWrittenH2 = True
+                    builder.AppendLine(New String("#"c, normalizedLevel) & " " & headingText.Trim())
+                End If
+            Else
+                builder.AppendLine(line)
+            End If
+        Next
+
+        Dim normalized = builder.ToString().Replace(vbCrLf, vbLf).Replace(vbCr, vbLf).Trim()
+        If Not hasWrittenH2 Then
+            Dim normalizedLines = normalized.Split(New String() {vbLf}, StringSplitOptions.None)
+            Dim rebuilt As New StringBuilder()
+            Dim insertedSection = False
+            For Each rawLine In normalizedLines
+                rebuilt.AppendLine(rawLine)
+                If Not insertedSection AndAlso rawLine.TrimStart().StartsWith("# ", StringComparison.Ordinal) Then
+                    rebuilt.AppendLine()
+                    rebuilt.AppendLine("## 内容")
+                    insertedSection = True
+                End If
+            Next
+            normalized = rebuilt.ToString().Trim()
+        End If
+
+        Return System.Text.RegularExpressions.Regex.Replace(normalized, "\n{3,}", vbLf & vbLf)
+    End Function
+
+    Private Function BuildFallbackMarkdownTitle(firstHeadingText As String, markdown As String) As String
+        If Not String.IsNullOrWhiteSpace(_topicBox.Text) Then Return CleanMarkdown(_topicBox.Text.Trim())
+        If Not String.IsNullOrWhiteSpace(firstHeadingText) Then Return CleanMarkdown(firstHeadingText.Trim())
+
+        Dim normalized = If(markdown, "").Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
+        For Each rawLine In normalized.Split(New String() {vbLf}, StringSplitOptions.None)
+            Dim line = If(rawLine, "").Trim()
+            If String.IsNullOrWhiteSpace(line) OrElse line.StartsWith("#", StringComparison.Ordinal) Then Continue For
+            line = line.TrimStart("-"c, "*"c, "+"c, " "c, vbTab)
+            If line.Length > 36 Then line = line.Substring(0, 36)
+            If Not String.IsNullOrWhiteSpace(line) Then Return CleanMarkdown(line)
+        Next
+
+        Return "演示主题"
+    End Function
+
+    Private Function TryParseMarkdownHeading(line As String, ByRef headingLevel As Integer, ByRef headingText As String) As Boolean
+        headingLevel = 0
+        headingText = Nothing
+
+        Dim value = If(line, "").Trim()
+        If Not value.StartsWith("#", StringComparison.Ordinal) Then Return False
+
+        While headingLevel < value.Length AndAlso value(headingLevel) = "#"c
+            headingLevel += 1
+        End While
+
+        If headingLevel < 1 OrElse headingLevel > 6 Then Return False
+        headingText = value.Substring(headingLevel).Trim()
+        Return True
     End Function
 
     Private Function NormalizeGeneratedMarkdownHeadingBodies(markdown As String) As String
@@ -1178,18 +1398,22 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Async Sub FinishOutlineEditButton_Click(sender As Object, e As EventArgs)
-        If String.IsNullOrWhiteSpace(GetEditedMarkdown()) Then
+        Dim normalizedMarkdown = PrepareEditedMarkdownForDocmee(GetEditedMarkdown())
+        If String.IsNullOrWhiteSpace(normalizedMarkdown) Then
             MessageBox.Show("请先填写 Markdown 大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
         Try
-            ValidateEditedMarkdownForDocmee(GetEditedMarkdown())
+            ValidateEditedMarkdownForDocmee(normalizedMarkdown)
         Catch ex As Exception
             MessageBox.Show(ex.Message, "Markdown 大纲", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End Try
 
+        If Not String.Equals(GetEditedMarkdown(), normalizedMarkdown, StringComparison.Ordinal) Then
+            SetOutlineEditorText(normalizedMarkdown)
+        End If
         ApplyOutlineEditCompletion()
         SetStatus("Markdown 大纲编辑完成，正在加载模板...")
 
@@ -1264,6 +1488,42 @@ Public Class ThemePptTaskPane
         Catch ex As InvalidOperationException
             Return False
         End Try
+    End Function
+
+    Private Function RunOnPaneUiThreadAsync(action As MethodInvoker) As Task
+        If action Is Nothing Then Return Task.FromResult(True)
+
+        If IsOnPaneUiThread() Then
+            action()
+            Return Task.FromResult(True)
+        End If
+
+        Dim completion As New TaskCompletionSource(Of Boolean)()
+        If Me.IsDisposed OrElse Not Me.IsHandleCreated Then
+            completion.SetResult(False)
+            Return completion.Task
+        End If
+
+        Try
+            Me.BeginInvoke(CType(Sub()
+                                    Try
+                                        If Me.IsDisposed Then
+                                            completion.TrySetResult(False)
+                                            Return
+                                        End If
+                                        action()
+                                        completion.TrySetResult(True)
+                                    Catch ex As Exception
+                                        completion.TrySetException(ex)
+                                    End Try
+                                End Sub, MethodInvoker))
+        Catch ex As ObjectDisposedException
+            completion.TrySetResult(False)
+        Catch ex As InvalidOperationException
+            completion.TrySetResult(False)
+        End Try
+
+        Return completion.Task
     End Function
 
     Private Function IsOnPaneUiThread() As Boolean
@@ -1486,7 +1746,7 @@ Public Class ThemePptTaskPane
         End If
 
         If _templateCombo.Items.Count = 0 Then Return
-        ShowTemplateSelectionDialog()
+        ShowTemplateGallery()
     End Sub
 
     Private Sub ConfigureDocmeeButton_Click(sender As Object, e As EventArgs)
@@ -1679,11 +1939,8 @@ Public Class ThemePptTaskPane
         If String.IsNullOrWhiteSpace(markdown) Then
             Throw New InvalidOperationException("请先粘贴 Markdown 大纲。")
         End If
-        If Not markdown.StartsWith("#", StringComparison.Ordinal) Then
-            Throw New InvalidOperationException("Markdown 大纲应以 # 一级标题开始。")
-        End If
 
-        Return NormalizeMarkdownForEditing(markdown)
+        Return PrepareEditedMarkdownForDocmee(markdown)
     End Function
 
     Private Sub ValidateEditedMarkdownForDocmee(markdown As String)
@@ -1743,10 +2000,11 @@ Public Class ThemePptTaskPane
 
         Dim requestedPage = Math.Max(1, page)
         _isTemplateLoading = True
+        _lastTemplateLoadUsedFallback = False
         AppendThemePptLog("LoadTemplatesAsync start. page=" & requestedPage.ToString())
         _refreshTemplatesButton.Enabled = False
         _selectTemplateButton.Enabled = False
-        _lastTemplateLoadUsedFallback = False
+        RefreshTemplatePager()
         CancelTemplateCoverLoad()
         CancelTemplateLoad()
         _templateLoadCts = New CancellationTokenSource()
@@ -1754,20 +2012,23 @@ Public Class ThemePptTaskPane
         Dim cancellationToken = loadCts.Token
 
         Try
-            SetStatus("正在加载 Docmee 模板...")
+            SetStatus("正在加载 Docmee 模板，第 " & requestedPage.ToString() & " 页...")
             Await Task.Yield()
             Dim templates = Await LoadTemplatesInBackgroundAsync(requestedPage, cancellationToken)
             cancellationToken.ThrowIfCancellationRequested()
             AppendThemePptLog("LoadTemplatesAsync fetched count=" & If(templates Is Nothing, 0, templates.Count).ToString())
-            _templatePage = requestedPage
-            _templateHasNextPage = templates IsNot Nothing AndAlso templates.Count >= TemplatePageSize
-            PopulateTemplates(templates)
+            Await RunOnPaneUiThreadAsync(CType(Sub()
+                                                  _templatePage = requestedPage
+                                                  _templateHasNextPage = templates IsNot Nothing AndAlso templates.Count >= TemplatePageSize
+                                                  PopulateTemplates(templates)
 
-            If _templateCombo.Items.Count = 0 Then
-                SetStatus("未获取到可用模板。")
-            Else
-                SetStatus($"已加载 {_templateCombo.Items.Count} 个模板。")
-            End If
+                                                  If _templateCombo.Items.Count = 0 Then
+                                                      SetStatus("未获取到可用模板。")
+                                                  Else
+                                                      SetStatus($"已加载第 {_templatePage} 页，共 {_templateCombo.Items.Count} 个模板。选择模板后点击导入PPT。")
+                                                      ShowTemplateGallery()
+                                                  End If
+                                              End Sub, MethodInvoker))
         Catch ex As OperationCanceledException
             SetStatus("模板加载已取消。")
         Catch ex As Exception
@@ -1776,17 +2037,21 @@ Public Class ThemePptTaskPane
 
             Dim fallbackTemplates = DocmeePptClient.GetFallbackTemplates()
             If fallbackTemplates.Count > 0 Then
-                _lastTemplateLoadUsedFallback = True
-                _templatePage = 1
-                _templateHasNextPage = False
-                PopulateTemplates(fallbackTemplates)
-                SetStatus($"模板接口失败，已使用内置模板 {fallbackTemplates.Count} 个。")
-                ShowTemplateGallery()
+                RunOnPaneUiThreadAsync(CType(Sub()
+                                                _lastTemplateLoadUsedFallback = True
+                                                _templatePage = 1
+                                                _templateHasNextPage = False
+                                                PopulateTemplates(fallbackTemplates)
+                                                SetStatus($"模板接口失败，已使用内置模板 {fallbackTemplates.Count} 个。")
+                                                ShowTemplateGallery()
+                                            End Sub, MethodInvoker)).GetAwaiter().GetResult()
             Else
-                _templateCombo.Enabled = False
-                SetStatus("模板加载失败。")
-                ShowOutlineOutput()
-                MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                RunOnPaneUiThreadAsync(CType(Sub()
+                                                _templateCombo.Enabled = False
+                                                SetStatus("模板加载失败。")
+                                                ShowOutlineOutput()
+                                                MessageBox.Show("加载模板失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                                            End Sub, MethodInvoker)).GetAwaiter().GetResult()
             End If
         Finally
             _isTemplateLoading = False
@@ -1795,6 +2060,7 @@ Public Class ThemePptTaskPane
                 _templateLoadCts = Nothing
             End If
             RefreshActionButtons()
+            RefreshTemplatePager()
         End Try
     End Function
 
@@ -1829,6 +2095,8 @@ Public Class ThemePptTaskPane
                 For Each template In templates
                     If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Continue For
                     _templateCombo.Items.Add(template)
+                    _templateListBox.Items.Add(template)
+                    _templateCardPanel.Controls.Add(CreateTemplateCard(template))
                 Next
             End If
         Finally
@@ -1841,7 +2109,12 @@ Public Class ThemePptTaskPane
         End If
         RefreshTemplateSelectionStyles()
         RefreshActionButtons()
+        RefreshTemplatePager()
         ResizeTemplateCards()
+        If _templateCombo.Items.Count > 0 Then
+            _templateCoverCts = New CancellationTokenSource()
+            BeginLoadTemplateCovers(_templateCoverLoadGeneration, _templateCoverCts.Token)
+        End If
         AppendThemePptLog("PopulateTemplates completed: count=" & _templateCombo.Items.Count.ToString() & ", generation=" & _templateCoverLoadGeneration.ToString())
     End Sub
 
@@ -2177,10 +2450,10 @@ Public Class ThemePptTaskPane
 
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
         Dim card As New Panel()
-        card.Width = Math.Max(220, _templateCardPanel.ClientSize.Width - 24)
-        card.Height = 278
+        card.Width = 208
+        card.Height = 214
         card.Padding = New Padding(8)
-        card.Margin = New Padding(0, 0, 0, 10)
+        card.Margin = New Padding(0, 0, 12, 12)
         card.BackColor = Color.White
         card.BorderStyle = BorderStyle.FixedSingle
         card.Tag = template
@@ -2188,7 +2461,7 @@ Public Class ThemePptTaskPane
 
         Dim previewPanel As New Panel()
         previewPanel.Name = "TemplateCoverHost"
-        previewPanel.BackColor = Color.FromArgb(255, 248, 241)
+        previewPanel.BackColor = Color.FromArgb(248, 250, 252)
         previewPanel.BorderStyle = BorderStyle.FixedSingle
         previewPanel.BackgroundImage = CreateTemplatePreviewBitmap(template, "封面加载中...")
         previewPanel.BackgroundImageLayout = ImageLayout.Stretch
@@ -2200,7 +2473,7 @@ Public Class ThemePptTaskPane
         previewBadge.AutoSize = False
         previewBadge.Text = "模板预览"
         previewBadge.TextAlign = ContentAlignment.MiddleLeft
-        previewBadge.ForeColor = Color.FromArgb(234, 88, 12)
+        previewBadge.ForeColor = OfficeAIStyleHelper.BrandPrimary
         previewBadge.Font = New Font(Me.Font.FontFamily, 8.5F, FontStyle.Bold)
         previewBadge.Tag = template
         previewBadge.Cursor = Cursors.Hand
@@ -2229,7 +2502,7 @@ Public Class ThemePptTaskPane
 
         Dim cover As New PictureBox()
         cover.Name = "TemplateCoverImage"
-        cover.BackColor = Color.FromArgb(248, 250, 252)
+        cover.BackColor = Color.White
         cover.Dock = DockStyle.Fill
         cover.SizeMode = PictureBoxSizeMode.Zoom
         cover.Tag = template
@@ -2257,7 +2530,7 @@ Public Class ThemePptTaskPane
         nameLabel.Name = "TemplateName"
         nameLabel.AutoSize = False
         nameLabel.TextAlign = ContentAlignment.MiddleLeft
-        nameLabel.AutoEllipsis = False
+        nameLabel.AutoEllipsis = True
         nameLabel.ForeColor = Color.FromArgb(39, 45, 55)
         nameLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
         nameLabel.Text = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
@@ -2268,7 +2541,7 @@ Public Class ThemePptTaskPane
         detailLabel.Name = "TemplateMeta"
         detailLabel.AutoSize = False
         detailLabel.TextAlign = ContentAlignment.MiddleLeft
-        detailLabel.AutoEllipsis = False
+        detailLabel.AutoEllipsis = True
         detailLabel.ForeColor = Color.FromArgb(86, 94, 108)
         detailLabel.Font = New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular)
         detailLabel.Text = BuildTemplateMetaText(template) & If(String.IsNullOrWhiteSpace(template.Id), "", " | ID " & template.Id)
@@ -2280,7 +2553,7 @@ Public Class ThemePptTaskPane
         selectLabel.AutoSize = False
         selectLabel.Text = "选择模板"
         selectLabel.TextAlign = ContentAlignment.MiddleCenter
-        selectLabel.ForeColor = Color.FromArgb(39, 45, 55)
+        selectLabel.ForeColor = OfficeAIStyleHelper.TextPrimary
         selectLabel.BackColor = Color.FromArgb(241, 245, 249)
         selectLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
         selectLabel.Tag = template
@@ -2311,11 +2584,14 @@ Public Class ThemePptTaskPane
         Dim left = card.Padding.Left
         Dim top = card.Padding.Top
         Dim innerWidth = Math.Max(120, card.ClientSize.Width - card.Padding.Horizontal)
-        Dim coverHeight = 138
-        Dim nameHeight = 42
-        Dim metaHeight = 36
-        Dim buttonHeight = 30
-        Dim gap = 6
+        Dim coverHeight = CInt(Math.Round(innerWidth * 9.0R / 16.0R))
+        coverHeight = Math.Max(92, Math.Min(136, coverHeight))
+        Dim nameHeight = 34
+        Dim metaHeight = 22
+        Dim buttonHeight = 28
+        Dim gap = 7
+        Dim targetHeight = card.Padding.Vertical + coverHeight + nameHeight + metaHeight + buttonHeight + gap * 3
+        If card.Height <> targetHeight Then card.Height = targetHeight
 
         Dim coverHost = FindTemplateCardChild(card, "TemplateCoverHost")
         If coverHost IsNot Nothing Then
@@ -2342,6 +2618,7 @@ Public Class ThemePptTaskPane
     Private Sub LayoutTemplateCoverHost(coverHost As Control)
         Dim contentWidth = Math.Max(80, coverHost.ClientSize.Width - 24)
         Dim contentLeft = 12
+        Dim hostHeight = Math.Max(72, coverHost.ClientSize.Height)
 
         Dim previewBadge = FindTemplateCardChild(coverHost, "TemplatePreviewBadge")
         If previewBadge IsNot Nothing Then
@@ -2350,12 +2627,13 @@ Public Class ThemePptTaskPane
 
         Dim previewTitle = FindTemplateCardChild(coverHost, "TemplatePreviewTitle")
         If previewTitle IsNot Nothing Then
-            previewTitle.Bounds = New Rectangle(contentLeft, 38, contentWidth, 44)
+            Dim titleHeight = Math.Max(24, hostHeight - 64)
+            previewTitle.Bounds = New Rectangle(contentLeft, 34, contentWidth, titleHeight)
         End If
 
         Dim previewMeta = FindTemplateCardChild(coverHost, "TemplatePreviewMeta")
         If previewMeta IsNot Nothing Then
-            previewMeta.Bounds = New Rectangle(contentLeft, 92, contentWidth, 20)
+            previewMeta.Bounds = New Rectangle(contentLeft, Math.Max(56, hostHeight - 26), contentWidth, 18)
         End If
 
         Dim cover = FindTemplateCardChild(coverHost, "TemplateCoverImage")
@@ -2470,6 +2748,10 @@ Public Class ThemePptTaskPane
         End If
 
         RefreshTemplateSelectionStyles()
+        RefreshActionButtons()
+
+        Dim displayName = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
+        SetStatus("已选择模板：" & displayName & "。点击导入PPT开始生成。")
     End Sub
 
     Private Sub TemplateCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
@@ -2553,7 +2835,7 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub DrawTemplateListPreview(graphics As Graphics, template As DocmeeTemplateInfo, bounds As Rectangle)
-        Using backgroundBrush As New SolidBrush(Color.FromArgb(255, 248, 241)),
+        Using backgroundBrush As New SolidBrush(Color.FromArgb(248, 250, 252)),
               borderPen As New Pen(Color.FromArgb(226, 232, 240))
             graphics.FillRectangle(backgroundBrush, bounds)
             graphics.DrawRectangle(borderPen, bounds)
@@ -2567,7 +2849,7 @@ Public Class ThemePptTaskPane
         Dim title = If(template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Name), "模板预览", template.Name.Trim())
         Dim status = If(template IsNot Nothing AndAlso _templateCoverMessages.ContainsKey(template.Id), _templateCoverMessages(template.Id), "封面加载中...")
 
-        Using accentBrush As New SolidBrush(Color.FromArgb(234, 88, 12)),
+        Using accentBrush As New SolidBrush(OfficeAIStyleHelper.BrandPrimary),
               titleFont As New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold),
               statusFont As New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular),
               titleBrush As New SolidBrush(Color.FromArgb(39, 45, 55)),
@@ -2617,15 +2899,15 @@ Public Class ThemePptTaskPane
 
         For Each pair In _templateCards
             Dim isSelected = String.Equals(pair.Key, selectedId, StringComparison.Ordinal)
-            pair.Value.BackColor = If(isSelected, Color.FromArgb(255, 245, 235), Color.White)
-            pair.Value.Padding = If(isSelected, New Padding(5), New Padding(8))
+            pair.Value.BackColor = If(isSelected, OfficeAIStyleHelper.BrandPrimaryLight, Color.White)
+            pair.Value.Padding = New Padding(8)
             LayoutTemplateCard(pair.Value)
 
             If _templateSelectLabels.ContainsKey(pair.Key) Then
                 Dim selectLabel = _templateSelectLabels(pair.Key)
                 selectLabel.Text = If(isSelected, "已选择", "选择模板")
-                selectLabel.BackColor = If(isSelected, Color.FromArgb(234, 88, 12), Color.FromArgb(241, 245, 249))
-                selectLabel.ForeColor = If(isSelected, Color.White, Color.FromArgb(39, 45, 55))
+                selectLabel.BackColor = If(isSelected, OfficeAIStyleHelper.BrandPrimary, Color.FromArgb(241, 245, 249))
+                selectLabel.ForeColor = If(isSelected, Color.White, OfficeAIStyleHelper.TextPrimary)
             End If
         Next
     End Sub
@@ -2635,14 +2917,29 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub ResizeTemplateCards()
-        Dim cardWidth = Math.Max(220, _templateCardPanel.ClientSize.Width - 24)
+        Dim availableWidth = _templateCardPanel.ClientSize.Width -
+                             SystemInformation.VerticalScrollBarWidth -
+                             _templateCardPanel.Padding.Horizontal -
+                             4
+        availableWidth = Math.Max(168, availableWidth)
+
+        Dim gap = 12
+        Dim minCardWidth = 168
+        Dim maxCardWidth = 226
+        Dim columns = Math.Max(1, CInt(Math.Floor((availableWidth + gap) / CDbl(minCardWidth + gap))))
+        Dim cardWidth = CInt(Math.Floor((availableWidth - gap * (columns - 1)) / CDbl(columns)))
+        cardWidth = Math.Max(minCardWidth, Math.Min(maxCardWidth, cardWidth))
+
         For Each card As Control In _templateCardPanel.Controls
             card.Width = cardWidth
+            card.Margin = New Padding(0, 0, gap, gap)
+            Dim panel = TryCast(card, Panel)
+            If panel IsNot Nothing Then LayoutTemplateCard(panel)
         Next
     End Sub
 
     Private Async Function GenerateAndImportPptxAsync() As Task
-        Dim markdown = GetEditedMarkdown()
+        Dim markdown = PrepareEditedMarkdownForDocmee(GetEditedMarkdown())
         If String.IsNullOrWhiteSpace(markdown) Then
             MessageBox.Show("请先生成或填写大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
@@ -2654,6 +2951,10 @@ Public Class ThemePptTaskPane
             MessageBox.Show(ex.Message, "Markdown 大纲", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End Try
+
+        If Not String.Equals(GetEditedMarkdown(), markdown, StringComparison.Ordinal) Then
+            SetOutlineEditorText(markdown)
+        End If
 
         Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
         If selectedTemplate Is Nothing OrElse String.IsNullOrWhiteSpace(selectedTemplate.Id) Then
