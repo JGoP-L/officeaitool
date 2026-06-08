@@ -179,8 +179,8 @@ Public Class ThemePptTaskPane
         modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
 
         ' 三个模式按钮作为 Segmented Control
-        Dim modes() As String = {GenerationModeTitle, GenerationModeDocument, GenerationModeMarkdown}
-        Dim modeBtnWidth As Integer = 98
+        Dim modes() As String = {GenerationModeTitle, GenerationModeDocument}
+        Dim modeBtnWidth As Integer = 110
         For i As Integer = 0 To modes.Length - 1
             Dim modeBtn As New Button()
             modeBtn.Text = modes(i)
@@ -219,11 +219,12 @@ Public Class ThemePptTaskPane
 
         ' --- 文档选择面板 ---
         _documentPanel.Dock = DockStyle.Fill
-        _documentPanel.ColumnCount = 3
-        _documentPanel.RowCount = 1
+        _documentPanel.ColumnCount = 2
+        _documentPanel.RowCount = 2
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        _documentPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
+        _documentPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         _documentPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
         _documentPanel.Visible = False
         _documentPanel.BackColor = Color.Transparent
@@ -231,20 +232,27 @@ Public Class ThemePptTaskPane
         Dim documentLabel As New Label()
         OfficeAIStyleHelper.StyleLabelBody(documentLabel)
         documentLabel.Text = "文档"
-        documentLabel.Margin = New Padding(0, 6, 10, 0)
+        documentLabel.AutoSize = False
+        documentLabel.Size = New Size(68, OfficeAIStyleHelper.ButtonHeight)
+        documentLabel.TextAlign = ContentAlignment.MiddleLeft
+        documentLabel.Margin = New Padding(0, 0, 10, OfficeAIStyleHelper.SpacingSm)
 
         _documentPathBox.Dock = DockStyle.Fill
         _documentPathBox.ReadOnly = True
+        _documentPathBox.Margin = New Padding(0, 0, 0, 0)
         OfficeAIStyleHelper.StyleTextBox(_documentPathBox)
 
-        _chooseDocumentButton.Text = "选择"
-        _chooseDocumentButton.Width = 66
+        _chooseDocumentButton.Text = "选择文档"
+        _chooseDocumentButton.Width = 96
+        _chooseDocumentButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _chooseDocumentButton.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
         AddHandler _chooseDocumentButton.Click, AddressOf ChooseDocumentButton_Click
         OfficeAIStyleHelper.StyleButtonSmall(_chooseDocumentButton)
 
         _documentPanel.Controls.Add(documentLabel, 0, 0)
-        _documentPanel.Controls.Add(_documentPathBox, 1, 0)
-        _documentPanel.Controls.Add(_chooseDocumentButton, 2, 0)
+        _documentPanel.Controls.Add(_chooseDocumentButton, 1, 0)
+        _documentPanel.Controls.Add(_documentPathBox, 0, 1)
+        _documentPanel.SetColumnSpan(_documentPathBox, 2)
 
         ' --- 按钮组 ---
         Dim buttonPanel As New FlowLayoutPanel()
@@ -256,13 +264,13 @@ Public Class ThemePptTaskPane
         OfficeAIStyleHelper.StyleFlowPanel(buttonPanel)
 
         _generateButton.Text = "生成大纲"
-        _generateButton.Width = 88
+        _generateButton.Width = 104
         _generateButton.Height = OfficeAIStyleHelper.ButtonHeight
         AddHandler _generateButton.Click, AddressOf GenerateButton_Click
         OfficeAIStyleHelper.StyleButtonPrimary(_generateButton)
 
         _finishOutlineEditButton.Text = "完成编辑"
-        _finishOutlineEditButton.Width = 88
+        _finishOutlineEditButton.Width = 104
         _finishOutlineEditButton.Height = OfficeAIStyleHelper.ButtonHeight
         _finishOutlineEditButton.Enabled = False
         AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click
@@ -274,15 +282,8 @@ Public Class ThemePptTaskPane
         AddHandler _insertButton.Click, AddressOf InsertButton_Click
         OfficeAIStyleHelper.StyleButtonAccent(_insertButton)
 
-        _configureDocmeeButton.Text = "配置"
-        _configureDocmeeButton.Width = 66
-        _configureDocmeeButton.Height = OfficeAIStyleHelper.ButtonHeight
-        AddHandler _configureDocmeeButton.Click, AddressOf ConfigureDocmeeButton_Click
-        OfficeAIStyleHelper.StyleButtonSecondary(_configureDocmeeButton)
-
         buttonPanel.Controls.Add(_generateButton)
         buttonPanel.Controls.Add(_finishOutlineEditButton)
-        buttonPanel.Controls.Add(_configureDocmeeButton)
 
         ' --- 模板选择区 ---
         Dim templateSectionLabel = _templateSectionLabel
@@ -441,6 +442,7 @@ Public Class ThemePptTaskPane
         hintLabel.Dock = DockStyle.Fill
         hintLabel.Height = 36
         OfficeAIStyleHelper.StyleLabelHint(hintLabel)
+        hintLabel.AutoSize = False
         hintLabel.TextAlign = ContentAlignment.MiddleLeft
         hintLabel.Text = "版本 " & ThemePptPaneBuild & " | Docmee 地址和 token 可配置"
 
@@ -462,7 +464,7 @@ Public Class ThemePptTaskPane
         ' 初始化隐藏的 ComboBox（作为模式数据源）
         _generationModeCombo.Visible = False
         _generationModeCombo.DropDownStyle = ComboBoxStyle.DropDownList
-        _generationModeCombo.Items.AddRange(New Object() {GenerationModeTitle, GenerationModeDocument, GenerationModeMarkdown})
+        _generationModeCombo.Items.AddRange(New Object() {GenerationModeTitle, GenerationModeDocument})
         _generationModeCombo.SelectedIndex = 0
         AddHandler _generationModeCombo.SelectedIndexChanged, AddressOf GenerationModeCombo_SelectedIndexChanged
         Me.Controls.Add(_generationModeCombo)
@@ -513,14 +515,13 @@ Public Class ThemePptTaskPane
 
     Private Sub UpdateGenerationModeUi()
         Dim mode = GetSelectedGenerationMode()
-        _documentPanel.Visible = String.Equals(mode, GenerationModeDocument, StringComparison.Ordinal)
+        Dim isDocumentMode = String.Equals(mode, GenerationModeDocument, StringComparison.Ordinal)
+        _documentPanel.Visible = isDocumentMode
+        SetTopicBoxVisible(Not isDocumentMode)
 
         Select Case mode
             Case GenerationModeDocument
-                If String.Equals(_topicBox.Text.Trim(), "AI 办公趋势", StringComparison.Ordinal) Then
-                    _topicBox.Text = "可选：补充文档生成要求，例如突出汇报重点。"
-                End If
-                SetStatus("选择 Word 或其他文档，生成 Markdown 大纲后可编辑并选择模板。")
+                SetStatus("选择 Word 或其他文档后，直接生成 Markdown 大纲。")
             Case GenerationModeMarkdown
                 If String.Equals(_topicBox.Text.Trim(), "AI 办公趋势", StringComparison.Ordinal) OrElse
                    _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
@@ -1670,9 +1671,7 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Function GetDocumentPrompt() As String
-        Dim text = _topicBox.Text.Trim()
-        If text.StartsWith("可选：", StringComparison.Ordinal) Then Return ""
-        Return text
+        Return ""
     End Function
 
     Private Function PrepareMarkdownOutlineFromInput() As String
@@ -2179,7 +2178,7 @@ Public Class ThemePptTaskPane
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
         Dim card As New Panel()
         card.Width = Math.Max(220, _templateCardPanel.ClientSize.Width - 24)
-        card.Height = 244
+        card.Height = 278
         card.Padding = New Padding(8)
         card.Margin = New Padding(0, 0, 0, 10)
         card.BackColor = Color.White
@@ -2258,7 +2257,7 @@ Public Class ThemePptTaskPane
         nameLabel.Name = "TemplateName"
         nameLabel.AutoSize = False
         nameLabel.TextAlign = ContentAlignment.MiddleLeft
-        nameLabel.AutoEllipsis = True
+        nameLabel.AutoEllipsis = False
         nameLabel.ForeColor = Color.FromArgb(39, 45, 55)
         nameLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
         nameLabel.Text = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
@@ -2269,7 +2268,7 @@ Public Class ThemePptTaskPane
         detailLabel.Name = "TemplateMeta"
         detailLabel.AutoSize = False
         detailLabel.TextAlign = ContentAlignment.MiddleLeft
-        detailLabel.AutoEllipsis = True
+        detailLabel.AutoEllipsis = False
         detailLabel.ForeColor = Color.FromArgb(86, 94, 108)
         detailLabel.Font = New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular)
         detailLabel.Text = BuildTemplateMetaText(template) & If(String.IsNullOrWhiteSpace(template.Id), "", " | ID " & template.Id)
@@ -2312,9 +2311,9 @@ Public Class ThemePptTaskPane
         Dim left = card.Padding.Left
         Dim top = card.Padding.Top
         Dim innerWidth = Math.Max(120, card.ClientSize.Width - card.Padding.Horizontal)
-        Dim coverHeight = 130
-        Dim nameHeight = 28
-        Dim metaHeight = 22
+        Dim coverHeight = 138
+        Dim nameHeight = 42
+        Dim metaHeight = 36
         Dim buttonHeight = 30
         Dim gap = 6
 

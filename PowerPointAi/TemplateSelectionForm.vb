@@ -76,7 +76,7 @@ Public Class TemplateSelectionForm
         _listBox.Location = New Point(OfficeAIStyleHelper.SpacingSm, contentY)
         _listBox.Size = New Size(280, 420)
         _listBox.DrawMode = DrawMode.OwnerDrawFixed
-        _listBox.ItemHeight = 76
+        _listBox.ItemHeight = 96
         _listBox.IntegralHeight = False
         _listBox.BackColor = OfficeAIStyleHelper.BgSurface
         _listBox.BorderStyle = BorderStyle.FixedSingle
@@ -96,6 +96,8 @@ Public Class TemplateSelectionForm
         _titleLabel.Size = New Size(630, 50)
         _titleLabel.AutoEllipsis = True
         OfficeAIStyleHelper.StyleLabelBody(_titleLabel)
+        _titleLabel.AutoSize = False
+        _titleLabel.TextAlign = ContentAlignment.MiddleLeft
         Controls.Add(_titleLabel)
 
         _prevButton.Text = "◀ 上一页"
@@ -109,6 +111,8 @@ Public Class TemplateSelectionForm
         _pageLabel.Size = New Size(88, 22)
         _pageLabel.TextAlign = ContentAlignment.MiddleCenter
         OfficeAIStyleHelper.StyleLabelHint(_pageLabel)
+        _pageLabel.AutoSize = False
+        _pageLabel.TextAlign = ContentAlignment.MiddleCenter
         Controls.Add(_pageLabel)
 
         _nextButton.Text = "下一页 ▶"
@@ -203,13 +207,11 @@ Public Class TemplateSelectionForm
         Dim title = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
         Dim meta = BuildMetaText(template)
         Using titleFont As New Font(Font.FontFamily, 9.0F, FontStyle.Bold),
-              metaFont As New Font(Font.FontFamily, 8.0F),
-              titleBrush As New SolidBrush(OfficeAIStyleHelper.TextPrimary),
-              metaBrush As New SolidBrush(OfficeAIStyleHelper.TextSecondary)
-            Dim titleRect = New Rectangle(e.Bounds.Left + 12, e.Bounds.Top + 10, e.Bounds.Width - 20, 24)
-            Dim metaRect = New Rectangle(e.Bounds.Left + 12, e.Bounds.Top + 38, e.Bounds.Width - 20, 24)
-            TextRenderer.DrawText(e.Graphics, title, titleFont, titleRect, OfficeAIStyleHelper.TextPrimary, TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
-            TextRenderer.DrawText(e.Graphics, meta, metaFont, metaRect, OfficeAIStyleHelper.TextSecondary, TextFormatFlags.EndEllipsis Or TextFormatFlags.VerticalCenter)
+              metaFont As New Font(Font.FontFamily, 8.0F)
+            Dim titleRect = New Rectangle(e.Bounds.Left + 12, e.Bounds.Top + 10, e.Bounds.Width - 24, 40)
+            Dim metaRect = New Rectangle(e.Bounds.Left + 12, e.Bounds.Top + 52, e.Bounds.Width - 24, 34)
+            TextRenderer.DrawText(e.Graphics, title, titleFont, titleRect, OfficeAIStyleHelper.TextPrimary, TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+            TextRenderer.DrawText(e.Graphics, meta, metaFont, metaRect, OfficeAIStyleHelper.TextSecondary, TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
         End Using
     End Sub
 

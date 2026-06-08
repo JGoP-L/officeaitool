@@ -260,6 +260,8 @@ Public Class Ribbon1
             .AutoEllipsis = True
         }
         OfficeAIStyleHelper.StyleLabelBody(label)
+        label.AutoSize = False
+        label.TextAlign = ContentAlignment.MiddleLeft
         dialog.Controls.Add(label)
 
         Dim progressBar As New ProgressBar() With {
@@ -503,6 +505,8 @@ Public Class Ribbon1
                 .AutoEllipsis = True
             }
             OfficeAIStyleHelper.StyleLabelBody(titleLabel)
+            titleLabel.AutoSize = False
+            titleLabel.TextAlign = ContentAlignment.MiddleLeft
             dialog.Controls.Add(titleLabel)
 
             Dim setPreview As MethodInvoker =
@@ -850,38 +854,85 @@ Public Class Ribbon1
         Using dialog As New Form()
             OfficeAIStyleHelper.StyleFormDialog(dialog)
             dialog.Text = "AI创作"
-            dialog.ClientSize = New Size(420, 380)
+            dialog.StartPosition = FormStartPosition.CenterScreen
+            dialog.ClientSize = New Size(540, 590)
             dialog.BackColor = OfficeAIStyleHelper.BgPage
 
-            ' 品牌色标题栏
-            Dim header = OfficeAIStyleHelper.CreateFormHeader("AI 创作", 420)
-            dialog.Controls.Add(header)
+            Dim heroPanel As New Panel() With {
+                .Location = New Point(OfficeAIStyleHelper.SpacingLg, OfficeAIStyleHelper.SpacingLg),
+                .Size = New Size(dialog.ClientSize.Width - OfficeAIStyleHelper.SpacingLg * 2, 88),
+                .BackColor = OfficeAIStyleHelper.BgSurface
+            }
+            dialog.Controls.Add(heroPanel)
 
-            Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingLg
+            Dim heroIcon As New Label() With {
+                .Text = "Ai",
+                .Location = New Point(18, 20),
+                .Size = New Size(46, 46),
+                .BackColor = OfficeAIStyleHelper.BrandPrimaryLight,
+                .ForeColor = OfficeAIStyleHelper.BrandPrimary,
+                .Font = New Font("Microsoft YaHei UI", 15.0F, FontStyle.Bold),
+                .TextAlign = ContentAlignment.MiddleCenter
+            }
+            heroPanel.Controls.Add(heroIcon)
+
+            Dim heroTitle As New Label() With {
+                .Text = "AI 创作",
+                .Location = New Point(78, 18),
+                .Size = New Size(heroPanel.Width - 190, 28),
+                .ForeColor = OfficeAIStyleHelper.TextPrimary,
+                .Font = New Font("Microsoft YaHei UI", 14.0F, FontStyle.Bold),
+                .TextAlign = ContentAlignment.MiddleLeft
+            }
+            heroPanel.Controls.Add(heroTitle)
+
+            Dim heroSubtitle As New Label() With {
+                .Text = "选中文本后，选择一种处理方式并替换回当前页面",
+                .Location = New Point(78, 52),
+                .Size = New Size(heroPanel.Width - 96, 22),
+                .ForeColor = OfficeAIStyleHelper.TextSecondary,
+                .Font = OfficeAIStyleHelper.FontUi,
+                .TextAlign = ContentAlignment.MiddleLeft
+            }
+            heroPanel.Controls.Add(heroSubtitle)
+
+            Dim heroBadge As New Label() With {
+                .Text = "内容提效",
+                .Location = New Point(heroPanel.Width - 108, 18),
+                .Size = New Size(88, 28),
+                .BackColor = OfficeAIStyleHelper.BrandPrimaryLight,
+                .ForeColor = OfficeAIStyleHelper.BrandPrimary,
+                .Font = OfficeAIStyleHelper.FontUiBold,
+                .TextAlign = ContentAlignment.MiddleCenter
+            }
+            heroPanel.Controls.Add(heroBadge)
+
+            Dim contentY As Integer = heroPanel.Bottom + OfficeAIStyleHelper.SpacingMd
 
             ' 提示标签
             Dim label As New Label() With {
-                .Text = "选择 AI 创作方式：",
+                .Text = "选择处理方式",
                 .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY),
                 .AutoSize = True
             }
             OfficeAIStyleHelper.StyleLabelBody(label)
             dialog.Controls.Add(label)
 
-            ' 卡片式模式选择 (2x2 网格)
+            ' 卡片式模式选择
             Dim cardY As Integer = contentY + 26
-            Dim cardW As Integer = 186
+            Dim cardW As Integer = dialog.ClientSize.Width - OfficeAIStyleHelper.SpacingLg * 2
+            Dim cardH As Integer = 78
+            Dim cardGap As Integer = 10
             Dim col1X As Integer = OfficeAIStyleHelper.SpacingLg
-            Dim col2X As Integer = col1X + cardW + OfficeAIStyleHelper.SpacingSm
 
-            Dim cardPolish = OfficeAIStyleHelper.CreateOptionCard("✨", "润色", "优化表达，提升文采", cardW)
+            Dim cardPolish = OfficeAIStyleHelper.CreateOptionCard("润", "润色", "优化表达，让文字更自然、专业", cardW, cardH)
             cardPolish.Location = New Point(col1X, cardY)
-            Dim cardExpand = OfficeAIStyleHelper.CreateOptionCard("⬆", "扩写", "丰富细节，充实内容", cardW)
-            cardExpand.Location = New Point(col2X, cardY)
-            Dim cardShorten = OfficeAIStyleHelper.CreateOptionCard("⬇", "缩写", "精简文字，突出重点", cardW)
-            cardShorten.Location = New Point(col1X, cardY + 80)
-            Dim cardTranslate = OfficeAIStyleHelper.CreateOptionCard("文", "翻译", "多语言互译，跨越障碍", cardW)
-            cardTranslate.Location = New Point(col2X, cardY + 80)
+            Dim cardExpand = OfficeAIStyleHelper.CreateOptionCard("扩", "扩写", "补充细节，扩展成更完整表述", cardW, cardH)
+            cardExpand.Location = New Point(col1X, cardPolish.Bottom + cardGap)
+            Dim cardShorten = OfficeAIStyleHelper.CreateOptionCard("缩", "缩写", "精简文字，保留核心信息和重点", cardW, cardH)
+            cardShorten.Location = New Point(col1X, cardExpand.Bottom + cardGap)
+            Dim cardTranslate = OfficeAIStyleHelper.CreateOptionCard("译", "翻译", "选择目标语言，保留原意并优化表达", cardW, cardH)
+            cardTranslate.Location = New Point(col1X, cardShorten.Bottom + cardGap)
 
             ' 卡片点击事件 - 使用 Dictionary 映射卡片到模式名
             Dim allCards = {cardPolish, cardExpand, cardShorten, cardTranslate}
@@ -892,20 +943,24 @@ Public Class Ribbon1
             OfficeAIStyleHelper.SetCardSelected(cardPolish, True)
 
             ' 目标语言选择行 (仅翻译时可见) - 必须在卡片点击事件之前声明
-            Dim langY As Integer = cardY + 168
+            Dim langY As Integer = cardTranslate.Bottom + OfficeAIStyleHelper.SpacingMd
 
             Dim languageLabel As New Label() With {
                 .Text = "目标语言：",
-                .Location = New Point(OfficeAIStyleHelper.SpacingLg, langY + 4),
-                .AutoSize = True,
+                .Location = New Point(OfficeAIStyleHelper.SpacingLg, langY + 3),
+                .Size = New Size(82, OfficeAIStyleHelper.InputHeight),
+                .AutoSize = False,
+                .TextAlign = ContentAlignment.MiddleLeft,
                 .Visible = False
             }
             OfficeAIStyleHelper.StyleLabelBody(languageLabel)
+            languageLabel.AutoSize = False
+            languageLabel.TextAlign = ContentAlignment.MiddleLeft
             dialog.Controls.Add(languageLabel)
 
             Dim languageCombo As New ComboBox() With {
-                .Location = New Point(96, langY),
-                .Size = New Size(300, OfficeAIStyleHelper.InputHeight),
+                .Location = New Point(112, langY),
+                .Size = New Size(dialog.ClientSize.Width - 128, OfficeAIStyleHelper.InputHeight),
                 .DropDownStyle = ComboBoxStyle.DropDownList,
                 .Visible = False
             }
@@ -933,13 +988,13 @@ Public Class Ribbon1
 
             ' 底部按钮
             Dim btnY As Integer = dialog.ClientSize.Height - OfficeAIStyleHelper.ButtonHeight - OfficeAIStyleHelper.SpacingLg - 8
-            Dim sepHorizontal = OfficeAIStyleHelper.CreateSeparator(386)
+            Dim sepHorizontal = OfficeAIStyleHelper.CreateSeparator(dialog.ClientSize.Width - OfficeAIStyleHelper.SpacingLg * 2)
             sepHorizontal.Location = New Point(OfficeAIStyleHelper.SpacingLg, btnY - OfficeAIStyleHelper.SpacingSm)
             dialog.Controls.Add(sepHorizontal)
 
             Dim okButton As New Button() With {
                 .Text = "开始创作",
-                .Location = New Point(212, btnY),
+                .Location = New Point(dialog.ClientSize.Width - 208, btnY),
                 .Size = New Size(110, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.OK
             }
@@ -949,7 +1004,7 @@ Public Class Ribbon1
 
             Dim cancelButton As New Button() With {
                 .Text = "取消",
-                .Location = New Point(330, btnY),
+                .Location = New Point(dialog.ClientSize.Width - 90, btnY),
                 .Size = New Size(74, OfficeAIStyleHelper.ButtonHeight),
                 .DialogResult = DialogResult.Cancel
             }

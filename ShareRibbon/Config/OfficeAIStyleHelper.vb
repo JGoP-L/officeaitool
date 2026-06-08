@@ -320,10 +320,10 @@ Public Module OfficeAIStyleHelper
     End Function
 
     ''' <summary>创建选项卡片 (用于替代 ComboBox 的模式选择)</summary>
-    Public Function CreateOptionCard(icon As String, title As String, desc As String, width As Integer) As Panel
+    Public Function CreateOptionCard(icon As String, title As String, desc As String, width As Integer, Optional height As Integer = 86) As Panel
         Dim card As New Panel()
         card.Width = width
-        card.Height = 72
+        card.Height = Math.Max(72, height)
         card.BackColor = BgSurface
         card.Cursor = Cursors.Hand
         card.Tag = "unselected"
@@ -341,15 +341,13 @@ Public Module OfficeAIStyleHelper
             Dim rect = New Rectangle(0, 0, pnl.Width - 1, pnl.Height - 1)
             Dim isSelected As Boolean = (pnl.Tag IsNot Nothing AndAlso pnl.Tag.ToString() = "selected")
 
-            ' 背景和边框
             Using path = CreateRoundedRect(rect, CornerRadius)
                 If isSelected Then
                     g.FillPath(New SolidBrush(BrandPrimaryLight), path)
-                    Using pen = New Pen(BrandPrimary, 2)
+                    Using pen = New Pen(BrandPrimary, 1.8F)
                         g.DrawPath(pen, path)
                     End Using
                 Else
-                    ' 默认浅灰背景
                     g.FillPath(New SolidBrush(BgSurface), path)
                     Using pen = New Pen(BorderLight, 1)
                         g.DrawPath(pen, path)
@@ -357,22 +355,64 @@ Public Module OfficeAIStyleHelper
                 End If
             End Using
 
-            ' 图标 (Segoe UI Symbol 字体，16pt，可渲染所有低位 Unicode 符号)
-            Using iconFont = New Font("Segoe UI Symbol", 16.0!, FontStyle.Regular)
-                Using iconBrush = New SolidBrush(BrandPrimary)
-                    g.DrawString(icon, iconFont, iconBrush, SpacingMd + 2, 14)
+            Dim iconTile = New Rectangle(SpacingMd + 2, Math.Max(10, (pnl.Height - 44) \ 2), 44, 44)
+            Using tilePath = CreateRoundedRect(iconTile, 10)
+                Using tileBrush As New SolidBrush(If(isSelected, BrandPrimary, BrandPrimaryLight))
+                    g.FillPath(tileBrush, tilePath)
                 End Using
             End Using
 
-            ' 标题 (粗体)
-            Using titleFont = New Font("Microsoft YaHei UI", 9.0!, FontStyle.Bold)
-                g.DrawString(title, titleFont, New SolidBrush(TextPrimary), SpacingMd + 42, 10)
+            Dim iconBounds = iconTile
+            Dim textLeft = iconTile.Right + SpacingMd
+            Dim badgeWidth = If(isSelected, 62, 0)
+            Dim textWidth = Math.Max(80, pnl.Width - textLeft - SpacingLg - badgeWidth)
+            Dim titleBounds = New Rectangle(textLeft, Math.Max(10, (pnl.Height - 48) \ 2), textWidth, 24)
+            Dim descBounds = New Rectangle(textLeft, titleBounds.Bottom + 1, textWidth, Math.Max(24, pnl.Height - titleBounds.Bottom - 10))
+
+            Using iconFont = New Font("Segoe UI Symbol", 17.0!, FontStyle.Regular)
+                TextRenderer.DrawText(g,
+                                      icon,
+                                      iconFont,
+                                      iconBounds,
+                                      If(isSelected, Color.White, BrandPrimary),
+                                      TextFormatFlags.HorizontalCenter Or TextFormatFlags.VerticalCenter Or TextFormatFlags.NoPadding)
             End Using
 
-            ' 描述 (小字灰色)
-            Using descFont = New Font("Microsoft YaHei UI", 8.0!, FontStyle.Regular)
-                g.DrawString(desc, descFont, New SolidBrush(TextSecondary), SpacingMd + 42, 32)
+            Using titleFont = New Font("Microsoft YaHei UI", 9.5!, FontStyle.Bold)
+                TextRenderer.DrawText(g,
+                                      title,
+                                      titleFont,
+                                      titleBounds,
+                                      TextPrimary,
+                                      TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis)
             End Using
+
+            Using descFont = New Font("Microsoft YaHei UI", 8.5!, FontStyle.Regular)
+                TextRenderer.DrawText(g,
+                                      desc,
+                                      descFont,
+                                      descBounds,
+                                      TextSecondary,
+                                      TextFormatFlags.Left Or TextFormatFlags.Top Or TextFormatFlags.WordBreak Or TextFormatFlags.EndEllipsis)
+            End Using
+
+            If isSelected Then
+                Dim badgeRect = New Rectangle(pnl.Width - SpacingLg - 54, Math.Max(10, (pnl.Height - 24) \ 2), 54, 24)
+                Using badgePath = CreateRoundedRect(badgeRect, 12)
+                    Using badgeBrush As New SolidBrush(Color.White)
+                        g.FillPath(badgeBrush, badgePath)
+                    End Using
+                End Using
+
+                Using badgeFont = New Font("Microsoft YaHei UI", 8.0!, FontStyle.Bold)
+                    TextRenderer.DrawText(g,
+                                          "已选",
+                                          badgeFont,
+                                          badgeRect,
+                                          BrandPrimary,
+                                          TextFormatFlags.HorizontalCenter Or TextFormatFlags.VerticalCenter)
+                End Using
+            End If
         End Sub
 
         Return card
