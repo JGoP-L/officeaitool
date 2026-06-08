@@ -157,11 +157,10 @@ Public Class ThemePptTaskPane
         layout.Dock = DockStyle.Fill
         layout.AutoSize = False
         layout.ColumnCount = 1
-        layout.RowCount = 10
+        layout.RowCount = 9
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 200.0F))
-        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
@@ -174,17 +173,18 @@ Public Class ThemePptTaskPane
         Dim modeLabel As New Label()
         OfficeAIStyleHelper.StyleLabelHeading(modeLabel)
         modeLabel.Text = "生成方式"
-        modeLabel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        modeLabel.Margin = New Padding(0)
+        modeLabel.Visible = False
 
         Dim modeSegmentedPanel As New Panel()
-        modeSegmentedPanel.Height = 36
+        modeSegmentedPanel.Height = 34
         modeSegmentedPanel.BackColor = OfficeAIStyleHelper.BorderLight
         modeSegmentedPanel.Padding = New Padding(1)
-        modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
 
         ' 模式按钮作为 Segmented Control
         Dim modes() As String = {GenerationModeTitle, GenerationModeDocument}
-        Dim modeBtnWidth As Integer = 110
+        Dim modeBtnWidth As Integer = 104
         modeSegmentedPanel.Width = 2 + modes.Length * modeBtnWidth + Math.Max(0, modes.Length - 1)
         For i As Integer = 0 To modes.Length - 1
             Dim modeBtn As New Button()
@@ -194,7 +194,7 @@ Public Class ThemePptTaskPane
             modeBtn.FlatAppearance.MouseOverBackColor = Color.Transparent
             modeBtn.FlatAppearance.MouseDownBackColor = Color.Transparent
             modeBtn.UseVisualStyleBackColor = False
-            modeBtn.Height = 34
+            modeBtn.Height = 32
             modeBtn.Width = modeBtnWidth
             modeBtn.Left = 1 + i * (modeBtnWidth + 1)
             modeBtn.Top = 1
@@ -219,7 +219,7 @@ Public Class ThemePptTaskPane
         _topicBox.Multiline = True
         _topicBox.ScrollBars = ScrollBars.Vertical
         _topicBox.Text = "AI 办公趋势"
-        _topicBox.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        _topicBox.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
         OfficeAIStyleHelper.StyleTextBoxMultiline(_topicBox)
 
         ' --- 文档选择面板 ---
@@ -265,18 +265,20 @@ Public Class ThemePptTaskPane
         buttonPanel.Dock = DockStyle.Fill
         buttonPanel.FlowDirection = FlowDirection.LeftToRight
         buttonPanel.WrapContents = True
-        buttonPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        buttonPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
         OfficeAIStyleHelper.StyleFlowPanel(buttonPanel)
 
         _generateButton.Text = "生成大纲"
         _generateButton.Width = 104
         _generateButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _generateButton.Margin = New Padding(0, 0, 8, 8)
         AddHandler _generateButton.Click, AddressOf GenerateButton_Click
         OfficeAIStyleHelper.StyleButtonPrimary(_generateButton)
 
         _finishOutlineEditButton.Text = "完成编辑"
         _finishOutlineEditButton.Width = 104
         _finishOutlineEditButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _finishOutlineEditButton.Margin = New Padding(0, 0, 8, 8)
         _finishOutlineEditButton.Enabled = False
         AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click
         OfficeAIStyleHelper.StyleButtonSecondary(_finishOutlineEditButton)
@@ -284,6 +286,7 @@ Public Class ThemePptTaskPane
         _insertButton.Text = "导入PPT"
         _insertButton.Width = 96
         _insertButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _insertButton.Margin = New Padding(0, 0, 8, 8)
         _insertButton.Enabled = False
         AddHandler _insertButton.Click, AddressOf InsertButton_Click
         OfficeAIStyleHelper.StyleButtonAccent(_insertButton)
@@ -296,7 +299,7 @@ Public Class ThemePptTaskPane
         Dim templateSectionLabel = _templateSectionLabel
         OfficeAIStyleHelper.StyleLabelHeading(templateSectionLabel)
         templateSectionLabel.Text = "选择模板"
-        templateSectionLabel.Margin = New Padding(0, OfficeAIStyleHelper.SpacingSm, 0, OfficeAIStyleHelper.SpacingSm)
+        templateSectionLabel.Margin = New Padding(0, OfficeAIStyleHelper.SpacingXs, 0, OfficeAIStyleHelper.SpacingSm)
         templateSectionLabel.Visible = False
 
         Dim templatePanel = _templateSectionPanel
@@ -334,11 +337,13 @@ Public Class ThemePptTaskPane
 
         ' --- 状态栏 ---
         _statusLabel.AutoSize = False
-        _statusLabel.Height = 24
-        _statusLabel.ForeColor = OfficeAIStyleHelper.TextSecondary
+        _statusLabel.Height = 30
+        _statusLabel.BackColor = OfficeAIStyleHelper.BrandPrimaryLight
+        _statusLabel.ForeColor = OfficeAIStyleHelper.BrandPrimaryDark
         _statusLabel.Font = OfficeAIStyleHelper.FontUiSmall
         _statusLabel.Text = "选择来源生成 Markdown 大纲，编辑完成后再选择模板生成 PPT。"
         _statusLabel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        _statusLabel.Padding = New Padding(10, 0, 10, 0)
         _statusLabel.TextAlign = ContentAlignment.MiddleLeft
 
         ' --- 内容区域（大纲编辑/预览/模板卡片/输出）---
@@ -505,9 +510,8 @@ Public Class ThemePptTaskPane
         layout.Controls.Add(buttonPanel, 0, 4)
         layout.Controls.Add(templateSectionLabel, 0, 5)
         layout.Controls.Add(templatePanel, 0, 6)
-        layout.Controls.Add(_statusLabel, 0, 7)
-        layout.Controls.Add(_contentPanel, 0, 8)
-        layout.Controls.Add(hintLabel, 0, 9)
+        layout.Controls.Add(_contentPanel, 0, 7)
+        layout.Controls.Add(hintLabel, 0, 8)
 
         scrollPanel.Controls.Add(layout)
         Me.Controls.Add(scrollPanel)
@@ -546,7 +550,7 @@ Public Class ThemePptTaskPane
         _topicBox.Visible = visible
         Dim layout = TryCast(_topicBox.Parent, TableLayoutPanel)
         If layout Is Nothing OrElse layout.RowCount <= 2 Then Return
-        layout.RowStyles(2).Height = If(visible, 200.0F, 0)
+        layout.RowStyles(2).Height = If(visible, 152.0F, 0)
     End Sub
 
     ''' <summary>控制模板选择区域可见性</summary>
@@ -2455,18 +2459,20 @@ Public Class ThemePptTaskPane
         card.Padding = New Padding(8)
         card.Margin = New Padding(0, 0, 12, 12)
         card.BackColor = Color.White
-        card.BorderStyle = BorderStyle.FixedSingle
+        card.BorderStyle = BorderStyle.None
         card.Tag = template
         card.Cursor = Cursors.Hand
+        AddHandler card.Paint, AddressOf TemplateCard_Paint
 
         Dim previewPanel As New Panel()
         previewPanel.Name = "TemplateCoverHost"
         previewPanel.BackColor = Color.FromArgb(248, 250, 252)
-        previewPanel.BorderStyle = BorderStyle.FixedSingle
+        previewPanel.BorderStyle = BorderStyle.None
         previewPanel.BackgroundImage = CreateTemplatePreviewBitmap(template, "封面加载中...")
         previewPanel.BackgroundImageLayout = ImageLayout.Stretch
         previewPanel.Tag = template
         previewPanel.Cursor = Cursors.Hand
+        AddHandler previewPanel.Paint, AddressOf TemplateCoverHost_Paint
 
         Dim previewBadge As New Label()
         previewBadge.Name = "TemplatePreviewBadge"
@@ -2613,6 +2619,32 @@ Public Class ThemePptTaskPane
         If selectLabel IsNot Nothing Then
             selectLabel.Bounds = New Rectangle(left, top + coverHeight + gap + nameHeight + metaHeight + gap, innerWidth, buttonHeight)
         End If
+    End Sub
+
+    Private Sub TemplateCard_Paint(sender As Object, e As PaintEventArgs)
+        Dim card = TryCast(sender, Panel)
+        If card Is Nothing OrElse card.Width <= 1 OrElse card.Height <= 1 Then Return
+
+        Dim template = TryCast(card.Tag, DocmeeTemplateInfo)
+        Dim selectedId = GetSelectedTemplateId()
+        Dim isSelected = template IsNot Nothing AndAlso
+                         Not String.IsNullOrWhiteSpace(template.Id) AndAlso
+                         String.Equals(template.Id, selectedId, StringComparison.Ordinal)
+        Dim borderColor = If(isSelected, OfficeAIStyleHelper.BrandPrimary, OfficeAIStyleHelper.BorderLight)
+        Dim borderWidth = If(isSelected, 2, 1)
+        Using borderPen As New Pen(borderColor, borderWidth)
+            Dim offset = borderWidth \ 2
+            e.Graphics.DrawRectangle(borderPen, offset, offset, card.Width - borderWidth, card.Height - borderWidth)
+        End Using
+    End Sub
+
+    Private Sub TemplateCoverHost_Paint(sender As Object, e As PaintEventArgs)
+        Dim host = TryCast(sender, Control)
+        If host Is Nothing OrElse host.Width <= 1 OrElse host.Height <= 1 Then Return
+
+        Using borderPen As New Pen(OfficeAIStyleHelper.BorderLight, 1)
+            e.Graphics.DrawRectangle(borderPen, 0, 0, host.Width - 1, host.Height - 1)
+        End Using
     End Sub
 
     Private Sub LayoutTemplateCoverHost(coverHost As Control)
@@ -2902,6 +2934,7 @@ Public Class ThemePptTaskPane
             pair.Value.BackColor = If(isSelected, OfficeAIStyleHelper.BrandPrimaryLight, Color.White)
             pair.Value.Padding = New Padding(8)
             LayoutTemplateCard(pair.Value)
+            pair.Value.Invalidate()
 
             If _templateSelectLabels.ContainsKey(pair.Key) Then
                 Dim selectLabel = _templateSelectLabels(pair.Key)
