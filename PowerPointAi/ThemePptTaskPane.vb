@@ -26,16 +26,22 @@ Public Class ThemePptTaskPane
     Private Const WM_SETREDRAW As Integer = &HB
     Private Const EM_LINESCROLL As Integer = &HB6
     Private Const EM_GETFIRSTVISIBLELINE As Integer = &HCE
+    Private Const EM_SETCUEBANNER As Integer = &H1501
     Private Const GenerationModeTitle As String = "AI智能创作"
     Private Const GenerationModeDocument As String = "文档生成"
     Private Const GenerationModeMarkdown As String = "Markdown大纲"
     Private Const TopicPromptText As String = "输入您的创作灵感"
+    Private Const OutlineStreamFlushIntervalMs As Integer = 120
     Private Shared ReadOnly MarkdownPreviewPipelineLock As New Object()
     Private Shared _markdownPreviewPipeline As MarkdownPipeline
     Private Shared _markdownPreviewPipelineInitializeError As String
 
     <DllImport("user32.dll", CharSet:=CharSet.Auto)>
     Private Shared Function SendMessage(hWnd As IntPtr, msg As Integer, wParam As IntPtr, lParam As IntPtr) As IntPtr
+    End Function
+
+    <DllImport("user32.dll", EntryPoint:="SendMessageW", CharSet:=CharSet.Unicode)>
+    Private Shared Function SendMessageString(hWnd As IntPtr, msg As Integer, wParam As IntPtr, lParam As String) As IntPtr
     End Function
 
     Private ReadOnly _pptApp As PowerPoint.Application
@@ -65,11 +71,16 @@ Public Class ThemePptTaskPane
     Private _lastImportedSlideCount As Integer
     Private _hasChosenGenerationMode As Boolean
     Private ReadOnly _outlineStreamBuffer As New StringBuilder()
+    Private ReadOnly _outlineStreamFlushTimer As New System.Windows.Forms.Timer()
+    Private _pendingOutlineStreamFlush As Boolean
+    Private _lastOutlineStreamFlushUtc As DateTime = DateTime.MinValue
 
     Private ReadOnly _generationModeCombo As New ComboBox()
     Private ReadOnly _generationModeLabel As New Label()
     Private ReadOnly _modeSegmentedPanel As New Panel()
+    Private ReadOnly _topicHostPanel As New Panel()
     Private ReadOnly _topicBox As New TextBox()
+    Private ReadOnly _topicPlaceholderLabel As New Label()
     Private ReadOnly _documentPanel As New TableLayoutPanel()
     Private ReadOnly _documentPathBox As New TextBox()
     Private ReadOnly _chooseDocumentButton As New Button()
@@ -118,6 +129,7 @@ Public Class ThemePptTaskPane
     Private _templateWebViewReady As Boolean
     Private _templateWebViewInitializing As Boolean
     Private _pendingTemplateGalleryRender As Boolean
+    Private _suppressTaskPaneOutput As Boolean
     Private ReadOnly _uiThreadId As Integer
 
     Public Sub New(pptApp As PowerPoint.Application)
@@ -132,6 +144,8 @@ Public Class ThemePptTaskPane
     Private Sub BuildLayout()
         Me.BackColor = OfficeAIStyleHelper.BgPage
         Me.Padding = New Padding(0)
+        _outlineStreamFlushTimer.Interval = OutlineStreamFlushIntervalMs
+        AddHandler _outlineStreamFlushTimer.Tick, AddressOf OutlineStreamFlushTimer_Tick
 
         ' 顶部品牌色标题栏
         Dim headerPanel As New Panel()
@@ -228,15 +242,37 @@ Public Class ThemePptTaskPane
         UpdateModeButtonsStyle(_modeSegmentedPanel, -1)
 
         ' --- 主题输入框 ---
+        _topicHostPanel.Dock = DockStyle.Fill
+        _topicHostPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        _topicHostPanel.BackColor = OfficeAIStyleHelper.BgSurface
+
         _topicBox.Dock = DockStyle.Fill
         _topicBox.Multiline = True
         _topicBox.ScrollBars = ScrollBars.Vertical
-        _topicBox.Text = TopicPromptText
-        _topicBox.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        _topicBox.Text = ""
+        _topicBox.Margin = New Padding(0)
         OfficeAIStyleHelper.StyleTextBoxMultiline(_topicBox)
-        ApplyTopicPromptIfEmpty()
         AddHandler _topicBox.Enter, AddressOf TopicBox_Enter
         AddHandler _topicBox.Leave, AddressOf TopicBox_Leave
+        AddHandler _topicBox.TextChanged, AddressOf TopicBox_TextChanged
+
+        _topicPlaceholderLabel.Text = TopicPromptText
+        _topicPlaceholderLabel.AutoSize = True
+        _topicPlaceholderLabel.Location = New Point(7, 7)
+        _topicPlaceholderLabel.BackColor = OfficeAIStyleHelper.BgSurface
+        _topicPlaceholderLabel.ForeColor = OfficeAIStyleHelper.TextSecondary
+        _topicPlaceholderLabel.Font = _topicBox.Font
+        _topicPlaceholderLabel.Cursor = Cursors.IBeam
+        AddHandler _topicPlaceholderLabel.Click,
+            Sub()
+                _topicBox.Focus()
+                _topicBox.SelectionStart = _topicBox.TextLength
+            End Sub
+
+        _topicHostPanel.Controls.Add(_topicBox)
+        _topicHostPanel.Controls.Add(_topicPlaceholderLabel)
+        _topicPlaceholderLabel.BringToFront()
+        ApplyTopicPromptIfEmpty()
 
         ' --- 文档选择面板 ---
         _documentPanel.Dock = DockStyle.Fill
@@ -576,7 +612,7 @@ Public Class ThemePptTaskPane
         ' --- 组装布局 ---
         layout.Controls.Add(modeLabel, 0, 0)
         layout.Controls.Add(_modeSegmentedPanel, 0, 1)
-        layout.Controls.Add(_topicBox, 0, 2)
+        layout.Controls.Add(_topicHostPanel, 0, 2)
         layout.Controls.Add(_documentPanel, 0, 3)
         layout.Controls.Add(_actionButtonPanel, 0, 4)
         layout.Controls.Add(templateSectionLabel, 0, 5)
@@ -633,8 +669,10 @@ Public Class ThemePptTaskPane
 
     ''' <summary>控制主题输入框可见性并折叠所在行</summary>
     Private Sub SetTopicBoxVisible(visible As Boolean)
+        _topicHostPanel.Visible = visible
         _topicBox.Visible = visible
-        Dim layout = TryCast(_topicBox.Parent, TableLayoutPanel)
+        _topicPlaceholderLabel.Visible = visible AndAlso String.IsNullOrWhiteSpace(_topicBox.Text)
+        Dim layout = TryCast(_topicHostPanel.Parent, TableLayoutPanel)
         If layout Is Nothing OrElse layout.RowCount <= 2 Then Return
         layout.RowStyles(2).Height = If(visible, 220.0F, 0)
     End Sub
@@ -704,7 +742,7 @@ Public Class ThemePptTaskPane
             Case GenerationModeDocument
                 SetStatus("选择 Word 或其他文档后，直接生成 Markdown 大纲。")
             Case GenerationModeMarkdown
-                If String.Equals(_topicBox.Text.Trim(), TopicPromptText, StringComparison.Ordinal) OrElse
+                If String.IsNullOrWhiteSpace(_topicBox.Text) OrElse
                    _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
                     _topicBox.Text = "# 演示主题" & vbCrLf & vbCrLf & "## 章节一" & vbCrLf & "### 页面标题" & vbCrLf & "- 要点内容"
                 End If
@@ -712,7 +750,7 @@ Public Class ThemePptTaskPane
             Case Else
                 If String.IsNullOrWhiteSpace(_topicBox.Text) OrElse
                    _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
-                    _topicBox.Text = TopicPromptText
+                    _topicBox.Text = ""
                 End If
                 ApplyTopicPromptIfEmpty()
                 SetStatus("输入主题后点击立即创作，生成可编辑内容。")
@@ -726,27 +764,25 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Function IsTopicPromptActive() As Boolean
-        Return String.Equals(If(_topicBox.Text, "").Trim(), TopicPromptText, StringComparison.Ordinal)
+        Return False
     End Function
 
     Private Sub ApplyTopicPromptIfEmpty()
         If _topicBox.IsDisposed Then Return
-        If String.IsNullOrWhiteSpace(_topicBox.Text) OrElse IsTopicPromptActive() Then
-            _topicBox.Text = TopicPromptText
-            _topicBox.ForeColor = OfficeAIStyleHelper.TextSecondary
-        Else
-            _topicBox.ForeColor = OfficeAIStyleHelper.TextPrimary
-        End If
+        _topicBox.ForeColor = OfficeAIStyleHelper.TextPrimary
+        _topicPlaceholderLabel.Visible = _topicHostPanel.Visible AndAlso String.IsNullOrWhiteSpace(_topicBox.Text)
+        If _topicPlaceholderLabel.Visible Then _topicPlaceholderLabel.BringToFront()
     End Sub
 
     Private Sub TopicBox_Enter(sender As Object, e As EventArgs)
-        If IsTopicPromptActive() Then
-            _topicBox.Clear()
-            _topicBox.ForeColor = OfficeAIStyleHelper.TextPrimary
-        End If
+        ApplyTopicPromptIfEmpty()
     End Sub
 
     Private Sub TopicBox_Leave(sender As Object, e As EventArgs)
+        ApplyTopicPromptIfEmpty()
+    End Sub
+
+    Private Sub TopicBox_TextChanged(sender As Object, e As EventArgs)
         ApplyTopicPromptIfEmpty()
     End Sub
 
@@ -2153,6 +2189,25 @@ Public Class ThemePptTaskPane
         End If
 
         Dim mode = GetSelectedGenerationMode()
+        If String.Equals(mode, GenerationModeTitle, StringComparison.Ordinal) AndAlso
+           String.IsNullOrWhiteSpace(GetCreativeTopicText()) Then
+            MessageBox.Show("请输入 PPT 主题。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            SetTopicBoxVisible(True)
+            _contentPanel.Visible = False
+            _topicBox.Focus()
+            SetStatus("请输入主题后再点击立即创作。")
+            Return
+        End If
+
+        If String.Equals(mode, GenerationModeMarkdown, StringComparison.Ordinal) AndAlso
+           String.IsNullOrWhiteSpace(_topicBox.Text) Then
+            MessageBox.Show("请先粘贴 Markdown 大纲。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            SetTopicBoxVisible(True)
+            _contentPanel.Visible = False
+            _topicBox.Focus()
+            SetStatus("请先填写 Markdown 大纲。")
+            Return
+        End If
 
         _generateButton.Enabled = False
         _finishOutlineEditButton.Enabled = False
@@ -2178,20 +2233,17 @@ Public Class ThemePptTaskPane
                     _taskId = ""
                 Case Else
                     Dim topic = GetCreativeTopicText()
-                    If String.IsNullOrWhiteSpace(topic) Then
-                        MessageBox.Show("请输入 PPT 主题。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                        Return
-                    End If
-
                     Dim requestContent = BuildRequestContent(topic)
                     SetStatus("正在创建 AI 智能创作任务...")
                     _taskId = Await _client.CreateTaskAsync(requestContent)
 
                     SetStatus("正在创作 PPT 内容...")
                     _outputBox.Clear()
+                    ResetOutlineStreamFlushState()
                     _outlineMarkdown = Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)
             End Select
 
+            FlushOutlineStreamOutput()
             SetOutlineEditorText(_outlineMarkdown.Trim())
             MarkOutlineEditingRequired()
             ShowOutlineEditor()
@@ -2229,6 +2281,7 @@ Public Class ThemePptTaskPane
 
         SetStatus("正在根据文档生成 PPT Markdown 大纲...")
         _outputBox.Clear()
+        ResetOutlineStreamFlushState()
         Return Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText, GetDocumentPrompt())
     End Function
 
@@ -2289,10 +2342,63 @@ Public Class ThemePptTaskPane
         End If
 
         _outlineStreamBuffer.Append(chunkText)
+        Dim elapsedMs = (DateTime.UtcNow - _lastOutlineStreamFlushUtc).TotalMilliseconds
+        If elapsedMs >= OutlineStreamFlushIntervalMs Then
+            FlushOutlineStreamOutput()
+        Else
+            ScheduleOutlineStreamFlush()
+        End If
+    End Sub
+
+    Private Sub ResetOutlineStreamFlushState()
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() ResetOutlineStreamFlushState(), MethodInvoker))
+            Return
+        End If
+
+        _outlineStreamFlushTimer.Stop()
+        _pendingOutlineStreamFlush = False
+        _lastOutlineStreamFlushUtc = DateTime.MinValue
+    End Sub
+
+    Private Sub ScheduleOutlineStreamFlush()
+        _pendingOutlineStreamFlush = True
+        If _outlineStreamFlushTimer.Enabled Then Return
+
+        Dim elapsedMs = Math.Max(0, CInt((DateTime.UtcNow - _lastOutlineStreamFlushUtc).TotalMilliseconds))
+        _outlineStreamFlushTimer.Interval = Math.Max(30, OutlineStreamFlushIntervalMs - elapsedMs)
+        _outlineStreamFlushTimer.Start()
+    End Sub
+
+    Private Sub OutlineStreamFlushTimer_Tick(sender As Object, e As EventArgs)
+        _outlineStreamFlushTimer.Stop()
+        If _pendingOutlineStreamFlush Then FlushOutlineStreamOutput()
+    End Sub
+
+    Private Sub FlushOutlineStreamOutput()
+        If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return
+
+        If _outputBox.InvokeRequired Then
+            BeginInvokeIfAlive(CType(Sub() FlushOutlineStreamOutput(), MethodInvoker))
+            Return
+        End If
+
+        _outlineStreamFlushTimer.Stop()
+        _pendingOutlineStreamFlush = False
+        _lastOutlineStreamFlushUtc = DateTime.UtcNow
+
         Dim formattedText = NormalizeMarkdownForStreamingDisplay(_outlineStreamBuffer.ToString())
-        _outputBox.Text = formattedText
-        _outputBox.SelectionStart = _outputBox.TextLength
-        _outputBox.ScrollToCaret()
+        If String.Equals(_outputBox.Text, formattedText, StringComparison.Ordinal) Then Return
+
+        Try
+            SendMessage(_outputBox.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero)
+            _outputBox.Text = formattedText
+            _outputBox.SelectionStart = _outputBox.TextLength
+            _outputBox.ScrollToCaret()
+        Finally
+            SendMessage(_outputBox.Handle, WM_SETREDRAW, New IntPtr(1), IntPtr.Zero)
+            _outputBox.Invalidate()
+        End Try
     End Sub
 
     Private Async Sub InsertButton_Click(sender As Object, e As EventArgs)
@@ -3271,6 +3377,234 @@ Public Class ThemePptTaskPane
         Next
     End Sub
 
+    Private Class PptGenerationSpinnerControl
+        Inherits Control
+
+        Private ReadOnly _timer As New System.Windows.Forms.Timer() With {.Interval = 30}
+        Private _angle As Single
+
+        Public Sub New()
+            Size = New Size(48, 48)
+            BackColor = Color.White
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            AddHandler _timer.Tick, Sub()
+                                        _angle = (_angle + 12.0F) Mod 360.0F
+                                        Invalidate()
+                                    End Sub
+        End Sub
+
+        Public Sub Start()
+            _timer.Start()
+        End Sub
+
+        Public Sub [Stop]()
+            _timer.Stop()
+        End Sub
+
+        Protected Overrides Sub Dispose(disposing As Boolean)
+            If disposing Then _timer.Dispose()
+            MyBase.Dispose(disposing)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim rect = New Rectangle(9, 9, Width - 18, Height - 18)
+            For i As Integer = 0 To 7
+                Dim alpha As Integer = Math.Max(35, 230 - i * 24)
+                Dim color As Color = If(i < 3, OfficeAIStyleHelper.BrandPrimary, Color.FromArgb(69, 166, 244))
+                Using pen As New Pen(Color.FromArgb(alpha, color), 5.0F)
+                    pen.StartCap = LineCap.Round
+                    pen.EndCap = LineCap.Round
+                    g.DrawArc(pen, rect, _angle - i * 20.0F, 18.0F)
+                End Using
+            Next
+        End Sub
+    End Class
+
+    Private Class PptGenerationMarqueeControl
+        Inherits Control
+
+        Private ReadOnly _timer As New System.Windows.Forms.Timer() With {.Interval = 28}
+        Private _offset As Integer
+
+        Public Sub New()
+            Size = New Size(210, 14)
+            BackColor = Color.White
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            AddHandler _timer.Tick, Sub()
+                                        _offset = (_offset + 5) Mod Math.Max(1, Width + 76)
+                                        Invalidate()
+                                    End Sub
+        End Sub
+
+        Public Sub Start()
+            _timer.Start()
+        End Sub
+
+        Public Sub [Stop]()
+            _timer.Stop()
+        End Sub
+
+        Protected Overrides Sub Dispose(disposing As Boolean)
+            If disposing Then _timer.Dispose()
+            MyBase.Dispose(disposing)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim track = New Rectangle(0, 4, Width - 1, Height - 8)
+            Using trackPath = CreateRoundedPath(track, 5)
+                Using brush As New SolidBrush(Color.FromArgb(239, 241, 246))
+                    g.FillPath(brush, trackPath)
+                End Using
+            End Using
+
+            Dim pill = New Rectangle(_offset - 72, 4, 72, Height - 8)
+            If pill.Right > 0 AndAlso pill.Left < Width Then
+                Using pillPath = CreateRoundedPath(pill, 5)
+                    Using brush As New LinearGradientBrush(pill, Color.FromArgb(162, 132, 235), OfficeAIStyleHelper.BrandPrimary, LinearGradientMode.Horizontal)
+                        g.FillPath(brush, pillPath)
+                    End Using
+                End Using
+            End If
+        End Sub
+    End Class
+
+    Private Class PptGenerationProgressForm
+        Inherits Form
+
+        Private ReadOnly _spinner As New PptGenerationSpinnerControl()
+        Private ReadOnly _marquee As New PptGenerationMarqueeControl()
+        Private ReadOnly _stageLabel As New Label()
+
+        Public Sub New()
+            Text = "PPT生成中"
+            ClientSize = New Size(330, 310)
+            FormBorderStyle = FormBorderStyle.None
+            StartPosition = FormStartPosition.CenterScreen
+            ShowIcon = False
+            ShowInTaskbar = False
+            TopMost = True
+            BackColor = Color.White
+            Font = New Font("Microsoft YaHei UI", 9.0F, FontStyle.Regular)
+            DoubleBuffered = True
+
+            Dim contentPanel As New Panel() With {
+                .Location = New Point(14, 14),
+                .Size = New Size(302, 282),
+                .BackColor = Color.White
+            }
+            Controls.Add(contentPanel)
+
+            _spinner.Location = New Point((contentPanel.Width - _spinner.Width) \ 2, 40)
+            contentPanel.Controls.Add(_spinner)
+
+            Dim titleLabel As New Label() With {
+                .Text = "PPT正在生成中，请稍后...",
+                .Location = New Point(0, 104),
+                .Size = New Size(contentPanel.Width, 30),
+                .TextAlign = ContentAlignment.MiddleCenter,
+                .Font = New Font("Microsoft YaHei UI", 12.0F, FontStyle.Bold),
+                .ForeColor = Color.FromArgb(80, 80, 86)
+            }
+            contentPanel.Controls.Add(titleLabel)
+
+            Dim dotsLabel As New Label() With {
+                .Text = "•••",
+                .Location = New Point(0, 138),
+                .Size = New Size(contentPanel.Width, 24),
+                .TextAlign = ContentAlignment.MiddleCenter,
+                .Font = New Font("Microsoft YaHei UI", 16.0F, FontStyle.Bold),
+                .ForeColor = Color.FromArgb(92, 92, 96)
+            }
+            contentPanel.Controls.Add(dotsLabel)
+
+            _marquee.Location = New Point((contentPanel.Width - _marquee.Width) \ 2, 174)
+            contentPanel.Controls.Add(_marquee)
+
+            _stageLabel.Text = "马上就好，请不要关闭此界面"
+            _stageLabel.Location = New Point(0, 212)
+            _stageLabel.Size = New Size(contentPanel.Width, 24)
+            _stageLabel.TextAlign = ContentAlignment.MiddleCenter
+            _stageLabel.Font = New Font("Microsoft YaHei UI", 9.0F, FontStyle.Regular)
+            _stageLabel.ForeColor = Color.FromArgb(100, 116, 139)
+            contentPanel.Controls.Add(_stageLabel)
+
+            Using path = CreateRoundedPath(New Rectangle(0, 0, Width, Height), 42)
+                Region = New Region(path)
+            End Using
+        End Sub
+
+        Public Sub UpdateStage(stageText As String)
+            If IsDisposed OrElse _stageLabel.IsDisposed OrElse String.IsNullOrWhiteSpace(stageText) Then Return
+
+            If InvokeRequired Then
+                BeginInvoke(CType(Sub() UpdateStage(stageText), MethodInvoker))
+                Return
+            End If
+
+            _stageLabel.Text = stageText
+            _stageLabel.Refresh()
+        End Sub
+
+        Protected Overrides Sub OnShown(e As EventArgs)
+            MyBase.OnShown(e)
+            _spinner.Start()
+            _marquee.Start()
+        End Sub
+
+        Protected Overrides Sub OnFormClosed(e As FormClosedEventArgs)
+            _spinner.Stop()
+            _marquee.Stop()
+            MyBase.OnFormClosed(e)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim borderRect = New Rectangle(2, 2, Width - 5, Height - 5)
+            Using path = CreateRoundedPath(borderRect, 42)
+                Using pen As New Pen(Color.FromArgb(147, 158, 154), 5.0F)
+                    g.DrawPath(pen, path)
+                End Using
+            End Using
+        End Sub
+    End Class
+
+    Private Shared Function CreateRoundedPath(rect As Rectangle, radius As Integer) As GraphicsPath
+        Dim path As New GraphicsPath()
+        If rect.Width <= 0 OrElse rect.Height <= 0 Then
+            path.AddRectangle(rect)
+            Return path
+        End If
+
+        Dim diameter = Math.Max(1, Math.Min(radius * 2, Math.Min(rect.Width, rect.Height)))
+        Dim arc As New Rectangle(rect.Location, New Size(diameter, diameter))
+        path.AddArc(arc, 180, 90)
+        arc.X = rect.Right - diameter
+        path.AddArc(arc, 270, 90)
+        arc.Y = rect.Bottom - diameter
+        path.AddArc(arc, 0, 90)
+        arc.X = rect.Left
+        path.AddArc(arc, 90, 90)
+        path.CloseFigure()
+        Return path
+    End Function
+
     Private Async Function GenerateAndImportPptxAsync() As Task
         Dim markdown = PrepareEditedMarkdownForDocmee(GetEditedMarkdown())
         If String.IsNullOrWhiteSpace(markdown) Then
@@ -3299,25 +3633,32 @@ Public Class ThemePptTaskPane
         _finishOutlineEditButton.Enabled = False
         _refreshTemplatesButton.Enabled = False
         _selectTemplateButton.Enabled = False
-        ShowOutlineOutput()
         ClearGeneratedPptState()
+        _suppressTaskPaneOutput = True
+        Dim progressForm As PptGenerationProgressForm = Nothing
 
         Try
+            progressForm = New PptGenerationProgressForm()
+            progressForm.Show()
+            progressForm.Refresh()
+            Application.DoEvents()
+
             _outlineMarkdown = markdown
             _templateConfirmedForCurrentOutline = True
             _confirmedTemplateId = selectedTemplate.Id
 
             SetStatus("正在创建模板生成任务...")
-            AppendTaskPaneLine("使用模板ID: " & selectedTemplate.Id)
+            AppendThemePptLog("Generate PPT with templateId=" & selectedTemplate.Id)
+            progressForm.UpdateStage("正在准备生成任务，请稍候")
             Dim pptTaskId = Await _client.CreateMarkdownTaskAsync(markdown)
-            AppendTaskPaneLine("生成任务ID: " & pptTaskId)
+            AppendThemePptLog("Generate PPT taskId=" & pptTaskId)
 
             SetStatus("正在按所选模板生成 PPTX...")
+            progressForm.UpdateStage("PPT正在生成中，请不要关闭")
             Dim pptInfo = Await _client.GeneratePptxAsync(pptTaskId, selectedTemplate.Id, markdown)
-            AppendTaskPaneLine("PPT ID: " & pptInfo.Id)
-            AppendTaskPaneLine("返回模板ID: " & pptInfo.TemplateId)
+            AppendThemePptLog("Generated PPT id=" & pptInfo.Id & ", templateId=" & pptInfo.TemplateId)
             If Not String.IsNullOrWhiteSpace(pptInfo.CoverUrl) Then
-                AppendTaskPaneLine("PPT 封面预览: " & pptInfo.CoverUrl)
+                AppendThemePptLog("Generated PPT coverUrl=" & pptInfo.CoverUrl)
             End If
 
             If Not String.Equals(pptInfo.TemplateId, selectedTemplate.Id, StringComparison.Ordinal) Then
@@ -3327,30 +3668,54 @@ Public Class ThemePptTaskPane
             SaveDocmeePptxIdToCurrentPresentation(_lastGeneratedPptId)
 
             SetStatus("正在获取 PPTX 下载地址...")
+            progressForm.UpdateStage("正在整理 PPT 文件，请稍候")
             Dim fileUrl = Await _client.DownloadPptxAsync(pptInfo.Id, True)
-            AppendTaskPaneLine("PPTX 下载地址: " & fileUrl)
+            AppendThemePptLog("Generated PPT downloadUrl=" & fileUrl)
 
             SetStatus("正在下载 PPTX...")
+            progressForm.UpdateStage("正在下载 PPT，请不要关闭")
             Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_{pptInfo.Id}.pptx")
-            AppendTaskPaneLine("本地保存路径: " & localPath)
+            AppendThemePptLog("Generated PPT localPath=" & localPath)
             Await _client.DownloadPptxFileAsync(fileUrl, localPath)
 
             SetStatus("正在导入当前演示文稿...")
+            progressForm.UpdateStage("正在导入演示文稿，马上就好")
             Dim importedCount = ImportPptxIntoPresentation(localPath)
             CaptureImportedSlideRange(importedCount)
-            AppendTaskPaneLine("已导入页数: " & importedCount.ToString())
+            AppendThemePptLog("Generated PPT importedCount=" & importedCount.ToString())
             SetStatus($"已生成并导入当前演示文稿，共 {importedCount} 页。")
+            CloseGenerationProgressForm(progressForm)
+            progressForm = Nothing
             CompleteImportAndHidePane()
         Catch ex As Exception
             SetStatus("生成或导入失败。")
-            AppendTaskPaneLine("生成并导入失败: " & ex.Message)
+            AppendThemePptLog("Generate and import PPT failed: " & ex.ToString())
             ClearGeneratedPptState()
+            CloseGenerationProgressForm(progressForm)
+            progressForm = Nothing
             MessageBox.Show("生成并导入 PPT 失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
+            _suppressTaskPaneOutput = False
+            CloseGenerationProgressForm(progressForm)
             _generateButton.Enabled = True
             RefreshActionButtons()
         End Try
     End Function
+
+    Private Sub CloseGenerationProgressForm(progressForm As PptGenerationProgressForm)
+        If progressForm Is Nothing OrElse progressForm.IsDisposed Then Return
+
+        Try
+            If progressForm.InvokeRequired Then
+                progressForm.BeginInvoke(CType(Sub() CloseGenerationProgressForm(progressForm), MethodInvoker))
+                Return
+            End If
+
+            progressForm.Close()
+            progressForm.Dispose()
+        Catch
+        End Try
+    End Sub
 
     Private Sub CompleteImportAndHidePane()
         If Not IsOnPaneUiThread() Then
@@ -3442,6 +3807,11 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub AppendTaskPaneLine(text As String)
+        If _suppressTaskPaneOutput Then
+            AppendThemePptLog("Task pane output suppressed: " & If(text, ""))
+            Return
+        End If
+
         If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return
         If _outputBox.InvokeRequired Then
             BeginInvokeIfAlive(CType(Sub() AppendTaskPaneLine(text), MethodInvoker))
