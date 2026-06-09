@@ -13,6 +13,7 @@ Public Class DocmeeTemplateInfo
     Public Property Name As String
     Public Property Category As String
     Public Property Style As String
+    Public Property ThemeColor As String
     Public Property CoverUrl As String
 
     Public Overrides Function ToString() As String
@@ -376,15 +377,20 @@ Public Class DocmeePptClient
         Return normalized
     End Function
 
-    Public Async Function ListTemplatesAsync(Optional page As Integer = 1, Optional size As Integer = 10, Optional cancellationToken As Threading.CancellationToken = Nothing) As Task(Of List(Of DocmeeTemplateInfo))
+    Public Async Function ListTemplatesAsync(Optional page As Integer = 1,
+                                             Optional size As Integer = 10,
+                                             Optional cancellationToken As Threading.CancellationToken = Nothing,
+                                             Optional category As String = "",
+                                             Optional style As String = "",
+                                             Optional themeColor As String = "") As Task(Of List(Of DocmeeTemplateInfo))
         Dim payload As New JObject From {
             {"page", Math.Max(page, 1)},
             {"size", Math.Max(size, 1)},
             {"filters", New JObject From {
                 {"type", 1},
-                {"category", JValue.CreateNull()},
-                {"style", JValue.CreateNull()},
-                {"themeColor", JValue.CreateNull()}
+                {"category", BuildTemplateFilterToken(category)},
+                {"style", BuildTemplateFilterToken(style)},
+                {"themeColor", BuildTemplateFilterToken(themeColor)}
             }}
         }
 
@@ -414,6 +420,7 @@ Public Class DocmeePptClient
                             .Name = FirstNonEmpty(templateObj, "name", "subject"),
                             .Category = TryGetString(templateObj("category")),
                             .Style = TryGetString(templateObj("style")),
+                            .ThemeColor = TryGetString(templateObj("themeColor")),
                             .CoverUrl = TryGetString(templateObj("coverUrl"))
                         })
                     Next
@@ -422,6 +429,11 @@ Public Class DocmeePptClient
                 End Using
             End Using
         End Using
+    End Function
+
+    Private Shared Function BuildTemplateFilterToken(value As String) As JToken
+        If String.IsNullOrWhiteSpace(value) Then Return JValue.CreateNull()
+        Return New JValue(value.Trim())
     End Function
 
     Public Async Function DownloadTemplateCoverAsync(coverUrl As String, Optional cancellationToken As Threading.CancellationToken = Nothing) As Task(Of Byte())

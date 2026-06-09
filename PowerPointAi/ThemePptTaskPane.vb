@@ -56,6 +56,10 @@ Public Class ThemePptTaskPane
     Private _templateCoverFailureCount As Integer
     Private _templatePage As Integer = 1
     Private _templateHasNextPage As Boolean
+    Private _templateFilterCategory As String = ""
+    Private _templateFilterStyle As String = ""
+    Private _templateFilterThemeColor As String = ""
+    Private _suppressTemplateFilterEvents As Boolean
     Private _isOutlineEditCompleted As Boolean
     Private _templateConfirmedForCurrentOutline As Boolean
     Private _confirmedTemplateId As String
@@ -105,6 +109,14 @@ Public Class ThemePptTaskPane
     Private ReadOnly _outlinePreviewWebView As New WebView2()
     Private ReadOnly _outlinePreviewDebounceTimer As New System.Windows.Forms.Timer()
     Private ReadOnly _templateGalleryPanel As New TableLayoutPanel()
+    Private ReadOnly _templateFilterPanel As New FlowLayoutPanel()
+    Private ReadOnly _templateCategoryFilterCombo As New ComboBox()
+    Private ReadOnly _templateStyleFilterCombo As New ComboBox()
+    Private ReadOnly _templateThemeColorFilterCombo As New ComboBox()
+    Private ReadOnly _templateFilterResetButton As New Button()
+    Private ReadOnly _templateStyleFilterView As New TemplateFilterPillButton()
+    Private ReadOnly _templateCategoryFilterView As New TemplateFilterPillButton()
+    Private ReadOnly _templateThemeColorFilterView As New TemplateColorFilterButton()
     Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
     Private ReadOnly _templatePagerPanel As New FlowLayoutPanel()
     Private ReadOnly _templatePrevPageButton As New Button()
@@ -147,9 +159,20 @@ Public Class ThemePptTaskPane
         _outlineStreamFlushTimer.Interval = OutlineStreamFlushIntervalMs
         AddHandler _outlineStreamFlushTimer.Tick, AddressOf OutlineStreamFlushTimer_Tick
 
+        Dim rootLayout As New TableLayoutPanel()
+        rootLayout.Dock = DockStyle.Fill
+        rootLayout.ColumnCount = 1
+        rootLayout.RowCount = 2
+        rootLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 48.0F))
+        rootLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        rootLayout.Margin = New Padding(0)
+        rootLayout.Padding = New Padding(0)
+        rootLayout.BackColor = OfficeAIStyleHelper.BgPage
+
         ' 顶部品牌色标题栏
         Dim headerPanel As New Panel()
-        headerPanel.Dock = DockStyle.Top
+        headerPanel.Dock = DockStyle.Fill
         headerPanel.Height = 48
         headerPanel.BackColor = OfficeAIStyleHelper.BrandPrimary
         headerPanel.Padding = New Padding(OfficeAIStyleHelper.SpacingLg, 0, OfficeAIStyleHelper.SpacingLg, 0)
@@ -169,8 +192,6 @@ Public Class ThemePptTaskPane
         headerVersion.AutoSize = True
         headerVersion.Location = New Point(headerTitle.Right + 8, 18)
         headerPanel.Controls.Add(headerVersion)
-
-        Me.Controls.Add(headerPanel)
 
         ' 主体滚动区域
         Dim scrollPanel As New Panel()
@@ -507,12 +528,40 @@ Public Class ThemePptTaskPane
 
         _templateGalleryPanel.Dock = DockStyle.Fill
         _templateGalleryPanel.ColumnCount = 1
-        _templateGalleryPanel.RowCount = 2
+        _templateGalleryPanel.RowCount = 3
         _templateGalleryPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+        _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 58.0F))
         _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
         _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 38.0F))
         _templateGalleryPanel.BackColor = OfficeAIStyleHelper.BgSurface
         _templateGalleryPanel.Visible = False
+
+        _templateFilterPanel.Dock = DockStyle.Fill
+        _templateFilterPanel.FlowDirection = FlowDirection.LeftToRight
+        _templateFilterPanel.WrapContents = False
+        _templateFilterPanel.Padding = New Padding(8, 10, 8, 4)
+        _templateFilterPanel.Margin = New Padding(0)
+        _templateFilterPanel.BackColor = OfficeAIStyleHelper.BgSurface
+        AddHandler _templateFilterPanel.Resize, AddressOf TemplateFilterPanel_Resize
+
+        ConfigureTemplateFilterCombo(_templateCategoryFilterCombo)
+        ConfigureTemplateFilterCombo(_templateStyleFilterCombo)
+        ConfigureTemplateFilterCombo(_templateThemeColorFilterCombo)
+        InitializeTemplateFilterOptions()
+
+        ConfigureTemplateFilterView(_templateStyleFilterView, "风格", 164)
+        ConfigureTemplateFilterView(_templateCategoryFilterView, "类别", 164)
+        _templateThemeColorFilterView.Width = 34
+        _templateThemeColorFilterView.Height = 34
+        _templateThemeColorFilterView.Margin = New Padding(4, 0, 0, 8)
+        AddHandler _templateStyleFilterView.Click, Sub(sender, args) ShowTemplateFilterMenu(_templateStyleFilterCombo, _templateStyleFilterView)
+        AddHandler _templateCategoryFilterView.Click, Sub(sender, args) ShowTemplateFilterMenu(_templateCategoryFilterCombo, _templateCategoryFilterView)
+        AddHandler _templateThemeColorFilterView.Click, Sub(sender, args) ShowTemplateFilterMenu(_templateThemeColorFilterCombo, _templateThemeColorFilterView)
+
+        _templateFilterPanel.Controls.Add(_templateStyleFilterView)
+        _templateFilterPanel.Controls.Add(_templateCategoryFilterView)
+        _templateFilterPanel.Controls.Add(_templateThemeColorFilterView)
+        LayoutTemplateFilterControls()
 
         _templateCardPanel.Dock = DockStyle.Fill
         _templateCardPanel.AutoScroll = True
@@ -572,8 +621,9 @@ Public Class ThemePptTaskPane
         _templatePagerPanel.Controls.Add(_templateNextPageButton)
         _templatePagerPanel.Controls.Add(_templatePageLabel)
         _templatePagerPanel.Controls.Add(_templatePrevPageButton)
-        _templateGalleryPanel.Controls.Add(_templateCardPanel, 0, 0)
-        _templateGalleryPanel.Controls.Add(_templatePagerPanel, 0, 1)
+        _templateGalleryPanel.Controls.Add(_templateFilterPanel, 0, 0)
+        _templateGalleryPanel.Controls.Add(_templateCardPanel, 0, 1)
+        _templateGalleryPanel.Controls.Add(_templatePagerPanel, 0, 2)
 
         _templateListBox.Dock = DockStyle.Fill
         _templateListBox.DrawMode = DrawMode.OwnerDrawFixed
@@ -621,7 +671,9 @@ Public Class ThemePptTaskPane
         layout.Controls.Add(hintLabel, 0, 8)
 
         scrollPanel.Controls.Add(layout)
-        Me.Controls.Add(scrollPanel)
+        rootLayout.Controls.Add(headerPanel, 0, 0)
+        rootLayout.Controls.Add(scrollPanel, 0, 1)
+        Me.Controls.Add(rootLayout)
 
         ' 初始化隐藏的 ComboBox（作为模式数据源）
         _generationModeCombo.Visible = False
@@ -693,6 +745,246 @@ Public Class ThemePptTaskPane
     Private Sub SetTemplateSectionVisible(visible As Boolean)
         _templateSectionLabel.Visible = visible
         _templateSectionPanel.Visible = visible
+    End Sub
+
+    Private Sub ConfigureTemplateFilterCombo(combo As ComboBox)
+        combo.DropDownStyle = ComboBoxStyle.DropDownList
+        combo.Visible = False
+        AddHandler combo.SelectedIndexChanged, AddressOf TemplateFilterCombo_SelectedIndexChanged
+    End Sub
+
+    Private Sub ConfigureTemplateFilterView(view As TemplateFilterPillButton, prefixText As String, width As Integer)
+        view.PrefixText = prefixText
+        view.ValueText = "全部"
+        view.Width = width
+        view.Height = 34
+        view.Margin = New Padding(0, 0, 10, 8)
+    End Sub
+
+    Private Sub TemplateFilterPanel_Resize(sender As Object, e As EventArgs)
+        LayoutTemplateFilterControls()
+    End Sub
+
+    Private Sub LayoutTemplateFilterControls()
+        If _templateFilterPanel Is Nothing Then Return
+
+        Dim innerWidth = Math.Max(260,
+                                  _templateFilterPanel.ClientSize.Width -
+                                  _templateFilterPanel.Padding.Horizontal)
+        Dim gap = 10
+        Dim colorWidth = 34
+        Dim availableForPills = innerWidth - colorWidth - gap * 2
+        Dim pillWidth = CInt(Math.Floor(availableForPills / 2.0R))
+        pillWidth = Math.Max(112, Math.Min(188, pillWidth))
+
+        _templateStyleFilterView.Width = pillWidth
+        _templateCategoryFilterView.Width = pillWidth
+        _templateStyleFilterView.Height = 34
+        _templateCategoryFilterView.Height = 34
+        _templateThemeColorFilterView.Width = colorWidth
+        _templateThemeColorFilterView.Height = 34
+        _templateStyleFilterView.Margin = New Padding(0, 0, gap, 8)
+        _templateCategoryFilterView.Margin = New Padding(0, 0, gap, 8)
+        _templateThemeColorFilterView.Margin = New Padding(0, 0, 0, 8)
+    End Sub
+
+    Private Sub InitializeTemplateFilterOptions()
+        _suppressTemplateFilterEvents = True
+        Try
+            _templateCategoryFilterCombo.Items.Clear()
+            _templateStyleFilterCombo.Items.Clear()
+            _templateThemeColorFilterCombo.Items.Clear()
+
+            AddTemplateFilterOption(_templateCategoryFilterCombo, "全部", "")
+            For Each category In New String() {"办公报告", "个人简历", "教育培训", "现代商务", "政务办公"}
+                AddTemplateFilterOption(_templateCategoryFilterCombo, category, category)
+            Next
+
+            AddTemplateFilterOption(_templateStyleFilterCombo, "全部", "")
+            For Each styleName In New String() {"商务科技", "创意趣味", "扁平简约", "卡通手绘", "创意时尚"}
+                AddTemplateFilterOption(_templateStyleFilterCombo, styleName, styleName)
+            Next
+
+            AddTemplateFilterOption(_templateThemeColorFilterCombo, "全部颜色", "")
+            AddTemplateFilterOption(_templateThemeColorFilterCombo, "黑色", "#000000")
+            AddTemplateFilterOption(_templateThemeColorFilterCombo, "白色", "#FFFFFF")
+            AddTemplateFilterOption(_templateThemeColorFilterCombo, "橙色", "#FA920A")
+            AddTemplateFilterOption(_templateThemeColorFilterCombo, "蓝色", "#589AFD")
+            AddTemplateFilterOption(_templateThemeColorFilterCombo, "红色", "#E05757")
+
+            _templateCategoryFilterCombo.SelectedIndex = 0
+            _templateStyleFilterCombo.SelectedIndex = 0
+            _templateThemeColorFilterCombo.SelectedIndex = 0
+            RefreshTemplateFilterVisuals()
+        Finally
+            _suppressTemplateFilterEvents = False
+        End Try
+    End Sub
+
+    Private Sub ShowTemplateFilterMenu(sourceCombo As ComboBox, anchor As Control)
+        If sourceCombo Is Nothing OrElse anchor Is Nothing OrElse _isTemplateLoading Then Return
+
+        Dim menu As New ContextMenuStrip()
+        menu.ShowImageMargin = True
+        menu.Font = OfficeAIStyleHelper.FontUi
+
+        For index As Integer = 0 To sourceCombo.Items.Count - 1
+            Dim optionItem = TryCast(sourceCombo.Items(index), TemplateFilterOption)
+            If optionItem Is Nothing Then Continue For
+
+            Dim item As New ToolStripMenuItem(optionItem.Text)
+            item.Tag = index
+            item.Checked = index = sourceCombo.SelectedIndex
+            item.CheckOnClick = False
+
+            If sourceCombo Is _templateThemeColorFilterCombo AndAlso
+               Not String.IsNullOrWhiteSpace(optionItem.Value) Then
+                item.Image = CreateTemplateColorMenuImage(optionItem.Value)
+            End If
+
+            AddHandler item.Click,
+                Sub(sender, args)
+                    Dim menuItem = TryCast(sender, ToolStripMenuItem)
+                    If menuItem Is Nothing Then Return
+                    Dim selectedIndex = CInt(menuItem.Tag)
+                    If selectedIndex >= 0 AndAlso selectedIndex < sourceCombo.Items.Count Then
+                        sourceCombo.SelectedIndex = selectedIndex
+                    End If
+                End Sub
+
+            menu.Items.Add(item)
+        Next
+
+        menu.Show(anchor, New Point(0, anchor.Height + 2))
+    End Sub
+
+    Private Function CreateTemplateColorMenuImage(colorValue As String) As Bitmap
+        Dim bitmap As New Bitmap(18, 18)
+        Using g = Graphics.FromImage(bitmap)
+            g.SmoothingMode = SmoothingMode.AntiAlias
+            Dim rect = New Rectangle(2, 2, 14, 14)
+            Using path = CreateRoundedPath(rect, 4)
+                Using brush = CreateTemplateColorBrush(colorValue, rect)
+                    g.FillPath(brush, path)
+                End Using
+                Using pen As New Pen(Color.FromArgb(226, 232, 240), 1.0F)
+                    g.DrawPath(pen, path)
+                End Using
+            End Using
+        End Using
+        Return bitmap
+    End Function
+
+    Private Sub AddTemplateFilterOption(combo As ComboBox, text As String, value As String)
+        Dim normalizedValue = If(value, "").Trim()
+        For Each item In combo.Items
+            Dim optionItem = TryCast(item, TemplateFilterOption)
+            If optionItem IsNot Nothing AndAlso
+               String.Equals(optionItem.Value, normalizedValue, StringComparison.OrdinalIgnoreCase) Then
+                Return
+            End If
+        Next
+
+        combo.Items.Add(New TemplateFilterOption With {
+            .Text = If(String.IsNullOrWhiteSpace(text), normalizedValue, text),
+            .Value = normalizedValue
+        })
+    End Sub
+
+    Private Sub SelectTemplateFilterValue(combo As ComboBox, value As String)
+        Dim normalizedValue = If(value, "").Trim()
+        For index As Integer = 0 To combo.Items.Count - 1
+            Dim optionItem = TryCast(combo.Items(index), TemplateFilterOption)
+            If optionItem IsNot Nothing AndAlso
+               String.Equals(optionItem.Value, normalizedValue, StringComparison.OrdinalIgnoreCase) Then
+                combo.SelectedIndex = index
+                Return
+            End If
+        Next
+
+        If combo.Items.Count > 0 Then combo.SelectedIndex = 0
+    End Sub
+
+    Private Function GetTemplateFilterValue(combo As ComboBox) As String
+        Dim optionItem = TryCast(combo.SelectedItem, TemplateFilterOption)
+        If optionItem Is Nothing Then Return ""
+        Return If(optionItem.Value, "").Trim()
+    End Function
+
+    Private Sub UpdateTemplateFilterStateFromControls()
+        _templateFilterCategory = GetTemplateFilterValue(_templateCategoryFilterCombo)
+        _templateFilterStyle = GetTemplateFilterValue(_templateStyleFilterCombo)
+        _templateFilterThemeColor = GetTemplateFilterValue(_templateThemeColorFilterCombo)
+        RefreshTemplateFilterControls()
+    End Sub
+
+    Private Function HasActiveTemplateFilters() As Boolean
+        Return Not String.IsNullOrWhiteSpace(_templateFilterCategory) OrElse
+               Not String.IsNullOrWhiteSpace(_templateFilterStyle) OrElse
+               Not String.IsNullOrWhiteSpace(_templateFilterThemeColor)
+    End Function
+
+    Private Function BuildTemplateFilterStatusText() As String
+        Dim parts As New List(Of String)()
+        If Not String.IsNullOrWhiteSpace(_templateFilterCategory) Then parts.Add("分类:" & _templateFilterCategory)
+        If Not String.IsNullOrWhiteSpace(_templateFilterStyle) Then parts.Add("风格:" & _templateFilterStyle)
+        If Not String.IsNullOrWhiteSpace(_templateFilterThemeColor) Then parts.Add("颜色:" & FormatTemplateColorText(_templateFilterThemeColor))
+        If parts.Count = 0 Then Return ""
+        Return "（" & String.Join("，", parts) & "）"
+    End Function
+
+    Private Sub RefreshTemplateFilterControls()
+        Dim enabled = Not _isTemplateLoading
+        _templateCategoryFilterCombo.Enabled = enabled
+        _templateStyleFilterCombo.Enabled = enabled
+        _templateThemeColorFilterCombo.Enabled = enabled
+        _templateFilterResetButton.Enabled = enabled AndAlso HasActiveTemplateFilters()
+        _templateCategoryFilterView.Enabled = enabled
+        _templateStyleFilterView.Enabled = enabled
+        _templateThemeColorFilterView.Enabled = enabled
+        RefreshTemplateFilterVisuals()
+    End Sub
+
+    Private Sub RefreshTemplateFilterVisuals()
+        _templateStyleFilterView.ValueText = GetTemplateFilterDisplayText(_templateStyleFilterCombo, "全部")
+        _templateCategoryFilterView.ValueText = GetTemplateFilterDisplayText(_templateCategoryFilterCombo, "全部")
+        _templateThemeColorFilterView.SelectedColorValue = _templateFilterThemeColor
+        _templateStyleFilterView.Invalidate()
+        _templateCategoryFilterView.Invalidate()
+        _templateThemeColorFilterView.Invalidate()
+    End Sub
+
+    Private Function GetTemplateFilterDisplayText(combo As ComboBox, defaultText As String) As String
+        Dim optionItem = TryCast(combo.SelectedItem, TemplateFilterOption)
+        If optionItem Is Nothing OrElse String.IsNullOrWhiteSpace(optionItem.Text) Then Return defaultText
+        Return optionItem.Text
+    End Function
+
+    Private Async Sub TemplateFilterCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
+        If _suppressTemplateFilterEvents OrElse _isTemplateLoading Then Return
+
+        UpdateTemplateFilterStateFromControls()
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        Await LoadTemplatesAsync(1)
+    End Sub
+
+    Private Async Sub TemplateFilterResetButton_Click(sender As Object, e As EventArgs)
+        If _isTemplateLoading Then Return
+
+        _suppressTemplateFilterEvents = True
+        Try
+            SelectTemplateFilterValue(_templateCategoryFilterCombo, "")
+            SelectTemplateFilterValue(_templateStyleFilterCombo, "")
+            SelectTemplateFilterValue(_templateThemeColorFilterCombo, "")
+        Finally
+            _suppressTemplateFilterEvents = False
+        End Try
+
+        UpdateTemplateFilterStateFromControls()
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        Await LoadTemplatesAsync(1)
     End Sub
 
     Private Async Sub ThemePptTaskPane_Load(sender As Object, e As EventArgs)
@@ -957,6 +1249,8 @@ Public Class ThemePptTaskPane
         _templateGalleryPanel.Visible = True
         _templateBackStepButton.Enabled = True
         _templateGalleryPanel.BringToFront()
+        LayoutTemplateFilterControls()
+        _templateFilterPanel.PerformLayout()
         RefreshTemplatePager()
         ResizeTemplateCards()
         AppendThemePptLog("ShowTemplateGallery in task pane. count=" &
@@ -1197,7 +1491,7 @@ Public Class ThemePptTaskPane
         If _lastTemplateLoadUsedFallback Then
             _templatePageLabel.Text = "内置模板"
         Else
-            _templatePageLabel.Text = "第 " & Math.Max(1, _templatePage).ToString() & " 页"
+            _templatePageLabel.Text = "第 " & Math.Max(1, _templatePage).ToString() & " 页" & If(HasActiveTemplateFilters(), " 筛选", "")
         End If
 
         _templatePrevPageButton.Enabled = Not _isTemplateLoading AndAlso
@@ -2212,7 +2506,7 @@ Public Class ThemePptTaskPane
         _generateButton.Enabled = False
         _finishOutlineEditButton.Enabled = False
         ShowOutlineOutput()
-        _outputBox.Clear()
+        ShowOutlineGenerationPlaceholder("正在生成...")
         _outlineStreamBuffer.Clear()
         _outline = Nothing
         _outlineMarkdown = ""
@@ -2238,7 +2532,7 @@ Public Class ThemePptTaskPane
                     _taskId = Await _client.CreateTaskAsync(requestContent)
 
                     SetStatus("正在创作 PPT 内容...")
-                    _outputBox.Clear()
+                    ShowOutlineGenerationPlaceholder("正在生成...")
                     ResetOutlineStreamFlushState()
                     _outlineMarkdown = Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)
             End Select
@@ -2276,11 +2570,12 @@ Public Class ThemePptTaskPane
         End If
 
         SetStatus("正在上传文档创建 Docmee 任务...")
+        ShowOutlineGenerationPlaceholder("正在上传文档...")
         AppendTaskPaneLine("文档路径: " & documentPath)
         _taskId = Await _client.CreateFileTaskAsync(documentPath)
 
         SetStatus("正在根据文档生成 PPT Markdown 大纲...")
-        _outputBox.Clear()
+        ShowOutlineGenerationPlaceholder("正在生成...")
         ResetOutlineStreamFlushState()
         Return Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText, GetDocumentPrompt())
     End Function
@@ -2375,6 +2670,20 @@ Public Class ThemePptTaskPane
         If _pendingOutlineStreamFlush Then FlushOutlineStreamOutput()
     End Sub
 
+    Private Sub ShowOutlineGenerationPlaceholder(message As String)
+        If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return
+
+        If _outputBox.InvokeRequired Then
+            BeginInvokeIfAlive(CType(Sub() ShowOutlineGenerationPlaceholder(message), MethodInvoker))
+            Return
+        End If
+
+        _outputBox.Text = If(String.IsNullOrWhiteSpace(message), "正在生成...", message.Trim()) &
+                          vbCrLf & vbCrLf &
+                          "内容会在这里实时输出，请稍候。"
+        ScrollOutputBoxToBottom()
+    End Sub
+
     Private Sub FlushOutlineStreamOutput()
         If Me.IsDisposed OrElse _outputBox.IsDisposed Then Return
 
@@ -2394,10 +2703,24 @@ Public Class ThemePptTaskPane
             SendMessage(_outputBox.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero)
             _outputBox.Text = formattedText
             _outputBox.SelectionStart = _outputBox.TextLength
-            _outputBox.ScrollToCaret()
+            _outputBox.SelectionLength = 0
         Finally
             SendMessage(_outputBox.Handle, WM_SETREDRAW, New IntPtr(1), IntPtr.Zero)
+            ScrollOutputBoxToBottom()
             _outputBox.Invalidate()
+        End Try
+    End Sub
+
+    Private Sub ScrollOutputBoxToBottom()
+        If Me.IsDisposed OrElse _outputBox.IsDisposed OrElse Not _outputBox.IsHandleCreated Then Return
+
+        Try
+            _outputBox.SelectionStart = _outputBox.TextLength
+            _outputBox.SelectionLength = 0
+            _outputBox.ScrollToCaret()
+            SendMessage(_outputBox.Handle, EM_LINESCROLL, IntPtr.Zero, New IntPtr(Math.Max(1, _outputBox.Lines.Length)))
+        Catch ex As Exception
+            AppendThemePptLog("Scroll output to bottom failed: " & ex.Message)
         End Try
     End Sub
 
@@ -2414,6 +2737,7 @@ Public Class ThemePptTaskPane
         AppendThemePptLog("LoadTemplatesAsync start. page=" & requestedPage.ToString())
         _refreshTemplatesButton.Enabled = False
         _selectTemplateButton.Enabled = False
+        RefreshTemplateFilterControls()
         RefreshTemplatePager()
         CancelTemplateCoverLoad()
         CancelTemplateLoad()
@@ -2422,7 +2746,7 @@ Public Class ThemePptTaskPane
         Dim cancellationToken = loadCts.Token
 
         Try
-            SetStatus("正在加载 Docmee 模板，第 " & requestedPage.ToString() & " 页...")
+            SetStatus("正在加载 Docmee 模板，第 " & requestedPage.ToString() & " 页" & BuildTemplateFilterStatusText() & "...")
             Await Task.Yield()
             Dim templates = Await LoadTemplatesInBackgroundAsync(requestedPage, cancellationToken)
             cancellationToken.ThrowIfCancellationRequested()
@@ -2433,9 +2757,13 @@ Public Class ThemePptTaskPane
                                                   PopulateTemplates(templates)
 
                                                   If _templateCombo.Items.Count = 0 Then
-                                                      SetStatus("未获取到可用模板。")
+                                                      If HasActiveTemplateFilters() Then
+                                                          SetStatus("没有找到符合当前筛选条件的模板，可重置筛选后再试。")
+                                                      Else
+                                                          SetStatus("未获取到可用模板。")
+                                                      End If
                                                   Else
-                                                      SetStatus($"已加载第 {_templatePage} 页，共 {_templateCombo.Items.Count} 个模板。选择模板后点击下一步。")
+                                                      SetStatus($"已加载第 {_templatePage} 页，共 {_templateCombo.Items.Count} 个模板{BuildTemplateFilterStatusText()}。选择模板后点击下一步。")
                                                       ShowTemplateGallery()
                                                   End If
                                               End Sub, MethodInvoker))
@@ -2445,7 +2773,7 @@ Public Class ThemePptTaskPane
             AppendThemePptLog("LoadTemplatesAsync exception: " & ex.ToString())
             AppendTemplateLoadFailure(ex)
 
-            Dim fallbackTemplates = DocmeePptClient.GetFallbackTemplates()
+            Dim fallbackTemplates = ApplyLocalTemplateFilters(DocmeePptClient.GetFallbackTemplates())
             If fallbackTemplates.Count > 0 Then
                 RunOnPaneUiThreadAsync(CType(Sub()
                                                 _lastTemplateLoadUsedFallback = True
@@ -2470,14 +2798,23 @@ Public Class ThemePptTaskPane
                 _templateLoadCts = Nothing
             End If
             RefreshActionButtons()
+            RefreshTemplateFilterControls()
             RefreshTemplatePager()
         End Try
     End Function
 
     Private Function LoadTemplatesInBackgroundAsync(page As Integer, cancellationToken As CancellationToken) As Task(Of List(Of DocmeeTemplateInfo))
+        Dim categoryFilter = _templateFilterCategory
+        Dim styleFilter = _templateFilterStyle
+        Dim themeColorFilter = _templateFilterThemeColor
         Return Task.Run(Function() As List(Of DocmeeTemplateInfo)
                             cancellationToken.ThrowIfCancellationRequested()
-                            Return _client.ListTemplatesAsync(Math.Max(1, page), TemplatePageSize, cancellationToken).GetAwaiter().GetResult()
+                            Return _client.ListTemplatesAsync(Math.Max(1, page),
+                                                              TemplatePageSize,
+                                                              cancellationToken,
+                                                              categoryFilter,
+                                                              styleFilter,
+                                                              themeColorFilter).GetAwaiter().GetResult()
                         End Function, cancellationToken)
     End Function
 
@@ -2497,18 +2834,25 @@ Public Class ThemePptTaskPane
         _templateCoverFilePaths.Clear()
         _templateCoverMessages.Clear()
 
+        Dim templateList As New List(Of DocmeeTemplateInfo)()
+        If templates IsNot Nothing Then
+            For Each template In templates
+                If template IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(template.Id) Then
+                    templateList.Add(template)
+                End If
+            Next
+        End If
+        UpdateTemplateFilterOptions(templateList)
+
         _templateCardPanel.SuspendLayout()
         Try
             ClearTemplateCardPanel()
 
-            If templates IsNot Nothing Then
-                For Each template In templates
-                    If template Is Nothing OrElse String.IsNullOrWhiteSpace(template.Id) Then Continue For
-                    _templateCombo.Items.Add(template)
-                    _templateListBox.Items.Add(template)
-                    _templateCardPanel.Controls.Add(CreateTemplateCard(template))
-                Next
-            End If
+            For Each template In templateList
+                _templateCombo.Items.Add(template)
+                _templateListBox.Items.Add(template)
+                _templateCardPanel.Controls.Add(CreateTemplateCard(template))
+            Next
         Finally
             _templateCardPanel.ResumeLayout(True)
         End Try
@@ -2527,6 +2871,96 @@ Public Class ThemePptTaskPane
         End If
         AppendThemePptLog("PopulateTemplates completed: count=" & _templateCombo.Items.Count.ToString() & ", generation=" & _templateCoverLoadGeneration.ToString())
     End Sub
+
+    Private Sub UpdateTemplateFilterOptions(templates As IEnumerable(Of DocmeeTemplateInfo))
+        _suppressTemplateFilterEvents = True
+        Try
+            If templates IsNot Nothing Then
+                For Each template In templates
+                    If template Is Nothing Then Continue For
+                    If Not String.IsNullOrWhiteSpace(template.Category) Then
+                        AddTemplateFilterOption(_templateCategoryFilterCombo, template.Category.Trim(), template.Category.Trim())
+                    End If
+                    If Not String.IsNullOrWhiteSpace(template.Style) Then
+                        AddTemplateFilterOption(_templateStyleFilterCombo, template.Style.Trim(), template.Style.Trim())
+                    End If
+                    If Not String.IsNullOrWhiteSpace(template.ThemeColor) Then
+                        AddTemplateFilterOption(_templateThemeColorFilterCombo,
+                                                FormatTemplateColorText(template.ThemeColor),
+                                                template.ThemeColor.Trim())
+                    End If
+                Next
+            End If
+
+            SelectTemplateFilterValue(_templateCategoryFilterCombo, _templateFilterCategory)
+            SelectTemplateFilterValue(_templateStyleFilterCombo, _templateFilterStyle)
+            SelectTemplateFilterValue(_templateThemeColorFilterCombo, _templateFilterThemeColor)
+            RefreshTemplateFilterVisuals()
+        Finally
+            _suppressTemplateFilterEvents = False
+        End Try
+    End Sub
+
+    Private Function ApplyLocalTemplateFilters(templates As IEnumerable(Of DocmeeTemplateInfo)) As List(Of DocmeeTemplateInfo)
+        Dim filtered As New List(Of DocmeeTemplateInfo)()
+        If templates Is Nothing Then Return filtered
+
+        For Each template In templates
+            If template Is Nothing Then Continue For
+            If Not String.IsNullOrWhiteSpace(_templateFilterCategory) AndAlso
+               Not String.Equals(If(template.Category, "").Trim(), _templateFilterCategory, StringComparison.OrdinalIgnoreCase) Then
+                Continue For
+            End If
+            If Not String.IsNullOrWhiteSpace(_templateFilterStyle) AndAlso
+               Not String.Equals(If(template.Style, "").Trim(), _templateFilterStyle, StringComparison.OrdinalIgnoreCase) Then
+                Continue For
+            End If
+            If Not String.IsNullOrWhiteSpace(_templateFilterThemeColor) AndAlso
+               Not String.Equals(If(template.ThemeColor, "").Trim(), _templateFilterThemeColor, StringComparison.OrdinalIgnoreCase) Then
+                Continue For
+            End If
+            filtered.Add(template)
+        Next
+
+        Return filtered
+    End Function
+
+    Private Shared Function FormatTemplateColorText(colorValue As String) As String
+        Dim normalized = If(colorValue, "").Trim().ToUpperInvariant()
+        Select Case normalized
+            Case "#000000"
+                Return "黑色"
+            Case "#FFFFFF"
+                Return "白色"
+            Case "#FA920A"
+                Return "橙色"
+            Case "#589AFD"
+                Return "蓝色"
+            Case "#E05757"
+                Return "红色"
+            Case Else
+                Return If(String.IsNullOrWhiteSpace(colorValue), "", colorValue.Trim())
+        End Select
+    End Function
+
+    Private Shared Function CreateTemplateColorBrush(colorValue As String, rect As Rectangle) As Brush
+        Dim paintRect = If(rect.Width <= 0 OrElse rect.Height <= 0, New Rectangle(0, 0, 1, 1), rect)
+        If String.IsNullOrWhiteSpace(colorValue) Then
+            Return New LinearGradientBrush(paintRect,
+                                           Color.FromArgb(95, 65, 230),
+                                           Color.FromArgb(250, 146, 10),
+                                           LinearGradientMode.ForwardDiagonal)
+        End If
+
+        Try
+            Return New SolidBrush(ColorTranslator.FromHtml(colorValue.Trim()))
+        Catch
+            Return New LinearGradientBrush(paintRect,
+                                           Color.FromArgb(95, 65, 230),
+                                           Color.FromArgb(250, 146, 10),
+                                           LinearGradientMode.ForwardDiagonal)
+        End Try
+    End Function
 
     Private Sub ClearTemplateCardPanel()
         Do While _templateCardPanel.Controls.Count > 0
@@ -3375,6 +3809,128 @@ Public Class ThemePptTaskPane
             Dim panel = TryCast(card, Panel)
             If panel IsNot Nothing Then LayoutTemplateCard(panel)
         Next
+    End Sub
+
+    Private Class TemplateFilterOption
+        Public Property Text As String
+        Public Property Value As String
+
+        Public Overrides Function ToString() As String
+            Return If(String.IsNullOrWhiteSpace(Text), Value, Text)
+        End Function
+    End Class
+
+    Private Class TemplateFilterPillButton
+        Inherits Control
+
+        Public Property PrefixText As String = ""
+        Public Property ValueText As String = "全部"
+
+        Public Sub New()
+            DoubleBuffered = True
+            Cursor = Cursors.Hand
+            Font = OfficeAIStyleHelper.FontUi
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim bounds = New Rectangle(0, 0, Width - 1, Height - 1)
+            Using path = CreateRoundedPath(bounds, 8)
+                Using fill As New SolidBrush(If(Enabled, Color.White, Color.FromArgb(248, 250, 252))),
+                      border As New Pen(Color.FromArgb(226, 232, 240), 1.0F)
+                    g.FillPath(fill, path)
+                    g.DrawPath(border, path)
+                End Using
+            End Using
+
+            Dim prefix = If(PrefixText, "").Trim()
+            Dim value = If(String.IsNullOrWhiteSpace(ValueText), "全部", ValueText.Trim())
+            Dim prefixColor = If(Enabled, Color.FromArgb(148, 163, 184), Color.FromArgb(190, 198, 210))
+            Dim valueColor = If(Enabled, OfficeAIStyleHelper.TextPrimary, Color.FromArgb(148, 163, 184))
+            Dim textY = 0
+            Dim textHeight = Height
+            Dim left = 12
+
+            Using prefixFont As New Font(Font, FontStyle.Bold)
+                Dim prefixSize = TextRenderer.MeasureText(prefix, prefixFont, New Size(Width, Height), TextFormatFlags.NoPadding)
+                TextRenderer.DrawText(g,
+                                      prefix,
+                                      prefixFont,
+                                      New Rectangle(left, textY, Math.Min(prefixSize.Width + 2, Width - 48), textHeight),
+                                      prefixColor,
+                                      TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.NoPadding)
+                Dim valueLeft = left + prefixSize.Width + 8
+                Dim valueWidth = Math.Max(20, Width - valueLeft - 34)
+                TextRenderer.DrawText(g,
+                                      value,
+                                      Font,
+                                      New Rectangle(valueLeft, textY, valueWidth, textHeight),
+                                      valueColor,
+                                      TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis Or TextFormatFlags.NoPadding)
+            End Using
+
+            DrawTemplateFilterChevron(g, New Rectangle(Width - 28, 0, 18, Height), Enabled)
+        End Sub
+    End Class
+
+    Private Class TemplateColorFilterButton
+        Inherits Control
+
+        Public Property SelectedColorValue As String = ""
+
+        Public Sub New()
+            DoubleBuffered = True
+            Cursor = Cursors.Hand
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim squareSize = Math.Min(30, Math.Min(Width, Height) - 2)
+            Dim rect = New Rectangle((Width - squareSize) \ 2,
+                                     (Height - squareSize) \ 2,
+                                     squareSize,
+                                     squareSize)
+            Using path = CreateRoundedPath(rect, 8)
+                Using brush = CreateTemplateColorBrush(SelectedColorValue, rect)
+                    g.FillPath(brush, path)
+                End Using
+                Using pen As New Pen(Color.FromArgb(226, 232, 240), 1.0F)
+                    g.DrawPath(pen, path)
+                End Using
+            End Using
+
+            If Not Enabled Then
+                Using overlay As New SolidBrush(Color.FromArgb(120, Color.White))
+                    g.FillRectangle(overlay, rect)
+                End Using
+            End If
+        End Sub
+    End Class
+
+    Private Shared Sub DrawTemplateFilterChevron(graphics As Graphics, bounds As Rectangle, enabled As Boolean)
+        Dim centerX = bounds.Left + bounds.Width \ 2
+        Dim centerY = bounds.Top + bounds.Height \ 2 + 1
+        Dim chevronColor As Color = If(enabled, Color.FromArgb(203, 213, 225), Color.FromArgb(226, 232, 240))
+        Using pen As New Pen(chevronColor, 1.8F)
+            pen.StartCap = LineCap.Round
+            pen.EndCap = LineCap.Round
+            graphics.DrawLine(pen, centerX - 5, centerY - 3, centerX, centerY + 3)
+            graphics.DrawLine(pen, centerX, centerY + 3, centerX + 5, centerY - 3)
+        End Using
     End Sub
 
     Private Class PptGenerationSpinnerControl

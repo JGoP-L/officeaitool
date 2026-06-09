@@ -59,13 +59,16 @@ Public Module OfficeAIStyleHelper
         btn.UseVisualStyleBackColor = False
         AddHandler btn.MouseEnter, Sub(s, e)
                                        btn.BackColor = BrandPrimaryDark
+                                       btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.MouseLeave, Sub(s, e)
                                        btn.BackColor = BrandPrimary
+                                       btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.EnabledChanged, Sub(s, e)
                                            If btn.Enabled Then
                                                btn.BackColor = BrandPrimary
+                                               btn.ForeColor = Color.White
                                            Else
                                                btn.BackColor = BorderMedium
                                                btn.ForeColor = TextMuted
@@ -119,13 +122,16 @@ Public Module OfficeAIStyleHelper
         btn.UseVisualStyleBackColor = False
         AddHandler btn.MouseEnter, Sub(s, e)
                                        btn.BackColor = Color.FromArgb(234, 88, 12)
+                                       btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.MouseLeave, Sub(s, e)
                                        btn.BackColor = BrandAccent
+                                       btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.EnabledChanged, Sub(s, e)
                                            If btn.Enabled Then
                                                btn.BackColor = BrandAccent
+                                               btn.ForeColor = Color.White
                                            Else
                                                btn.BackColor = BorderMedium
                                                btn.ForeColor = TextMuted
