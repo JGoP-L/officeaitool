@@ -535,7 +535,10 @@ Public Class DocmeePptClient
         End Using
     End Function
 
-    Public Async Function DownloadPptxAsync(pptId As String, Optional refresh As Boolean = False) As Task(Of String)
+    Public Async Function DownloadPptxAsync(pptId As String,
+                                            Optional refresh As Boolean = False,
+                                            Optional maxAttempts As Integer = 1,
+                                            Optional retryDelayMs As Integer = 1000) As Task(Of String)
         If String.IsNullOrWhiteSpace(pptId) Then
             Throw New ArgumentException("缺少 PPT ID。", NameOf(pptId))
         End If
@@ -545,27 +548,36 @@ Public Class DocmeePptClient
             {"refresh", refresh}
         }
 
+        Dim attempts = Math.Max(1, maxAttempts)
         Using client = CreateHttpClient()
-            Using request As New HttpRequestMessage(HttpMethod.Post, DownloadPptxEndpoint)
-                AddDocmeeTokenHeader(request.Headers)
-                request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
+            For attempt As Integer = 1 To attempts
+                Using request As New HttpRequestMessage(HttpMethod.Post, DownloadPptxEndpoint)
+                    AddDocmeeTokenHeader(request.Headers)
+                    request.Content = New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
 
-                Using response = Await client.SendAsync(request).ConfigureAwait(False)
-                    Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                    EnsureSuccess(response, responseText)
+                    Using response = Await client.SendAsync(request).ConfigureAwait(False)
+                        Dim responseText = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                        EnsureSuccess(response, responseText)
 
-                    Dim result = JObject.Parse(responseText)
-                    EnsureDocmeeSuccess(result)
+                        Dim result = JObject.Parse(responseText)
+                        EnsureDocmeeSuccess(result)
 
-                    Dim fileUrl = TryGetString(result.SelectToken("data.fileUrl"))
-                    If String.IsNullOrWhiteSpace(fileUrl) Then
-                        Throw New InvalidOperationException("Docmee 返回成功，但没有 PPT 下载地址。")
-                    End If
+                        Dim fileUrl = TryGetString(result.SelectToken("data.fileUrl"))
+                        If Not String.IsNullOrWhiteSpace(fileUrl) Then Return fileUrl
 
-                    Return fileUrl
+                        If attempt >= attempts Then
+                            Throw New InvalidOperationException("Docmee 返回成功，但没有 PPT 下载地址。")
+                        End If
+
+                        ShareRibbon.LogInfo("[DocmeeDownload] Download URL is not ready. pptId=" & pptId.Trim() & ", attempt=" & attempt.ToString() & "/" & attempts.ToString())
+                    End Using
                 End Using
-            End Using
+
+                Await Task.Delay(Math.Max(200, retryDelayMs)).ConfigureAwait(False)
+            Next
         End Using
+
+        Throw New InvalidOperationException("Docmee 返回成功，但没有 PPT 下载地址。")
     End Function
 
     Public Async Function NewPageWithAiV2Async(content As String, pptxId As String, Optional progressHandler As Action(Of String) = Nothing, Optional templateIdOverride As String = "") As Task(Of DocmeeNewPageResult)
@@ -845,7 +857,7 @@ Public Class DocmeePptClient
         If streamReadException IsNot Nothing AndAlso
            String.IsNullOrWhiteSpace(result.PptxId) AndAlso
            String.IsNullOrWhiteSpace(result.FileUrl) Then
-            Throw New IOException("Docmee 流式连接已关闭，且没有返回可下载的 PPT 信息。", streamReadException)
+            ShareRibbon.LogInfo("[DocmeeNewPage] Stream closed without download info; caller will use request pptxId as download fallback.")
         End If
 
         Return result

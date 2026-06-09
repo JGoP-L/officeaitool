@@ -57,4 +57,10 @@ Public Class ThisAddIn
         themePptTaskPane.Visible = True
     End Sub
 
+    Public Sub HideThemePptTaskPane()
+        If themePptTaskPane IsNot Nothing Then
+            themePptTaskPane.Visible = False
+        End If
+    End Sub
+
 End Class

@@ -1,7 +1,9 @@
 ﻿' PowerPointAi\Ribbon1.vb
 Imports System.Diagnostics
 Imports System.Drawing
+Imports System.Drawing.Drawing2D
 Imports System.IO
+Imports System.Runtime.InteropServices
 Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
@@ -66,7 +68,7 @@ Public Class Ribbon1
 
     Protected Overrides Async Sub ProofreadButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            ShareRibbon.GlobalStatusStripAll.ShowProgress("AI内容提效：正在启动替换单页...")
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("AI内容提效：正在启动AI生成单页...")
             LogInfo("[ReplaceSlide] Button clicked.")
             Dim request = ShowReplaceSlideDialog()
             LogInfo("[ReplaceSlide] Dialog closed. hasRequest=" & (request IsNot Nothing).ToString())
@@ -79,7 +81,7 @@ Public Class Ribbon1
             Await ReplaceCurrentSlideWithDocmeeAsync(request)
         Catch ex As Exception
             LogError("[ReplaceSlide] Failed in button handler.", ex)
-            MessageBox.Show("替换单页出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("AI生成单页出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
@@ -115,59 +117,10 @@ Public Class Ribbon1
     End Function
 
     Private Function ShowReplaceSlideDialog() As ReplaceSlideOptions
-        Using dialog As New Form()
-            OfficeAIStyleHelper.StyleFormDialog(dialog)
-            dialog.Text = "替换单页"
-            dialog.ClientSize = New Size(420, 220)
-            dialog.BackColor = OfficeAIStyleHelper.BgPage
-
-            ' 品牌色标题栏
-            Dim header = OfficeAIStyleHelper.CreateFormHeader("替换单页", 420)
-            dialog.Controls.Add(header)
-
-            Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingMd
-
-            Dim label As New Label() With {
-                .Text = "输入新单页要求：",
-                .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY),
-                .AutoSize = True
-            }
-            OfficeAIStyleHelper.StyleLabelBody(label)
-            dialog.Controls.Add(label)
-
-            Dim inputBox As New TextBox() With {
-                .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY + 26),
-                .Size = New Size(386, 80),
-                .Multiline = True,
-                .ScrollBars = ScrollBars.Vertical,
-                .Text = "工作与生活失衡的现状与代价"
-            }
-            OfficeAIStyleHelper.StyleTextBoxMultiline(inputBox)
-            dialog.Controls.Add(inputBox)
-
-            Dim okButton As New Button() With {
-                .Text = "替换",
-                .Location = New Point(224, inputBox.Bottom + OfficeAIStyleHelper.SpacingMd),
-                .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
-                .DialogResult = DialogResult.OK
-            }
-            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
-            dialog.Controls.Add(okButton)
-            dialog.AcceptButton = okButton
-
-            Dim cancelButton As New Button() With {
-                .Text = "取消",
-                .Location = New Point(318, inputBox.Bottom + OfficeAIStyleHelper.SpacingMd),
-                .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
-                .DialogResult = DialogResult.Cancel
-            }
-            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
-            dialog.Controls.Add(cancelButton)
-            dialog.CancelButton = cancelButton
-
+        Using dialog As New NewPageRequestForm()
             If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
             Return New ReplaceSlideOptions() With {
-                .Content = inputBox.Text.Trim()
+                .Content = dialog.RequestContent
             }
         End Using
     End Function
@@ -177,7 +130,7 @@ Public Class Ribbon1
         Dim originalSlide = GetCurrentSlide()
         If originalSlide Is Nothing Then
             LogInfo("[ReplaceSlide] No current slide.")
-            MessageBox.Show("请先选中要替换的幻灯片。", "替换单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            MessageBox.Show("请先选中要生成单页的幻灯片。", "AI生成单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
         LogInfo("[ReplaceSlide] Current slide index=" & originalSlide.SlideIndex.ToString())
@@ -194,7 +147,7 @@ Public Class Ribbon1
         LogInfo("[ReplaceSlide] Calling Docmee newPageWithAiV2.")
         Dim progressWindow = CreateReplaceProgressWindow()
         progressWindow.Item1.Show()
-        UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在分析当前页内容...")
+        UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在匹配页面类型 ...")
 
         Dim result As DocmeeNewPageResult = Nothing
         Try
@@ -212,19 +165,19 @@ Public Class Ribbon1
             Dim fileUrl = result.FileUrl
             LogInfo("[ReplaceSlide] Docmee result. pptxId=" & pptxId & ", hasFileUrl=" & Not String.IsNullOrWhiteSpace(fileUrl))
             If String.IsNullOrWhiteSpace(fileUrl) Then
-                ShareRibbon.GlobalStatusStripAll.ShowProgress("正在获取替换单页 PPTX...")
+                ShareRibbon.GlobalStatusStripAll.ShowProgress("正在获取AI生成单页 PPTX...")
                 UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在整理页面结构...")
                 LogInfo("[ReplaceSlide] Download URL missing, calling downloadPptx.")
-                fileUrl = Await client.DownloadPptxAsync(pptxId, True)
+                fileUrl = Await client.DownloadPptxAsync(pptxId, True, 6, 1200)
             End If
 
             Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_newpage_{pptxId}_{Guid.NewGuid():N}.pptx")
-            ShareRibbon.GlobalStatusStripAll.ShowProgress("正在下载替换单页 PPTX...")
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("正在下载AI生成单页 PPTX...")
             UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在下载候选页面...")
             LogInfo("[ReplaceSlide] Downloading PPTX to " & localPath)
             Await client.DownloadPptxFileAsync(fileUrl, localPath)
 
-            ShareRibbon.GlobalStatusStripAll.ShowProgress("请选择要替换的单页...")
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("请选择要应用的AI生成单页...")
             UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在准备选择界面...")
             LogInfo("[ReplaceSlide] Selecting replacement slide from downloaded PPTX.")
             CloseReplaceProgressWindow(progressWindow.Item1)
@@ -232,47 +185,17 @@ Public Class Ribbon1
 
             _lastReplaceSlidePptxId = pptxId
             SaveDocmeePptxId(pptxId)
-            ShareRibbon.GlobalStatusStripAll.ShowProgress("替换单页完成")
+            ShareRibbon.GlobalStatusStripAll.ShowProgress("AI生成单页完成")
             LogInfo("[ReplaceSlide] Completed.")
         Finally
             CloseReplaceProgressWindow(progressWindow.Item1)
         End Try
     End Function
 
-    Private Function CreateReplaceProgressWindow() As Tuple(Of Form, Label)
-        Dim dialog As New Form()
-        OfficeAIStyleHelper.StyleFormDialog(dialog)
-        dialog.Text = "正在生成"
-        dialog.ClientSize = New Size(380, 130)
-        dialog.ControlBox = False
-        dialog.BackColor = OfficeAIStyleHelper.BgPage
-
-        ' 品牌色标题栏
-        Dim header = OfficeAIStyleHelper.CreateFormHeader("正在生成替换页", 380)
-        dialog.Controls.Add(header)
-
-        Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingMd
-
-        Dim label As New Label() With {
-            .Text = "正在分析当前页内容...",
-            .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY),
-            .Size = New Size(350, 20),
-            .AutoEllipsis = True
-        }
-        OfficeAIStyleHelper.StyleLabelBody(label)
-        label.AutoSize = False
-        label.TextAlign = ContentAlignment.MiddleLeft
-        dialog.Controls.Add(label)
-
-        Dim progressBar As New ProgressBar() With {
-            .Location = New Point(OfficeAIStyleHelper.SpacingLg, contentY + 28),
-            .Size = New Size(350, 8),
-            .Style = ProgressBarStyle.Marquee,
-            .MarqueeAnimationSpeed = 30
-        }
-        dialog.Controls.Add(progressBar)
-
-        Return Tuple.Create(dialog, label)
+    Private Function CreateReplaceProgressWindow(Optional sectionTitle As String = "新页面",
+                                                 Optional initialStatus As String = "正在匹配页面类型 ...") As Tuple(Of Form, Label)
+        Dim dialog As New NewPageProgressForm(sectionTitle, initialStatus)
+        Return Tuple.Create(CType(dialog, Form), dialog.StatusLabel)
     End Function
 
     Private Sub UpdateReplaceProgressWindow(dialog As Form, label As Label, message As String)
@@ -299,6 +222,653 @@ Public Class Ribbon1
         dialog.Close()
         dialog.Dispose()
     End Sub
+
+    Private NotInheritable Class NewPageUiPainter
+        Private Sub New()
+        End Sub
+
+        Private Const WM_NCLBUTTONDOWN As Integer = &HA1
+        Private Shared ReadOnly HTCAPTION As New IntPtr(2)
+
+        <DllImport("user32.dll")>
+        Private Shared Function ReleaseCapture() As Boolean
+        End Function
+
+        <DllImport("user32.dll")>
+        Private Shared Function SendMessage(hWnd As IntPtr, msg As Integer, wParam As IntPtr, lParam As IntPtr) As IntPtr
+        End Function
+
+        Public Shared Function CreateRoundedRect(rect As Rectangle, radius As Integer) As GraphicsPath
+            Dim path As New GraphicsPath()
+            If rect.Width <= 0 OrElse rect.Height <= 0 Then
+                path.AddRectangle(rect)
+                Return path
+            End If
+
+            Dim diameter = Math.Max(1, Math.Min(radius * 2, Math.Min(rect.Width, rect.Height)))
+            Dim arc As New Rectangle(rect.Location, New Size(diameter, diameter))
+            path.AddArc(arc, 180, 90)
+            arc.X = rect.Right - diameter
+            path.AddArc(arc, 270, 90)
+            arc.Y = rect.Bottom - diameter
+            path.AddArc(arc, 0, 90)
+            arc.X = rect.Left
+            path.AddArc(arc, 90, 90)
+            path.CloseFigure()
+            Return path
+        End Function
+
+        Public Shared Sub StyleCloseButton(btn As Button)
+            btn.Text = "×"
+            btn.FlatStyle = FlatStyle.Flat
+            btn.FlatAppearance.BorderSize = 0
+            btn.BackColor = Color.FromArgb(246, 247, 251)
+            btn.ForeColor = Color.FromArgb(82, 82, 91)
+            btn.Font = New Font("Microsoft YaHei UI", 15.0!, FontStyle.Regular)
+            btn.Cursor = Cursors.Hand
+            btn.TabStop = False
+            btn.UseVisualStyleBackColor = False
+            AddHandler btn.MouseEnter, Sub()
+                                           btn.BackColor = Color.FromArgb(238, 242, 255)
+                                           btn.ForeColor = OfficeAIStyleHelper.BrandPrimary
+                                       End Sub
+            AddHandler btn.MouseLeave, Sub()
+                                           btn.BackColor = Color.FromArgb(246, 247, 251)
+                                           btn.ForeColor = Color.FromArgb(82, 82, 91)
+                                       End Sub
+        End Sub
+
+        Public Shared Sub EnableFormDrag(frm As Form, ParamArray dragSurfaces As Control())
+            If frm Is Nothing OrElse dragSurfaces Is Nothing Then Return
+
+            For Each surface In dragSurfaces
+                If surface Is Nothing Then Continue For
+                AddHandler surface.MouseDown,
+                    Sub(sender As Object, e As MouseEventArgs)
+                        If e.Button <> MouseButtons.Left OrElse frm.IsDisposed Then Return
+
+                        ReleaseCapture()
+                        SendMessage(frm.Handle, WM_NCLBUTTONDOWN, HTCAPTION, IntPtr.Zero)
+                    End Sub
+            Next
+        End Sub
+    End Class
+
+    Private Class NewPageCardPanel
+        Inherits Panel
+
+        Public Sub New()
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            BackColor = Color.FromArgb(245, 246, 250)
+        End Sub
+
+        Protected Overrides Sub OnResize(e As EventArgs)
+            MyBase.OnResize(e)
+            If Width <= 0 OrElse Height <= 0 Then Return
+            Using path = NewPageUiPainter.CreateRoundedRect(New Rectangle(0, 0, Width, Height), 10)
+                Region = New Region(path)
+            End Using
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim rect = New Rectangle(2, 2, Width - 5, Height - 5)
+            Using path = NewPageUiPainter.CreateRoundedRect(rect, 10)
+                Using brush As New SolidBrush(Color.White)
+                    g.FillPath(brush, path)
+                End Using
+                Using pen As New Pen(Color.FromArgb(100, 55, 229), 3.0F)
+                    g.DrawPath(pen, path)
+                End Using
+            End Using
+        End Sub
+    End Class
+
+    Private Class NewPageInputPanel
+        Inherits Panel
+
+        Public Sub New()
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            BackColor = Color.White
+        End Sub
+
+        Protected Overrides Sub OnResize(e As EventArgs)
+            MyBase.OnResize(e)
+            If Width <= 0 OrElse Height <= 0 Then Return
+            Using path = NewPageUiPainter.CreateRoundedRect(New Rectangle(0, 0, Width, Height), 12)
+                Region = New Region(path)
+            End Using
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim rect = New Rectangle(1, 1, Width - 3, Height - 3)
+            Using path = NewPageUiPainter.CreateRoundedRect(rect, 12)
+                Using brush As New SolidBrush(Color.White)
+                    g.FillPath(brush, path)
+                End Using
+                Using pen As New Pen(Color.FromArgb(236, 238, 245), 2.0F)
+                    g.DrawPath(pen, path)
+                End Using
+            End Using
+        End Sub
+    End Class
+
+    Private Class SlidePreviewFramePanel
+        Inherits Panel
+
+        Public Sub New()
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            BackColor = Color.White
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim shadowRect = New Rectangle(8, 10, Width - 16, Height - 18)
+            Using shadowPath = NewPageUiPainter.CreateRoundedRect(shadowRect, 2)
+                Using shadowBrush As New SolidBrush(Color.FromArgb(22, 15, 23, 42))
+                    g.FillPath(shadowBrush, shadowPath)
+                End Using
+            End Using
+
+            Dim slideRect = New Rectangle(0, 0, Width - 18, Height - 18)
+            Using slidePath = NewPageUiPainter.CreateRoundedRect(slideRect, 2)
+                Using brush As New SolidBrush(Color.White)
+                    g.FillPath(brush, slidePath)
+                End Using
+            End Using
+        End Sub
+    End Class
+
+    Private Class NewPageGradientButton
+        Inherits Button
+
+        Private _hover As Boolean
+
+        Public Sub New()
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            FlatStyle = FlatStyle.Flat
+            FlatAppearance.BorderSize = 0
+            Cursor = Cursors.Hand
+            Font = New Font("Microsoft YaHei UI", 11.0!, FontStyle.Bold)
+            ForeColor = Color.White
+            Height = 42
+            TabStop = False
+            UseVisualStyleBackColor = False
+        End Sub
+
+        Protected Overrides Sub OnMouseEnter(e As EventArgs)
+            _hover = True
+            Invalidate()
+            MyBase.OnMouseEnter(e)
+        End Sub
+
+        Protected Overrides Sub OnMouseLeave(e As EventArgs)
+            _hover = False
+            Invalidate()
+            MyBase.OnMouseLeave(e)
+        End Sub
+
+        Protected Overrides Sub OnEnabledChanged(e As EventArgs)
+            Invalidate()
+            MyBase.OnEnabledChanged(e)
+        End Sub
+
+        Protected Overrides Sub OnPaint(pevent As PaintEventArgs)
+            Dim g = pevent.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim rect = New Rectangle(0, 0, Width - 1, Height - 1)
+            Using path = NewPageUiPainter.CreateRoundedRect(rect, 8)
+                If Enabled Then
+                    Dim leftColor = If(_hover, Color.FromArgb(91, 61, 235), Color.FromArgb(109, 52, 229))
+                    Dim rightColor = If(_hover, Color.FromArgb(78, 70, 229), Color.FromArgb(89, 45, 222))
+                    Using brush As New LinearGradientBrush(rect, leftColor, rightColor, LinearGradientMode.Horizontal)
+                        g.FillPath(brush, path)
+                    End Using
+                Else
+                    Using brush As New SolidBrush(Color.FromArgb(203, 213, 225))
+                        g.FillPath(brush, path)
+                    End Using
+                End If
+            End Using
+
+            TextRenderer.DrawText(g,
+                                  Text,
+                                  Font,
+                                  rect,
+                                  If(Enabled, Color.White, Color.FromArgb(241, 245, 249)),
+                                  TextFormatFlags.HorizontalCenter Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis)
+        End Sub
+    End Class
+
+    Private Class NewPageSpinnerControl
+        Inherits Control
+
+        Private ReadOnly _timer As New System.Windows.Forms.Timer() With {.Interval = 30}
+        Private _angle As Single
+
+        Public Sub New()
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            Size = New Size(72, 72)
+            BackColor = Color.White
+            AddHandler _timer.Tick, Sub()
+                                        _angle = (_angle + 12.0F) Mod 360.0F
+                                        Invalidate()
+                                    End Sub
+        End Sub
+
+        Public Sub Start()
+            _timer.Start()
+        End Sub
+
+        Public Sub [Stop]()
+            _timer.Stop()
+        End Sub
+
+        Protected Overrides Sub Dispose(disposing As Boolean)
+            If disposing Then
+                _timer.Dispose()
+            End If
+            MyBase.Dispose(disposing)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim rect = New Rectangle(10, 10, Width - 20, Height - 20)
+            For i As Integer = 0 To 8
+                Dim alpha As Integer = Math.Max(20, 230 - i * 22)
+                Dim spinnerColor As Color = If(i < 3, OfficeAIStyleHelper.BrandPrimary, Color.FromArgb(69, 166, 244))
+                Using pen As New Pen(Color.FromArgb(alpha, spinnerColor), 7.0F)
+                    pen.StartCap = LineCap.Round
+                    pen.EndCap = LineCap.Round
+                    g.DrawArc(pen, rect, _angle - i * 18.0F, 18.0F)
+                End Using
+            Next
+        End Sub
+    End Class
+
+    Private Class NewPageMarqueeControl
+        Inherits Control
+
+        Private ReadOnly _timer As New System.Windows.Forms.Timer() With {.Interval = 28}
+        Private _offset As Integer
+
+        Public Sub New()
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+            Size = New Size(160, 12)
+            BackColor = Color.White
+            AddHandler _timer.Tick, Sub()
+                                        _offset = (_offset + 5) Mod Math.Max(1, Width + 70)
+                                        Invalidate()
+                                    End Sub
+        End Sub
+
+        Public Sub Start()
+            _timer.Start()
+        End Sub
+
+        Public Sub [Stop]()
+            _timer.Stop()
+        End Sub
+
+        Protected Overrides Sub Dispose(disposing As Boolean)
+            If disposing Then
+                _timer.Dispose()
+            End If
+            MyBase.Dispose(disposing)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Dim trackRect = New Rectangle(0, 2, Width - 1, Height - 4)
+            Using trackPath = NewPageUiPainter.CreateRoundedRect(trackRect, 6)
+                Using brush As New SolidBrush(Color.FromArgb(240, 242, 247))
+                    g.FillPath(brush, trackPath)
+                End Using
+            End Using
+
+            Dim pillWidth = 62
+            Dim pillX = _offset - pillWidth
+            Dim pillRect = New Rectangle(pillX, 2, pillWidth, Height - 4)
+            Using pillPath = NewPageUiPainter.CreateRoundedRect(pillRect, 6)
+                Using brush As New LinearGradientBrush(pillRect, Color.FromArgb(189, 169, 242), Color.FromArgb(105, 82, 235), LinearGradientMode.Horizontal)
+                    g.FillPath(brush, pillPath)
+                End Using
+            End Using
+        End Sub
+    End Class
+
+    Private Class NewPageRequestForm
+        Inherits Form
+
+        Private Const MaxInputChars As Integer = 1000
+        Private Const PlaceholderText As String = "请输入页面的标题或者具体内容，我会根据您输入的文本为您生成新的页面"
+
+        Private ReadOnly _inputBox As New TextBox()
+        Private ReadOnly _counterLabel As New Label()
+        Private ReadOnly _submitButton As New NewPageGradientButton()
+        Private ReadOnly _fadeTimer As New System.Windows.Forms.Timer() With {.Interval = 15}
+        Private _placeholderActive As Boolean
+        Private _requestContent As String = ""
+
+        Public ReadOnly Property RequestContent As String
+            Get
+                Return _requestContent
+            End Get
+        End Property
+
+        Public Sub New()
+            BuildLayout()
+            AddHandler _fadeTimer.Tick, AddressOf FadeTimer_Tick
+        End Sub
+
+        Private Sub BuildLayout()
+            Text = "AI生成单页"
+            Font = OfficeAIStyleHelper.FontUi
+            BackColor = Color.FromArgb(245, 246, 250)
+            ClientSize = New Size(960, 600)
+            FormBorderStyle = FormBorderStyle.None
+            StartPosition = FormStartPosition.CenterScreen
+            ShowIcon = False
+            ShowInTaskbar = False
+            KeyPreview = True
+
+            Dim sectionLabel As New Label() With {
+                .Text = "新页面",
+                .Location = New Point(34, 16),
+                .AutoSize = True,
+                .Font = New Font("Microsoft YaHei UI", 10.0!, FontStyle.Regular),
+                .ForeColor = Color.FromArgb(107, 114, 128)
+            }
+            Controls.Add(sectionLabel)
+
+            Dim card As New NewPageCardPanel() With {
+                .Location = New Point(32, 42),
+                .Size = New Size(896, 520)
+            }
+            Controls.Add(card)
+            NewPageUiPainter.EnableFormDrag(Me, Me, sectionLabel, card)
+
+            Dim closeButton As New Button() With {
+                .Location = New Point(card.Width - 48, 14),
+                .Size = New Size(34, 34),
+                .DialogResult = DialogResult.Cancel
+            }
+            NewPageUiPainter.StyleCloseButton(closeButton)
+            AddHandler closeButton.Click, Sub()
+                                             DialogResult = DialogResult.Cancel
+                                             Close()
+                                         End Sub
+            card.Controls.Add(closeButton)
+            CancelButton = closeButton
+
+            Dim titleLabel As New Label() With {
+                .Text = "请输入页面标题或内容",
+                .Location = New Point(30, 62),
+                .AutoSize = True,
+                .Font = New Font("Microsoft YaHei UI", 13.0!, FontStyle.Bold),
+                .ForeColor = Color.FromArgb(55, 65, 81)
+            }
+            card.Controls.Add(titleLabel)
+            NewPageUiPainter.EnableFormDrag(Me, titleLabel)
+
+            Dim inputShell As New NewPageInputPanel() With {
+                .Location = New Point(30, 108),
+                .Size = New Size(card.Width - 60, 330)
+            }
+            card.Controls.Add(inputShell)
+
+            _inputBox.BorderStyle = BorderStyle.None
+            _inputBox.Multiline = True
+            _inputBox.ScrollBars = ScrollBars.Vertical
+            _inputBox.AcceptsReturn = True
+            _inputBox.AcceptsTab = True
+            _inputBox.MaxLength = MaxInputChars
+            _inputBox.Font = New Font("Microsoft YaHei UI", 10.5!, FontStyle.Regular)
+            _inputBox.Location = New Point(18, 18)
+            _inputBox.Size = New Size(inputShell.Width - 36, inputShell.Height - 36)
+            _inputBox.BackColor = Color.White
+            AddHandler _inputBox.Enter, AddressOf InputBox_Enter
+            AddHandler _inputBox.Leave, AddressOf InputBox_Leave
+            AddHandler _inputBox.TextChanged, AddressOf InputBox_TextChanged
+            inputShell.Controls.Add(_inputBox)
+
+            _counterLabel.Location = New Point(inputShell.Right - 100, inputShell.Bottom + 6)
+            _counterLabel.Size = New Size(100, 22)
+            _counterLabel.TextAlign = ContentAlignment.MiddleRight
+            _counterLabel.Font = New Font("Microsoft YaHei UI", 9.0!, FontStyle.Regular)
+            _counterLabel.ForeColor = Color.FromArgb(156, 163, 175)
+            card.Controls.Add(_counterLabel)
+
+            _submitButton.Text = "⚡  AI智能生成新页面"
+            _submitButton.Location = New Point(30, card.Height - 78)
+            _submitButton.Size = New Size(card.Width - 60, 44)
+            AddHandler _submitButton.Click, AddressOf SubmitButton_Click
+            card.Controls.Add(_submitButton)
+
+            SetPlaceholder()
+            AddHandler KeyDown, Sub(sender, e)
+                                    If e.KeyCode = Keys.Escape Then
+                                        DialogResult = DialogResult.Cancel
+                                        Close()
+                                    End If
+                                End Sub
+        End Sub
+
+        Protected Overrides Sub OnShown(e As EventArgs)
+            MyBase.OnShown(e)
+            Opacity = 0
+            _fadeTimer.Start()
+        End Sub
+
+        Protected Overrides Sub Dispose(disposing As Boolean)
+            If disposing Then
+                _fadeTimer.Dispose()
+            End If
+            MyBase.Dispose(disposing)
+        End Sub
+
+        Private Sub FadeTimer_Tick(sender As Object, e As EventArgs)
+            Opacity = Math.Min(1, Opacity + 0.08)
+            If Opacity >= 1 Then _fadeTimer.Stop()
+        End Sub
+
+        Private Sub InputBox_Enter(sender As Object, e As EventArgs)
+            If Not _placeholderActive Then Return
+            _placeholderActive = False
+            _inputBox.Text = ""
+            _inputBox.ForeColor = OfficeAIStyleHelper.TextPrimary
+            UpdateCounter()
+        End Sub
+
+        Private Sub InputBox_Leave(sender As Object, e As EventArgs)
+            If String.IsNullOrWhiteSpace(_inputBox.Text) Then
+                SetPlaceholder()
+            End If
+        End Sub
+
+        Private Sub InputBox_TextChanged(sender As Object, e As EventArgs)
+            UpdateCounter()
+        End Sub
+
+        Private Sub SetPlaceholder()
+            _placeholderActive = True
+            _inputBox.ForeColor = Color.FromArgb(180, 184, 194)
+            _inputBox.Text = PlaceholderText
+            _inputBox.SelectionStart = 0
+            _inputBox.SelectionLength = 0
+            UpdateCounter()
+        End Sub
+
+        Private Function GetActualText() As String
+            If _placeholderActive Then Return ""
+            Return If(_inputBox.Text, "").Trim()
+        End Function
+
+        Private Sub UpdateCounter()
+            Dim count = GetActualText().Length
+            _counterLabel.Text = count.ToString() & " / " & MaxInputChars.ToString()
+        End Sub
+
+        Private Sub SubmitButton_Click(sender As Object, e As EventArgs)
+            Dim content = GetActualText()
+            If String.IsNullOrWhiteSpace(content) Then
+                MessageBox.Show("请输入页面标题或内容。", "AI生成单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                _inputBox.Focus()
+                Return
+            End If
+
+            _requestContent = content
+            DialogResult = DialogResult.OK
+            Close()
+        End Sub
+    End Class
+
+    Private Class NewPageProgressForm
+        Inherits Form
+
+        Private ReadOnly _spinner As New NewPageSpinnerControl()
+        Private ReadOnly _marquee As New NewPageMarqueeControl()
+        Private ReadOnly _statusLabel As New Label()
+        Private ReadOnly _fadeTimer As New System.Windows.Forms.Timer() With {.Interval = 15}
+
+        Public ReadOnly Property StatusLabel As Label
+            Get
+                Return _statusLabel
+            End Get
+        End Property
+
+        Public Sub New(sectionTitle As String, initialStatus As String)
+            BuildLayout(sectionTitle, initialStatus)
+            AddHandler _fadeTimer.Tick, AddressOf FadeTimer_Tick
+        End Sub
+
+        Private Sub BuildLayout(sectionTitle As String, initialStatus As String)
+            Text = sectionTitle
+            Font = OfficeAIStyleHelper.FontUi
+            BackColor = Color.FromArgb(245, 246, 250)
+            ClientSize = New Size(960, 600)
+            FormBorderStyle = FormBorderStyle.None
+            StartPosition = FormStartPosition.CenterScreen
+            ShowIcon = False
+            ShowInTaskbar = False
+            KeyPreview = True
+
+            Dim sectionLabel As New Label() With {
+                .Text = sectionTitle,
+                .Location = New Point(34, 16),
+                .AutoSize = True,
+                .Font = New Font("Microsoft YaHei UI", 10.0!, FontStyle.Regular),
+                .ForeColor = Color.FromArgb(107, 114, 128)
+            }
+            Controls.Add(sectionLabel)
+
+            Dim card As New NewPageCardPanel() With {
+                .Location = New Point(32, 42),
+                .Size = New Size(896, 520)
+            }
+            Controls.Add(card)
+            NewPageUiPainter.EnableFormDrag(Me, Me, sectionLabel, card)
+
+            Dim closeButton As New Button() With {
+                .Location = New Point(card.Width - 48, 14),
+                .Size = New Size(34, 34)
+            }
+            NewPageUiPainter.StyleCloseButton(closeButton)
+            AddHandler closeButton.Click, Sub()
+                                             Hide()
+                                         End Sub
+            card.Controls.Add(closeButton)
+
+            _spinner.Location = New Point((card.Width - _spinner.Width) \ 2, 196)
+            card.Controls.Add(_spinner)
+
+            _marquee.Location = New Point((card.Width - _marquee.Width) \ 2, _spinner.Bottom + 28)
+            card.Controls.Add(_marquee)
+
+            _statusLabel.Text = initialStatus
+            _statusLabel.Location = New Point(0, _marquee.Bottom + 24)
+            _statusLabel.Size = New Size(card.Width, 32)
+            _statusLabel.TextAlign = ContentAlignment.MiddleCenter
+            _statusLabel.AutoEllipsis = True
+            _statusLabel.Font = New Font("Microsoft YaHei UI", 11.0!, FontStyle.Bold)
+            _statusLabel.ForeColor = OfficeAIStyleHelper.BrandPrimary
+            card.Controls.Add(_statusLabel)
+
+            Dim noteLabel As New Label() With {
+                .Text = "即便是AI也不能保证百分百正确，请注意甄别并核实。",
+                .Location = New Point(30, card.Height - 34),
+                .Size = New Size(card.Width - 60, 22),
+                .TextAlign = ContentAlignment.MiddleCenter,
+                .Font = New Font("Microsoft YaHei UI", 9.0!, FontStyle.Regular),
+                .ForeColor = Color.FromArgb(107, 114, 128)
+            }
+            card.Controls.Add(noteLabel)
+
+            AddHandler KeyDown, Sub(sender, e)
+                                    If e.KeyCode = Keys.Escape Then Hide()
+                                End Sub
+        End Sub
+
+        Protected Overrides Sub OnShown(e As EventArgs)
+            MyBase.OnShown(e)
+            Opacity = 0
+            _spinner.Start()
+            _marquee.Start()
+            _fadeTimer.Start()
+        End Sub
+
+        Protected Overrides Sub OnFormClosed(e As FormClosedEventArgs)
+            _spinner.Stop()
+            _marquee.Stop()
+            MyBase.OnFormClosed(e)
+        End Sub
+
+        Protected Overrides Sub Dispose(disposing As Boolean)
+            If disposing Then
+                _fadeTimer.Dispose()
+            End If
+            MyBase.Dispose(disposing)
+        End Sub
+
+        Private Sub FadeTimer_Tick(sender As Object, e As EventArgs)
+            Opacity = Math.Min(1, Opacity + 0.08)
+            If Opacity >= 1 Then _fadeTimer.Stop()
+        End Sub
+    End Class
 
     Private Function ResolveDocmeePptxId() As String
         Try
@@ -347,6 +917,413 @@ Public Class Ribbon1
             Dim displayTitle = If(String.IsNullOrWhiteSpace(Title), "未命名页面", Title.Trim())
             Return $"第 {SlideIndex} 页 - {displayTitle}"
         End Function
+    End Class
+
+    Private Class ReplacementThumbCard
+        Inherits Panel
+
+        Private ReadOnly _pictureBox As New PictureBox()
+        Private ReadOnly _titleLabel As New Label()
+        Private _selected As Boolean
+
+        Public Event CardClicked(sender As Object, e As EventArgs)
+
+        Public ReadOnly Property Choice As PptxSlideChoice
+
+        Public Sub New(choice As PptxSlideChoice, index As Integer, total As Integer)
+            Me.Choice = choice
+            Size = New Size(235, 164)
+            Margin = New Padding(0, 0, 0, 16)
+            BackColor = Color.White
+            Cursor = Cursors.Hand
+            SetStyle(ControlStyles.AllPaintingInWmPaint Or
+                     ControlStyles.OptimizedDoubleBuffer Or
+                     ControlStyles.ResizeRedraw Or
+                     ControlStyles.UserPaint, True)
+
+            _pictureBox.Location = New Point(10, 10)
+            _pictureBox.Size = New Size(215, 121)
+            _pictureBox.BackColor = Color.FromArgb(249, 250, 251)
+            _pictureBox.SizeMode = PictureBoxSizeMode.Zoom
+            _pictureBox.Cursor = Cursors.Hand
+            Controls.Add(_pictureBox)
+
+            _titleLabel.Location = New Point(10, 136)
+            _titleLabel.Size = New Size(215, 22)
+            _titleLabel.AutoEllipsis = True
+            _titleLabel.TextAlign = ContentAlignment.MiddleLeft
+            _titleLabel.Font = New Font("Microsoft YaHei UI", 7.5!, FontStyle.Regular)
+            _titleLabel.ForeColor = Color.FromArgb(75, 85, 99)
+            _titleLabel.Text = GetDisplayTitle(index, total)
+            _titleLabel.Cursor = Cursors.Hand
+            Controls.Add(_titleLabel)
+
+            AddHandler Click, AddressOf RaiseCardClicked
+            AddHandler _pictureBox.Click, AddressOf RaiseCardClicked
+            AddHandler _titleLabel.Click, AddressOf RaiseCardClicked
+        End Sub
+
+        Public Sub SetSelected(value As Boolean)
+            _selected = value
+            Invalidate()
+        End Sub
+
+        Public Sub SetLoading()
+            If _pictureBox.Image Is Nothing Then
+                _pictureBox.BackColor = Color.FromArgb(248, 250, 252)
+            End If
+        End Sub
+
+        Public Sub SetPreview(previewPath As String)
+            DisposePreview()
+            If String.IsNullOrWhiteSpace(previewPath) OrElse Not File.Exists(previewPath) Then
+                _pictureBox.BackColor = Color.FromArgb(248, 250, 252)
+                Return
+            End If
+
+            Using previewImage = Image.FromFile(previewPath)
+                _pictureBox.Image = New Bitmap(previewImage)
+            End Using
+            _pictureBox.BackColor = Color.White
+        End Sub
+
+        Public Sub DisposePreview()
+            If _pictureBox.Image Is Nothing Then Return
+            Dim oldImage = _pictureBox.Image
+            _pictureBox.Image = Nothing
+            oldImage.Dispose()
+        End Sub
+
+        Private Function GetDisplayTitle(index As Integer, total As Integer) As String
+            Dim title = If(Choice Is Nothing OrElse String.IsNullOrWhiteSpace(Choice.Title), "未命名页面", Choice.Title.Trim())
+            Return $"第 {index}/{total} 页  {title}"
+        End Function
+
+        Private Sub RaiseCardClicked(sender As Object, e As EventArgs)
+            RaiseEvent CardClicked(Me, EventArgs.Empty)
+        End Sub
+
+        Protected Overrides Sub OnPaint(e As PaintEventArgs)
+            MyBase.OnPaint(e)
+            Dim g = e.Graphics
+            g.SmoothingMode = SmoothingMode.AntiAlias
+
+            Using brush As New SolidBrush(Color.White)
+                g.FillRectangle(brush, ClientRectangle)
+            End Using
+
+            Dim imageRect = New Rectangle(_pictureBox.Left - 3, _pictureBox.Top - 3, _pictureBox.Width + 6, _pictureBox.Height + 6)
+            Using imagePath = NewPageUiPainter.CreateRoundedRect(imageRect, 12)
+                If _selected Then
+                    Using pen As New Pen(Color.FromArgb(100, 55, 229), 3.0F)
+                        g.DrawPath(pen, imagePath)
+                    End Using
+                End If
+            End Using
+        End Sub
+    End Class
+
+    Private Class ReplacementSlideChoiceForm
+        Inherits Form
+
+        Private ReadOnly _choices As New List(Of PptxSlideChoice)()
+        Private ReadOnly _previewLoader As Func(Of PptxSlideChoice, String)
+        Private ReadOnly _cards As New Dictionary(Of PptxSlideChoice, ReplacementThumbCard)()
+        Private ReadOnly _mainPreviewBox As New PictureBox()
+        Private ReadOnly _mainTitleLabel As New Label()
+        Private ReadOnly _thumbFlow As New FlowLayoutPanel()
+        Private ReadOnly _insertButton As New NewPageGradientButton()
+        Private ReadOnly _pageLabel As New Label()
+        Private _selectedChoice As PptxSlideChoice
+        Private _loadingPreviews As Boolean
+
+        Public ReadOnly Property SelectedChoice As PptxSlideChoice
+            Get
+                Return _selectedChoice
+            End Get
+        End Property
+
+        Public Sub New(choices As IEnumerable(Of PptxSlideChoice),
+                       previewLoader As Func(Of PptxSlideChoice, String))
+            If choices IsNot Nothing Then
+                For Each choice In choices
+                    If choice IsNot Nothing Then _choices.Add(choice)
+                Next
+            End If
+            _previewLoader = previewLoader
+            BuildLayout()
+        End Sub
+
+        Private Sub BuildLayout()
+            Text = "选择AI生成单页"
+            Font = OfficeAIStyleHelper.FontUi
+            BackColor = Color.FromArgb(245, 246, 250)
+            FormBorderStyle = FormBorderStyle.None
+            StartPosition = FormStartPosition.CenterScreen
+            ShowIcon = False
+            ShowInTaskbar = False
+            KeyPreview = True
+
+            Dim workingArea = Screen.FromPoint(Cursor.Position).WorkingArea
+            Dim formWidth = Math.Min(1500, Math.Max(1100, workingArea.Width - 90))
+            Dim formHeight = Math.Min(860, Math.Max(720, workingArea.Height - 90))
+            ClientSize = New Size(formWidth, formHeight)
+
+            Dim sectionLabel As New Label() With {
+                .Text = "新页面",
+                .Location = New Point(18, 8),
+                .AutoSize = True,
+                .Font = New Font("Microsoft YaHei UI", 10.0!, FontStyle.Regular),
+                .ForeColor = Color.FromArgb(107, 114, 128)
+            }
+            Controls.Add(sectionLabel)
+
+            Dim card As New NewPageCardPanel() With {
+                .Location = New Point(10, 32),
+                .Size = New Size(ClientSize.Width - 20, ClientSize.Height - 54)
+            }
+            Controls.Add(card)
+            NewPageUiPainter.EnableFormDrag(Me, Me, sectionLabel, card)
+
+            Dim closeButton As New Button() With {
+                .Location = New Point(card.Width - 48, 14),
+                .Size = New Size(34, 34),
+                .DialogResult = DialogResult.Cancel
+            }
+            NewPageUiPainter.StyleCloseButton(closeButton)
+            AddHandler closeButton.Click, Sub()
+                                             DialogResult = DialogResult.Cancel
+                                             Close()
+                                         End Sub
+            card.Controls.Add(closeButton)
+            CancelButton = closeButton
+
+            Dim rightPanelWidth = 245
+            Dim rightPanelLeft = card.Width - rightPanelWidth - 38
+            Dim separatorX = rightPanelLeft - 50
+            Dim previewLeft = 92
+            Dim previewTop = 112
+            Dim previewWidth = Math.Max(660, separatorX - previewLeft - 96)
+            Dim previewHeight = CInt(previewWidth * 9 / 16)
+            Dim maxPreviewHeight = Math.Max(380, card.Height - previewTop - 190)
+            If previewHeight > maxPreviewHeight Then
+                previewHeight = maxPreviewHeight
+                previewWidth = CInt(previewHeight * 16 / 9)
+            End If
+
+            Dim previewHost As New SlidePreviewFramePanel() With {
+                .Location = New Point(previewLeft, previewTop),
+                .Size = New Size(previewWidth + 18, previewHeight + 18)
+            }
+            card.Controls.Add(previewHost)
+
+            _mainPreviewBox.Location = New Point(0, 0)
+            _mainPreviewBox.Size = New Size(previewWidth, previewHeight)
+            _mainPreviewBox.BackColor = Color.White
+            _mainPreviewBox.SizeMode = PictureBoxSizeMode.Zoom
+            previewHost.Controls.Add(_mainPreviewBox)
+
+            _mainTitleLabel.Location = New Point(previewLeft, previewHost.Bottom + 6)
+            _mainTitleLabel.Size = New Size(previewWidth, 22)
+            _mainTitleLabel.TextAlign = ContentAlignment.MiddleCenter
+            _mainTitleLabel.AutoEllipsis = True
+            _mainTitleLabel.Font = New Font("Microsoft YaHei UI", 9.5!, FontStyle.Regular)
+            _mainTitleLabel.ForeColor = Color.FromArgb(100, 116, 139)
+            _mainTitleLabel.Visible = False
+            card.Controls.Add(_mainTitleLabel)
+
+            _insertButton.Text = "✓  将此页面插入演示文档"
+            Dim insertButtonY = Math.Min(previewHost.Bottom + 24, card.Height - 112)
+            _insertButton.Location = New Point(previewLeft + (previewWidth - 280) \ 2, insertButtonY)
+            _insertButton.Size = New Size(280, 48)
+            AddHandler _insertButton.Click, AddressOf InsertButton_Click
+            card.Controls.Add(_insertButton)
+            AcceptButton = _insertButton
+
+            Dim separator As New Label() With {
+                .Location = New Point(separatorX, 88),
+                .Size = New Size(1, card.Height - 174),
+                .BackColor = Color.FromArgb(229, 231, 235),
+                .AutoSize = False
+            }
+            card.Controls.Add(separator)
+
+            Dim verticalHint As New Label() With {
+                .Text = "来" & vbCrLf & "试" & vbCrLf & "试" & vbCrLf & "其" & vbCrLf & "他" & vbCrLf & "的" & vbCrLf & "页" & vbCrLf & "面",
+                .Location = New Point(separatorX + 8, Math.Max(120, (card.Height - 180) \ 2)),
+                .Size = New Size(24, 180),
+                .TextAlign = ContentAlignment.MiddleCenter,
+                .Font = New Font("Microsoft YaHei UI", 9.0!, FontStyle.Regular),
+                .ForeColor = Color.FromArgb(156, 163, 175)
+            }
+            card.Controls.Add(verticalHint)
+
+            Dim candidateTitle As New Label() With {
+                .Text = "候选页面",
+                .Location = New Point(rightPanelLeft, 60),
+                .Size = New Size(rightPanelWidth, 32),
+                .TextAlign = ContentAlignment.MiddleCenter,
+                .Font = New Font("Microsoft YaHei UI", 15.0!, FontStyle.Regular),
+                .ForeColor = Color.FromArgb(55, 65, 81)
+            }
+            card.Controls.Add(candidateTitle)
+            NewPageUiPainter.EnableFormDrag(Me, candidateTitle)
+
+            _thumbFlow.Location = New Point(rightPanelLeft, 106)
+            _thumbFlow.Size = New Size(rightPanelWidth, card.Height - 192)
+            _thumbFlow.BackColor = Color.White
+            _thumbFlow.AutoScroll = True
+            _thumbFlow.FlowDirection = FlowDirection.TopDown
+            _thumbFlow.WrapContents = False
+            _thumbFlow.Padding = New Padding(0, 0, 0, 8)
+            card.Controls.Add(_thumbFlow)
+
+            Dim noteLabel As New Label() With {
+                .Text = "即便是AI也不能保证百分百正确，请注意甄别并核实。",
+                .Location = New Point(30, card.Height - 34),
+                .Size = New Size(card.Width - 60, 22),
+                .TextAlign = ContentAlignment.MiddleCenter,
+                .Font = New Font("Microsoft YaHei UI", 9.0!, FontStyle.Regular),
+                .ForeColor = Color.FromArgb(107, 114, 128)
+            }
+            card.Controls.Add(noteLabel)
+            NewPageUiPainter.EnableFormDrag(Me, noteLabel)
+
+            _pageLabel.Location = New Point(card.Width - 158, card.Height - 34)
+            _pageLabel.Size = New Size(100, 22)
+            _pageLabel.TextAlign = ContentAlignment.MiddleRight
+            _pageLabel.Font = New Font("Microsoft YaHei UI", 9.0!, FontStyle.Regular)
+            _pageLabel.ForeColor = Color.FromArgb(224, 226, 232)
+            card.Controls.Add(_pageLabel)
+
+            For index As Integer = 0 To _choices.Count - 1
+                Dim thumb = New ReplacementThumbCard(_choices(index), index + 1, _choices.Count)
+                AddHandler thumb.CardClicked, AddressOf ThumbCard_Click
+                _cards(_choices(index)) = thumb
+                _thumbFlow.Controls.Add(thumb)
+            Next
+
+            AddHandler KeyDown, Sub(sender, e)
+                                    If e.KeyCode = Keys.Escape Then
+                                        DialogResult = DialogResult.Cancel
+                                        Close()
+                                    End If
+                                End Sub
+            AddHandler FormClosed, AddressOf ReplacementSlideChoiceForm_FormClosed
+        End Sub
+
+        Protected Overrides Sub OnShown(e As EventArgs)
+            MyBase.OnShown(e)
+            Dim defaultIndex = If(_choices.Count > 0, 0, -1)
+            If defaultIndex >= 0 Then
+                SelectChoice(_choices(defaultIndex))
+                If _cards.ContainsKey(_choices(defaultIndex)) Then
+                    _thumbFlow.ScrollControlIntoView(_cards(_choices(defaultIndex)))
+                End If
+            End If
+
+            BeginInvoke(CType(Sub() LoadAllThumbPreviews(), MethodInvoker))
+        End Sub
+
+        Private Sub ThumbCard_Click(sender As Object, e As EventArgs)
+            Dim thumb = TryCast(sender, ReplacementThumbCard)
+            If thumb Is Nothing Then Return
+            SelectChoice(thumb.Choice)
+        End Sub
+
+        Private Sub SelectChoice(choice As PptxSlideChoice)
+            If choice Is Nothing Then Return
+            _selectedChoice = choice
+            For Each pair In _cards
+                pair.Value.SetSelected(Object.ReferenceEquals(pair.Key, choice))
+            Next
+            Dim pageIndex = _choices.IndexOf(choice)
+            _pageLabel.Text = If(pageIndex >= 0, (pageIndex + 1).ToString() & " / " & _choices.Count.ToString(), "")
+            LoadMainPreview(choice)
+        End Sub
+
+        Private Sub LoadMainPreview(choice As PptxSlideChoice)
+            DisposeMainPreview()
+            If choice Is Nothing Then
+                _mainTitleLabel.Text = ""
+                Return
+            End If
+
+            _mainTitleLabel.Text = choice.ToString() & "    正在生成预览..."
+            Cursor = Cursors.WaitCursor
+            _mainPreviewBox.Refresh()
+            _mainTitleLabel.Refresh()
+            Application.DoEvents()
+
+            Try
+                Dim previewPath = LoadPreviewPath(choice)
+                If Not String.IsNullOrWhiteSpace(previewPath) AndAlso File.Exists(previewPath) Then
+                    Using previewImage = Image.FromFile(previewPath)
+                        _mainPreviewBox.Image = New Bitmap(previewImage)
+                    End Using
+                    If _cards.ContainsKey(choice) Then _cards(choice).SetPreview(previewPath)
+                    _mainTitleLabel.Text = choice.ToString()
+                Else
+                    _mainTitleLabel.Text = choice.ToString() & "    预览图生成失败"
+                End If
+            Finally
+                Cursor = Cursors.Default
+            End Try
+        End Sub
+
+        Private Sub LoadAllThumbPreviews()
+            If _loadingPreviews Then Return
+            _loadingPreviews = True
+            Try
+                For Each choice In _choices
+                    If IsDisposed Then Return
+                    If Not _cards.ContainsKey(choice) Then Continue For
+
+                    Dim thumb = _cards(choice)
+                    thumb.SetLoading()
+                    thumb.Refresh()
+                    Application.DoEvents()
+
+                    Dim previewPath = LoadPreviewPath(choice)
+                    thumb.SetPreview(previewPath)
+                    If Object.ReferenceEquals(choice, _selectedChoice) AndAlso _mainPreviewBox.Image Is Nothing Then
+                        LoadMainPreview(choice)
+                    End If
+                Next
+            Finally
+                _loadingPreviews = False
+            End Try
+        End Sub
+
+        Private Function LoadPreviewPath(choice As PptxSlideChoice) As String
+            If choice Is Nothing Then Return ""
+            If _previewLoader Is Nothing Then Return ""
+            Return _previewLoader(choice)
+        End Function
+
+        Private Sub InsertButton_Click(sender As Object, e As EventArgs)
+            If _selectedChoice Is Nothing Then
+                MessageBox.Show("请先选择一个候选页面。", "选择AI生成单页", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+
+            DialogResult = DialogResult.OK
+            Close()
+        End Sub
+
+        Private Sub DisposeMainPreview()
+            If _mainPreviewBox.Image Is Nothing Then Return
+            Dim oldImage = _mainPreviewBox.Image
+            _mainPreviewBox.Image = Nothing
+            oldImage.Dispose()
+        End Sub
+
+        Private Sub ReplacementSlideChoiceForm_FormClosed(sender As Object, e As FormClosedEventArgs)
+            DisposeMainPreview()
+            For Each thumb In _cards.Values
+                thumb.DisposePreview()
+            Next
+        End Sub
     End Class
 
     Private Function ReplaceCurrentSlideWithSelectedSlideFromPptx(originalSlide As PowerPoint.Slide, pptxPath As String) As Boolean
@@ -466,115 +1443,9 @@ Public Class Ribbon1
     End Function
 
     Private Function ShowReplacementSlideChoiceDialog(choices As List(Of PptxSlideChoice)) As PptxSlideChoice
-        Using dialog As New Form()
-            OfficeAIStyleHelper.StyleFormDialog(dialog)
-            dialog.Text = "选择替换页"
-            dialog.ClientSize = New Size(960, 580)
-            dialog.BackColor = OfficeAIStyleHelper.BgPage
-
-            ' 品牌色标题栏
-            Dim header = OfficeAIStyleHelper.CreateFormHeader("选择替换页 - Docmee 生成了多页，请选择用于替换的页面", 960)
-            dialog.Controls.Add(header)
-
-            Dim contentY As Integer = header.Bottom + OfficeAIStyleHelper.SpacingSm
-
-            Dim listBox As New ListBox() With {
-                .Location = New Point(OfficeAIStyleHelper.SpacingSm, contentY),
-                .Size = New Size(280, 420)
-            }
-            listBox.BackColor = OfficeAIStyleHelper.BgSurface
-            listBox.BorderStyle = BorderStyle.FixedSingle
-            listBox.Font = OfficeAIStyleHelper.FontUi
-            For Each choice In choices
-                listBox.Items.Add(choice)
-            Next
-            dialog.Controls.Add(listBox)
-
-            Dim previewBox As New PictureBox() With {
-                .Location = New Point(306, contentY),
-                .Size = New Size(630, 354),
-                .BackColor = OfficeAIStyleHelper.BgSurface,
-                .BorderStyle = BorderStyle.FixedSingle,
-                .SizeMode = PictureBoxSizeMode.Zoom
-            }
-            dialog.Controls.Add(previewBox)
-
-            Dim titleLabel As New Label() With {
-                .Location = New Point(306, previewBox.Bottom + OfficeAIStyleHelper.SpacingSm),
-                .Size = New Size(630, 40),
-                .AutoEllipsis = True
-            }
-            OfficeAIStyleHelper.StyleLabelBody(titleLabel)
-            titleLabel.AutoSize = False
-            titleLabel.TextAlign = ContentAlignment.MiddleLeft
-            dialog.Controls.Add(titleLabel)
-
-            Dim setPreview As MethodInvoker =
-                Sub()
-                    Dim choice = TryCast(listBox.SelectedItem, PptxSlideChoice)
-                    If previewBox.Image IsNot Nothing Then
-                        Dim oldImage = previewBox.Image
-                        previewBox.Image = Nothing
-                        oldImage.Dispose()
-                    End If
-
-                    If choice Is Nothing Then
-                        titleLabel.Text = ""
-                        Return
-                    End If
-
-                    titleLabel.Text = choice.ToString() & "    正在生成预览..."
-                    dialog.Cursor = Cursors.WaitCursor
-                    previewBox.Refresh()
-                    titleLabel.Refresh()
-                    Application.DoEvents()
-
-                    Dim previewPath = EnsureSlidePreview(choice)
-                    titleLabel.Text = choice.ToString()
-                    dialog.Cursor = Cursors.Default
-                    If Not String.IsNullOrWhiteSpace(previewPath) AndAlso File.Exists(previewPath) Then
-                        Using previewImage = Image.FromFile(previewPath)
-                            previewBox.Image = New Bitmap(previewImage)
-                        End Using
-                    Else
-                        titleLabel.Text = choice.ToString() & "    预览图生成失败"
-                    End If
-                End Sub
-
-            AddHandler listBox.SelectedIndexChanged, Sub() setPreview.Invoke()
-            AddHandler dialog.FormClosed,
-                Sub()
-                    If previewBox.Image IsNot Nothing Then
-                        Dim oldImage = previewBox.Image
-                        previewBox.Image = Nothing
-                        oldImage.Dispose()
-                    End If
-                End Sub
-
-            listBox.SelectedIndex = Math.Max(0, choices.Count - 1)
-
-            Dim okButton As New Button() With {
-                .Text = "使用此页",
-                .Location = New Point(750, titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm),
-                .Size = New Size(96, OfficeAIStyleHelper.ButtonHeight),
-                .DialogResult = DialogResult.OK
-            }
-            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
-            dialog.Controls.Add(okButton)
-            dialog.AcceptButton = okButton
-
-            Dim cancelButton As New Button() With {
-                .Text = "取消",
-                .Location = New Point(854, titleLabel.Bottom + OfficeAIStyleHelper.SpacingSm),
-                .Size = New Size(86, OfficeAIStyleHelper.ButtonHeight),
-                .DialogResult = DialogResult.Cancel
-            }
-            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
-            dialog.Controls.Add(cancelButton)
-            dialog.CancelButton = cancelButton
-
+        Using dialog As New ReplacementSlideChoiceForm(choices, AddressOf EnsureSlidePreview)
             If dialog.ShowDialog() <> DialogResult.OK Then Return Nothing
-            Return TryCast(listBox.SelectedItem, PptxSlideChoice)
+            Return dialog.SelectedChoice
         End Using
     End Function
 
@@ -594,7 +1465,7 @@ Public Class Ribbon1
         LogInfo("[BeautifyTemplate] NewPageWithAi contentLength=" & slideContent.Length.ToString())
 
         Dim client As New DocmeePptClient()
-        Dim progressWindow = CreateReplaceProgressWindow()
+        Dim progressWindow = CreateReplaceProgressWindow("美化单页", "正在生成美化页面...")
         progressWindow.Item1.Text = "正在美化当前页"
         progressWindow.Item1.Show()
         UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在生成美化页面...")
@@ -624,7 +1495,7 @@ Public Class Ribbon1
             LogInfo("[BeautifyTemplate] Docmee result. pptxId=" & resultPptxId & ", hasFileUrl=" & Not String.IsNullOrWhiteSpace(fileUrl))
             If String.IsNullOrWhiteSpace(fileUrl) Then
                 UpdateReplaceProgressWindow(progressWindow.Item1, progressWindow.Item2, "正在获取美化 PPTX...")
-                fileUrl = Await client.DownloadPptxAsync(resultPptxId, True)
+                fileUrl = Await client.DownloadPptxAsync(resultPptxId, True, 6, 1200)
             End If
 
             Dim localPath = Path.Combine(Path.GetTempPath(), $"wenduoduoAI_beautify_{resultPptxId}_{Guid.NewGuid():N}.pptx")

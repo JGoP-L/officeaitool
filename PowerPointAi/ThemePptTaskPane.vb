@@ -26,9 +26,10 @@ Public Class ThemePptTaskPane
     Private Const WM_SETREDRAW As Integer = &HB
     Private Const EM_LINESCROLL As Integer = &HB6
     Private Const EM_GETFIRSTVISIBLELINE As Integer = &HCE
-    Private Const GenerationModeTitle As String = "标题生成"
+    Private Const GenerationModeTitle As String = "AI智能创作"
     Private Const GenerationModeDocument As String = "文档生成"
     Private Const GenerationModeMarkdown As String = "Markdown大纲"
+    Private Const TopicPromptText As String = "输入您的创作灵感"
     Private Shared ReadOnly MarkdownPreviewPipelineLock As New Object()
     Private Shared _markdownPreviewPipeline As MarkdownPipeline
     Private Shared _markdownPreviewPipelineInitializeError As String
@@ -62,15 +63,24 @@ Public Class ThemePptTaskPane
     Private _lastGeneratedPptId As String
     Private _lastImportedSlideStartIndex As Integer
     Private _lastImportedSlideCount As Integer
+    Private _hasChosenGenerationMode As Boolean
+    Private ReadOnly _outlineStreamBuffer As New StringBuilder()
 
     Private ReadOnly _generationModeCombo As New ComboBox()
+    Private ReadOnly _generationModeLabel As New Label()
+    Private ReadOnly _modeSegmentedPanel As New Panel()
     Private ReadOnly _topicBox As New TextBox()
     Private ReadOnly _documentPanel As New TableLayoutPanel()
     Private ReadOnly _documentPathBox As New TextBox()
     Private ReadOnly _chooseDocumentButton As New Button()
     Private ReadOnly _generateButton As New Button()
+    Private ReadOnly _restartButton As New Button()
     Private ReadOnly _insertButton As New Button()
     Private ReadOnly _finishOutlineEditButton As New Button()
+    Private ReadOnly _outlineActionPanel As New FlowLayoutPanel()
+    Private ReadOnly _chooseTemplateFromOutlineButton As New Button()
+    Private ReadOnly _editOutlineButton As New Button()
+    Private ReadOnly _actionButtonPanel As New FlowLayoutPanel()
     Private ReadOnly _configureDocmeeButton As New Button()
     Private ReadOnly _templateCombo As New ComboBox()
     Private ReadOnly _refreshTemplatesButton As New Button()
@@ -88,6 +98,8 @@ Public Class ThemePptTaskPane
     Private ReadOnly _templatePagerPanel As New FlowLayoutPanel()
     Private ReadOnly _templatePrevPageButton As New Button()
     Private ReadOnly _templateNextPageButton As New Button()
+    Private ReadOnly _templateBackStepButton As New Button()
+    Private ReadOnly _templateNextStepButton As New Button()
     Private ReadOnly _templatePageLabel As New Label()
     Private ReadOnly _templateListBox As New ListBox()
     Private ReadOnly _templateWebView As New WebView2()
@@ -160,7 +172,7 @@ Public Class ThemePptTaskPane
         layout.RowCount = 9
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 200.0F))
+        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 260.0F))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
@@ -170,22 +182,21 @@ Public Class ThemePptTaskPane
         layout.BackColor = Color.Transparent
 
         ' --- 生成方式选择器（Segmented Control 风格）---
-        Dim modeLabel As New Label()
+        Dim modeLabel = _generationModeLabel
         OfficeAIStyleHelper.StyleLabelHeading(modeLabel)
-        modeLabel.Text = "生成方式"
+        modeLabel.Text = "选择生成方式"
         modeLabel.Margin = New Padding(0)
-        modeLabel.Visible = False
+        modeLabel.Visible = True
 
-        Dim modeSegmentedPanel As New Panel()
-        modeSegmentedPanel.Height = 34
-        modeSegmentedPanel.BackColor = OfficeAIStyleHelper.BorderLight
-        modeSegmentedPanel.Padding = New Padding(1)
-        modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        _modeSegmentedPanel.Height = 40
+        _modeSegmentedPanel.BackColor = OfficeAIStyleHelper.BorderLight
+        _modeSegmentedPanel.Padding = New Padding(1)
+        _modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        _modeSegmentedPanel.Dock = DockStyle.Fill
+        _modeSegmentedPanel.MinimumSize = New Size(220, 40)
 
         ' 模式按钮作为 Segmented Control
         Dim modes() As String = {GenerationModeTitle, GenerationModeDocument}
-        Dim modeBtnWidth As Integer = 104
-        modeSegmentedPanel.Width = 2 + modes.Length * modeBtnWidth + Math.Max(0, modes.Length - 1)
         For i As Integer = 0 To modes.Length - 1
             Dim modeBtn As New Button()
             modeBtn.Text = modes(i)
@@ -194,9 +205,9 @@ Public Class ThemePptTaskPane
             modeBtn.FlatAppearance.MouseOverBackColor = Color.Transparent
             modeBtn.FlatAppearance.MouseDownBackColor = Color.Transparent
             modeBtn.UseVisualStyleBackColor = False
-            modeBtn.Height = 32
-            modeBtn.Width = modeBtnWidth
-            modeBtn.Left = 1 + i * (modeBtnWidth + 1)
+            modeBtn.Height = 38
+            modeBtn.Width = 104
+            modeBtn.Left = 1 + i * 105
             modeBtn.Top = 1
             modeBtn.Font = OfficeAIStyleHelper.FontUi
             modeBtn.Cursor = Cursors.Hand
@@ -204,23 +215,28 @@ Public Class ThemePptTaskPane
             modeBtn.Tag = i
             Dim captured As Button = modeBtn
             AddHandler modeBtn.Click, Sub(s, e)
-                                          _generationModeCombo.SelectedIndex = CInt(captured.Tag)
+                                          SelectGenerationMode(CInt(captured.Tag))
                                       End Sub
-            modeSegmentedPanel.Controls.Add(modeBtn)
+            _modeSegmentedPanel.Controls.Add(modeBtn)
         Next
+        AddHandler _modeSegmentedPanel.Resize, Sub(s, e) LayoutModeButtons()
+        LayoutModeButtons()
         ' 事件只绑定一次
         AddHandler _generationModeCombo.SelectedIndexChanged, Sub(s, e)
-                                                                 UpdateModeButtonsStyle(modeSegmentedPanel, _generationModeCombo.SelectedIndex)
+                                                                 UpdateModeButtonsStyle(_modeSegmentedPanel, _generationModeCombo.SelectedIndex)
                                                              End Sub
-        UpdateModeButtonsStyle(modeSegmentedPanel, 0)
+        UpdateModeButtonsStyle(_modeSegmentedPanel, -1)
 
         ' --- 主题输入框 ---
         _topicBox.Dock = DockStyle.Fill
         _topicBox.Multiline = True
         _topicBox.ScrollBars = ScrollBars.Vertical
-        _topicBox.Text = "AI 办公趋势"
+        _topicBox.Text = TopicPromptText
         _topicBox.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
         OfficeAIStyleHelper.StyleTextBoxMultiline(_topicBox)
+        ApplyTopicPromptIfEmpty()
+        AddHandler _topicBox.Enter, AddressOf TopicBox_Enter
+        AddHandler _topicBox.Leave, AddressOf TopicBox_Leave
 
         ' --- 文档选择面板 ---
         _documentPanel.Dock = DockStyle.Fill
@@ -260,40 +276,51 @@ Public Class ThemePptTaskPane
         _documentPanel.SetColumnSpan(_documentPathBox, 2)
 
         ' --- 按钮组 ---
-        Dim buttonPanel As New FlowLayoutPanel()
-        buttonPanel.AutoSize = True
-        buttonPanel.Dock = DockStyle.Fill
-        buttonPanel.FlowDirection = FlowDirection.LeftToRight
-        buttonPanel.WrapContents = True
-        buttonPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
-        OfficeAIStyleHelper.StyleFlowPanel(buttonPanel)
+        _actionButtonPanel.AutoSize = True
+        _actionButtonPanel.Dock = DockStyle.Fill
+        _actionButtonPanel.FlowDirection = FlowDirection.LeftToRight
+        _actionButtonPanel.WrapContents = True
+        _actionButtonPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        _actionButtonPanel.Visible = False
+        OfficeAIStyleHelper.StyleFlowPanel(_actionButtonPanel)
 
-        _generateButton.Text = "生成大纲"
+        _generateButton.Text = "立即创作"
         _generateButton.Width = 104
         _generateButton.Height = OfficeAIStyleHelper.ButtonHeight
         _generateButton.Margin = New Padding(0, 0, 8, 8)
         AddHandler _generateButton.Click, AddressOf GenerateButton_Click
         OfficeAIStyleHelper.StyleButtonPrimary(_generateButton)
 
-        _finishOutlineEditButton.Text = "完成编辑"
+        _restartButton.Text = "重新生成"
+        _restartButton.Width = 96
+        _restartButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _restartButton.Margin = New Padding(0, 0, 8, 8)
+        _restartButton.Visible = False
+        AddHandler _restartButton.Click, AddressOf RestartButton_Click
+        OfficeAIStyleHelper.StyleButtonSecondary(_restartButton)
+
+        _finishOutlineEditButton.Text = "确认内容"
         _finishOutlineEditButton.Width = 104
         _finishOutlineEditButton.Height = OfficeAIStyleHelper.ButtonHeight
         _finishOutlineEditButton.Margin = New Padding(0, 0, 8, 8)
         _finishOutlineEditButton.Enabled = False
+        _finishOutlineEditButton.Visible = False
         AddHandler _finishOutlineEditButton.Click, AddressOf FinishOutlineEditButton_Click
         OfficeAIStyleHelper.StyleButtonSecondary(_finishOutlineEditButton)
 
-        _insertButton.Text = "导入PPT"
+        _insertButton.Text = "下一步"
         _insertButton.Width = 96
         _insertButton.Height = OfficeAIStyleHelper.ButtonHeight
         _insertButton.Margin = New Padding(0, 0, 8, 8)
         _insertButton.Enabled = False
+        _insertButton.Visible = False
         AddHandler _insertButton.Click, AddressOf InsertButton_Click
         OfficeAIStyleHelper.StyleButtonAccent(_insertButton)
 
-        buttonPanel.Controls.Add(_generateButton)
-        buttonPanel.Controls.Add(_finishOutlineEditButton)
-        buttonPanel.Controls.Add(_insertButton)
+        _actionButtonPanel.Controls.Add(_generateButton)
+        _actionButtonPanel.Controls.Add(_restartButton)
+        _actionButtonPanel.Controls.Add(_finishOutlineEditButton)
+        _actionButtonPanel.Controls.Add(_insertButton)
 
         ' --- 模板选择区 ---
         Dim templateSectionLabel = _templateSectionLabel
@@ -358,27 +385,53 @@ Public Class ThemePptTaskPane
         Dim outlineEditorPanel As New TableLayoutPanel()
         outlineEditorPanel.Dock = DockStyle.Fill
         outlineEditorPanel.ColumnCount = 1
-        outlineEditorPanel.RowCount = 2
+        outlineEditorPanel.RowCount = 3
         outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+        outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 42.0F))
         outlineEditorPanel.BackColor = Color.Transparent
 
         Dim outlineEditorLabel As New Label()
         OfficeAIStyleHelper.StyleLabelHeading(outlineEditorLabel)
-        outlineEditorLabel.Text = "Markdown 源码"
+        outlineEditorLabel.Text = "Markdown 内容"
         outlineEditorLabel.Margin = New Padding(0, 0, 0, 4)
 
         _outlineEditor.Dock = DockStyle.Fill
         _outlineEditor.Multiline = True
-        _outlineEditor.ReadOnly = False
+        _outlineEditor.ReadOnly = True
         _outlineEditor.ScrollBars = RichTextBoxScrollBars.Vertical
         _outlineEditor.WordWrap = True
         _outlineEditor.AcceptsTab = True
         OfficeAIStyleHelper.StyleRichTextBox(_outlineEditor)
         AddHandler _outlineEditor.TextChanged, AddressOf OutlineEditor_TextChanged
 
+        _outlineActionPanel.Dock = DockStyle.Fill
+        _outlineActionPanel.FlowDirection = FlowDirection.RightToLeft
+        _outlineActionPanel.WrapContents = False
+        _outlineActionPanel.Padding = New Padding(0, 6, 0, 0)
+        _outlineActionPanel.Margin = New Padding(0)
+        _outlineActionPanel.BackColor = Color.Transparent
+
+        _chooseTemplateFromOutlineButton.Text = "挑选模板"
+        _chooseTemplateFromOutlineButton.Width = 104
+        _chooseTemplateFromOutlineButton.Height = 30
+        _chooseTemplateFromOutlineButton.Margin = New Padding(8, 0, 0, 0)
+        AddHandler _chooseTemplateFromOutlineButton.Click, AddressOf ChooseTemplateFromOutlineButton_Click
+        OfficeAIStyleHelper.StyleButtonPrimary(_chooseTemplateFromOutlineButton)
+
+        _editOutlineButton.Text = "修改大纲"
+        _editOutlineButton.Width = 104
+        _editOutlineButton.Height = 30
+        _editOutlineButton.Margin = New Padding(8, 0, 0, 0)
+        AddHandler _editOutlineButton.Click, AddressOf EditOutlineButton_Click
+        OfficeAIStyleHelper.StyleButtonSecondary(_editOutlineButton)
+
+        _outlineActionPanel.Controls.Add(_chooseTemplateFromOutlineButton)
+        _outlineActionPanel.Controls.Add(_editOutlineButton)
+
         outlineEditorPanel.Controls.Add(outlineEditorLabel, 0, 0)
         outlineEditorPanel.Controls.Add(_outlineEditor, 0, 1)
+        outlineEditorPanel.Controls.Add(_outlineActionPanel, 0, 2)
 
         Dim outlinePreviewPanel As New TableLayoutPanel()
         outlinePreviewPanel.Dock = DockStyle.Fill
@@ -447,6 +500,22 @@ Public Class ThemePptTaskPane
         AddHandler _templateNextPageButton.Click, AddressOf TemplateNextPageButton_Click
         OfficeAIStyleHelper.StyleButtonSmall(_templateNextPageButton)
 
+        _templateNextStepButton.Text = "下一步"
+        _templateNextStepButton.Width = 82
+        _templateNextStepButton.Height = 28
+        _templateNextStepButton.Enabled = False
+        _templateNextStepButton.Margin = New Padding(8, 0, 0, 0)
+        AddHandler _templateNextStepButton.Click, AddressOf InsertButton_Click
+        OfficeAIStyleHelper.StyleButtonPrimary(_templateNextStepButton)
+
+        _templateBackStepButton.Text = "上一步"
+        _templateBackStepButton.Width = 82
+        _templateBackStepButton.Height = 28
+        _templateBackStepButton.Enabled = True
+        _templateBackStepButton.Margin = New Padding(8, 0, 0, 0)
+        AddHandler _templateBackStepButton.Click, AddressOf TemplateBackStepButton_Click
+        OfficeAIStyleHelper.StyleButtonSecondary(_templateBackStepButton)
+
         _templatePageLabel.AutoSize = False
         _templatePageLabel.Width = 104
         _templatePageLabel.Height = 28
@@ -462,6 +531,8 @@ Public Class ThemePptTaskPane
         AddHandler _templatePrevPageButton.Click, AddressOf TemplatePrevPageButton_Click
         OfficeAIStyleHelper.StyleButtonSmall(_templatePrevPageButton)
 
+        _templatePagerPanel.Controls.Add(_templateNextStepButton)
+        _templatePagerPanel.Controls.Add(_templateBackStepButton)
         _templatePagerPanel.Controls.Add(_templateNextPageButton)
         _templatePagerPanel.Controls.Add(_templatePageLabel)
         _templatePagerPanel.Controls.Add(_templatePrevPageButton)
@@ -504,10 +575,10 @@ Public Class ThemePptTaskPane
 
         ' --- 组装布局 ---
         layout.Controls.Add(modeLabel, 0, 0)
-        layout.Controls.Add(modeSegmentedPanel, 0, 1)
+        layout.Controls.Add(_modeSegmentedPanel, 0, 1)
         layout.Controls.Add(_topicBox, 0, 2)
         layout.Controls.Add(_documentPanel, 0, 3)
-        layout.Controls.Add(buttonPanel, 0, 4)
+        layout.Controls.Add(_actionButtonPanel, 0, 4)
         layout.Controls.Add(templateSectionLabel, 0, 5)
         layout.Controls.Add(templatePanel, 0, 6)
         layout.Controls.Add(_contentPanel, 0, 7)
@@ -520,11 +591,26 @@ Public Class ThemePptTaskPane
         _generationModeCombo.Visible = False
         _generationModeCombo.DropDownStyle = ComboBoxStyle.DropDownList
         _generationModeCombo.Items.AddRange(New Object() {GenerationModeTitle, GenerationModeDocument})
-        _generationModeCombo.SelectedIndex = 0
+        _generationModeCombo.SelectedIndex = -1
         AddHandler _generationModeCombo.SelectedIndexChanged, AddressOf GenerationModeCombo_SelectedIndexChanged
         Me.Controls.Add(_generationModeCombo)
 
         UpdateGenerationModeUi()
+    End Sub
+
+    ''' <summary>更新 Segmented Control 按钮样式</summary>
+    Private Sub LayoutModeButtons()
+        Dim buttons = _modeSegmentedPanel.Controls.OfType(Of Button)().OrderBy(Function(btn) CInt(btn.Tag)).ToList()
+        If buttons.Count = 0 Then Return
+
+        Dim gap As Integer = 1
+        Dim availableWidth = Math.Max(220, _modeSegmentedPanel.ClientSize.Width - 2 - gap * (buttons.Count - 1))
+        Dim buttonWidth = Math.Max(104, CInt(Math.Floor(availableWidth / buttons.Count)))
+        Dim buttonHeight = Math.Max(32, _modeSegmentedPanel.ClientSize.Height - 2)
+
+        For i As Integer = 0 To buttons.Count - 1
+            buttons(i).SetBounds(1 + i * (buttonWidth + gap), 1, buttonWidth, buttonHeight)
+        Next
     End Sub
 
     ''' <summary>更新 Segmented Control 按钮样式</summary>
@@ -550,7 +636,19 @@ Public Class ThemePptTaskPane
         _topicBox.Visible = visible
         Dim layout = TryCast(_topicBox.Parent, TableLayoutPanel)
         If layout Is Nothing OrElse layout.RowCount <= 2 Then Return
-        layout.RowStyles(2).Height = If(visible, 152.0F, 0)
+        layout.RowStyles(2).Height = If(visible, 220.0F, 0)
+    End Sub
+
+    Private Sub SetGenerationInputSectionVisible(visible As Boolean)
+        _generationModeLabel.Visible = visible
+        _modeSegmentedPanel.Visible = visible
+        _documentPanel.Visible = False
+        _actionButtonPanel.Visible = False
+        If Not visible Then
+            SetTopicBoxVisible(False)
+        Else
+            UpdateGenerationModeUi()
+        End If
     End Sub
 
     ''' <summary>控制模板选择区域可见性</summary>
@@ -565,29 +663,59 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub GenerationModeCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
+        If _generationModeCombo.SelectedIndex >= 0 Then
+            _hasChosenGenerationMode = True
+        End If
         UpdateGenerationModeUi()
     End Sub
 
+    Private Sub SelectGenerationMode(index As Integer)
+        If index < 0 OrElse index >= _generationModeCombo.Items.Count Then Return
+
+        _hasChosenGenerationMode = True
+        If _generationModeCombo.SelectedIndex = index Then
+            UpdateGenerationModeUi()
+        Else
+            _generationModeCombo.SelectedIndex = index
+        End If
+    End Sub
+
     Private Sub UpdateGenerationModeUi()
+        Dim hasMode = _hasChosenGenerationMode AndAlso _generationModeCombo.SelectedIndex >= 0
+        If Not hasMode Then
+            _documentPanel.Visible = False
+            SetTopicBoxVisible(False)
+            _actionButtonPanel.Visible = False
+            SetTemplateSectionVisible(False)
+            _contentPanel.Visible = False
+            UpdateModeButtonsStyle(_modeSegmentedPanel, -1)
+            SetStatus("请选择生成方式。")
+            Return
+        End If
+
         Dim mode = GetSelectedGenerationMode()
         Dim isDocumentMode = String.Equals(mode, GenerationModeDocument, StringComparison.Ordinal)
+        _actionButtonPanel.Visible = True
         _documentPanel.Visible = isDocumentMode
         SetTopicBoxVisible(Not isDocumentMode)
+        If Not HasGenerationState() Then _contentPanel.Visible = False
 
         Select Case mode
             Case GenerationModeDocument
                 SetStatus("选择 Word 或其他文档后，直接生成 Markdown 大纲。")
             Case GenerationModeMarkdown
-                If String.Equals(_topicBox.Text.Trim(), "AI 办公趋势", StringComparison.Ordinal) OrElse
+                If String.Equals(_topicBox.Text.Trim(), TopicPromptText, StringComparison.Ordinal) OrElse
                    _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
                     _topicBox.Text = "# 演示主题" & vbCrLf & vbCrLf & "## 章节一" & vbCrLf & "### 页面标题" & vbCrLf & "- 要点内容"
                 End If
                 SetStatus("粘贴 Markdown 大纲，确认后再选择模板生成 PPT。")
             Case Else
-                If _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
-                    _topicBox.Text = "AI 办公趋势"
+                If String.IsNullOrWhiteSpace(_topicBox.Text) OrElse
+                   _topicBox.Text.Trim().StartsWith("可选：", StringComparison.Ordinal) Then
+                    _topicBox.Text = TopicPromptText
                 End If
-                SetStatus("输入主题生成 Markdown 大纲，编辑完成后再选择模板生成 PPT。")
+                ApplyTopicPromptIfEmpty()
+                SetStatus("输入主题后点击立即创作，生成可编辑内容。")
         End Select
     End Sub
 
@@ -596,6 +724,31 @@ Public Class ThemePptTaskPane
         If String.IsNullOrWhiteSpace(selectedMode) Then Return GenerationModeTitle
         Return selectedMode
     End Function
+
+    Private Function IsTopicPromptActive() As Boolean
+        Return String.Equals(If(_topicBox.Text, "").Trim(), TopicPromptText, StringComparison.Ordinal)
+    End Function
+
+    Private Sub ApplyTopicPromptIfEmpty()
+        If _topicBox.IsDisposed Then Return
+        If String.IsNullOrWhiteSpace(_topicBox.Text) OrElse IsTopicPromptActive() Then
+            _topicBox.Text = TopicPromptText
+            _topicBox.ForeColor = OfficeAIStyleHelper.TextSecondary
+        Else
+            _topicBox.ForeColor = OfficeAIStyleHelper.TextPrimary
+        End If
+    End Sub
+
+    Private Sub TopicBox_Enter(sender As Object, e As EventArgs)
+        If IsTopicPromptActive() Then
+            _topicBox.Clear()
+            _topicBox.ForeColor = OfficeAIStyleHelper.TextPrimary
+        End If
+    End Sub
+
+    Private Sub TopicBox_Leave(sender As Object, e As EventArgs)
+        ApplyTopicPromptIfEmpty()
+    End Sub
 
     Private Sub ChooseDocumentButton_Click(sender As Object, e As EventArgs)
         Using dialog As New OpenFileDialog()
@@ -694,6 +847,9 @@ Public Class ThemePptTaskPane
             Return
         End If
 
+        _actionButtonPanel.Visible = False
+        SetTemplateSectionVisible(False)
+        _contentPanel.Visible = True
         _outlineWorkspacePanel.Visible = False
         _templateGalleryPanel.Visible = False
         _templateListBox.Visible = False
@@ -709,14 +865,21 @@ Public Class ThemePptTaskPane
             Return
         End If
 
+        SetGenerationInputSectionVisible(False)
+        _actionButtonPanel.Visible = False
+        _contentPanel.Visible = True
         _templateGalleryPanel.Visible = False
         _templateListBox.Visible = False
         _templateWebView.Visible = False
         _templatePaintGallery.Visible = False
         _outputBox.Visible = False
         _outlineWorkspacePanel.Visible = True
+        _outlineWorkspacePanel.Panel2Collapsed = True
+        _outlineEditor.ReadOnly = True
+        _editOutlineButton.Text = "修改大纲"
+        _chooseTemplateFromOutlineButton.Enabled = Not String.IsNullOrWhiteSpace(GetEditedMarkdown())
+        _outlineActionPanel.Visible = True
         _outlineWorkspacePanel.BringToFront()
-        BeginInvokeIfAlive(CType(Sub() ApplyOutlineWorkspaceLayout(), MethodInvoker))
     End Sub
 
     Private Sub ApplyOutlineWorkspaceLayout()
@@ -746,12 +909,17 @@ Public Class ThemePptTaskPane
             Return
         End If
 
+        SetGenerationInputSectionVisible(False)
+        SetTemplateSectionVisible(False)
+        _actionButtonPanel.Visible = False
+        _contentPanel.Visible = True
         _outlineWorkspacePanel.Visible = False
         _templateListBox.Visible = False
         _templateWebView.Visible = False
         _templatePaintGallery.Visible = False
         _outputBox.Visible = False
         _templateGalleryPanel.Visible = True
+        _templateBackStepButton.Enabled = True
         _templateGalleryPanel.BringToFront()
         RefreshTemplatePager()
         ResizeTemplateCards()
@@ -970,6 +1138,20 @@ Public Class ThemePptTaskPane
         Await LoadTemplatesAsync(_templatePage + 1)
     End Sub
 
+    Private Sub TemplateBackStepButton_Click(sender As Object, e As EventArgs)
+        _templateGalleryPanel.Visible = False
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        ShowOutlineEditor()
+        _outlineEditor.ReadOnly = False
+        _outlineEditor.Focus()
+        _outlineEditor.SelectionStart = _outlineEditor.TextLength
+        _outlineEditor.ScrollToCaret()
+        _editOutlineButton.Text = "修改大纲"
+        SetStatus("已返回大纲，可修改后再点击右下角的挑选模板。")
+        RefreshActionButtons()
+    End Sub
+
     Private Sub RefreshTemplatePager()
         If Not IsOnPaneUiThread() Then
             BeginInvokeIfAlive(CType(Sub() RefreshTemplatePager(), MethodInvoker))
@@ -1003,16 +1185,31 @@ Public Class ThemePptTaskPane
                Not String.IsNullOrWhiteSpace(selectedTemplate.Id)
     End Function
 
+    Private Function HasGenerationState() As Boolean
+        Return Not String.IsNullOrWhiteSpace(_outlineMarkdown) OrElse
+               Not String.IsNullOrWhiteSpace(GetEditedMarkdown()) OrElse
+               _isOutlineEditCompleted OrElse
+               _templateConfirmedForCurrentOutline OrElse
+               Not String.IsNullOrWhiteSpace(_lastGeneratedPptId) OrElse
+               _lastImportedSlideCount > 0 OrElse
+               (_outputBox.Visible AndAlso Not String.IsNullOrWhiteSpace(_outputBox.Text))
+    End Function
+
     Private Sub RefreshActionButtons()
         If Not IsOnPaneUiThread() Then
             BeginInvokeIfAlive(CType(Sub() RefreshActionButtons(), MethodInvoker))
             Return
         End If
 
+        _restartButton.Visible = HasGenerationState()
+        _restartButton.Enabled = Not _isTemplateLoading
         _finishOutlineEditButton.Enabled = Not String.IsNullOrWhiteSpace(GetEditedMarkdown()) AndAlso Not _isOutlineEditCompleted
+        _chooseTemplateFromOutlineButton.Enabled = Not _isTemplateLoading AndAlso Not String.IsNullOrWhiteSpace(GetEditedMarkdown())
+        _editOutlineButton.Enabled = Not _isTemplateLoading AndAlso Not String.IsNullOrWhiteSpace(GetEditedMarkdown())
         _refreshTemplatesButton.Enabled = _isOutlineEditCompleted AndAlso Not _isTemplateLoading
         _selectTemplateButton.Enabled = CanChooseTemplate()
         _insertButton.Enabled = CanGenerateFromTemplate()
+        _templateNextStepButton.Enabled = CanGenerateFromTemplate()
         RefreshTemplatePager()
     End Sub
 
@@ -1043,19 +1240,39 @@ Public Class ThemePptTaskPane
         Dim value = If(markdown, "").Trim()
         If String.IsNullOrWhiteSpace(value) Then Return ""
 
+        value = NormalizeMarkdownLineBreaks(value)
+        value = NormalizeGeneratedMarkdownHeadingBodies(value)
+        value = NormalizeDocmeeMarkdownStructure(value)
+
+        Return value.Trim().Replace(vbLf, Environment.NewLine)
+    End Function
+
+    Private Function NormalizeMarkdownForStreamingDisplay(markdown As String) As String
+        Dim value = If(markdown, "")
+        If String.IsNullOrWhiteSpace(value) Then Return ""
+
+        value = NormalizeMarkdownLineBreaks(value)
+        value = NormalizeGeneratedMarkdownHeadingBodies(value)
+        Return value.TrimStart().Replace(vbLf, Environment.NewLine)
+    End Function
+
+    Private Function NormalizeMarkdownLineBreaks(markdown As String) As String
+        Dim value = If(markdown, "")
+        If String.IsNullOrWhiteSpace(value) Then Return ""
+
         value = value.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
         value = value.Replace("\r\n", vbLf).Replace("\n", vbLf).Replace("\r", vbLf)
         value = value.Replace(ChrW(&HA0), " ")
 
         value = System.Text.RegularExpressions.Regex.Replace(value, "[ \t]+\n", vbLf)
-        value = System.Text.RegularExpressions.Regex.Replace(value, "([^\n])\s+(#{1,6}\s+)", "$1" & vbLf & vbLf & "$2")
+        value = System.Text.RegularExpressions.Regex.Replace(value, "([^#\n])(?=#{1,6}\s+)", "$1" & vbLf & vbLf)
+        value = System.Text.RegularExpressions.Regex.Replace(value, "([^#\n])\s+(#{1,6}\s+)", "$1" & vbLf & vbLf & "$2")
         value = System.Text.RegularExpressions.Regex.Replace(value, "([^\n])\s+([-*+]\s+)", "$1" & vbLf & "$2")
         value = System.Text.RegularExpressions.Regex.Replace(value, "([^\n])\s+(\d{1,2}[\.\)]\s+)", "$1" & vbLf & "$2")
+        value = System.Text.RegularExpressions.Regex.Replace(value, "\n[ \t]+(?=#{1,6}\s+)", vbLf)
         value = System.Text.RegularExpressions.Regex.Replace(value, "\n{3,}", vbLf & vbLf)
-        value = NormalizeGeneratedMarkdownHeadingBodies(value)
-        value = NormalizeDocmeeMarkdownStructure(value)
 
-        Return value.Trim().Replace(vbLf, Environment.NewLine)
+        Return value
     End Function
 
     Private Function PrepareEditedMarkdownForDocmee(markdown As String) As String
@@ -1150,7 +1367,8 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Function BuildFallbackMarkdownTitle(firstHeadingText As String, markdown As String) As String
-        If Not String.IsNullOrWhiteSpace(_topicBox.Text) Then Return CleanMarkdown(_topicBox.Text.Trim())
+        Dim topic = GetCreativeTopicText()
+        If Not String.IsNullOrWhiteSpace(topic) Then Return CleanMarkdown(topic)
         If Not String.IsNullOrWhiteSpace(firstHeadingText) Then Return CleanMarkdown(firstHeadingText.Trim())
 
         Dim normalized = If(markdown, "").Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
@@ -1397,14 +1615,35 @@ Public Class ThemePptTaskPane
         _isOutlineEditCompleted = True
         _templateConfirmedForCurrentOutline = False
         _confirmedTemplateId = ""
-        SetTemplateSectionVisible(True)
+        SetTemplateSectionVisible(False)
         RefreshActionButtons()
     End Sub
 
     Private Async Sub FinishOutlineEditButton_Click(sender As Object, e As EventArgs)
+        Await ChooseTemplateFromOutlineAsync()
+    End Sub
+
+    Private Async Sub ChooseTemplateFromOutlineButton_Click(sender As Object, e As EventArgs)
+        Await ChooseTemplateFromOutlineAsync()
+    End Sub
+
+    Private Sub EditOutlineButton_Click(sender As Object, e As EventArgs)
+        _outlineEditor.ReadOnly = False
+        _outlineEditor.Focus()
+        _outlineEditor.SelectionStart = _outlineEditor.TextLength
+        _outlineEditor.ScrollToCaret()
+        _isOutlineEditCompleted = False
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        SetTemplateSectionVisible(False)
+        RefreshActionButtons()
+        SetStatus("正在修改大纲，改完后点击右下角的挑选模板。")
+    End Sub
+
+    Private Async Function ChooseTemplateFromOutlineAsync() As Task
         Dim normalizedMarkdown = PrepareEditedMarkdownForDocmee(GetEditedMarkdown())
         If String.IsNullOrWhiteSpace(normalizedMarkdown) Then
-            MessageBox.Show("请先填写 Markdown 大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            MessageBox.Show("请先填写内容。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
@@ -1419,7 +1658,8 @@ Public Class ThemePptTaskPane
             SetOutlineEditorText(normalizedMarkdown)
         End If
         ApplyOutlineEditCompletion()
-        SetStatus("Markdown 大纲编辑完成，正在加载模板...")
+        _outlineEditor.ReadOnly = True
+        SetStatus("内容已确认，正在加载模板...")
 
         If _templateCombo.Items.Count = 0 Then
             Await LoadTemplatesAsync()
@@ -1428,11 +1668,13 @@ Public Class ThemePptTaskPane
         End If
 
         If _templateCombo.Items.Count > 0 AndAlso _lastTemplateLoadUsedFallback Then
-            SetStatus($"Markdown 大纲编辑完成，模板接口失败，已使用内置模板 {_templateCombo.Items.Count} 个，请预览并选择模板后生成。")
+            SetStatus($"模板接口失败，已使用内置模板 {_templateCombo.Items.Count} 个。选择模板后点击下一步。")
+            ShowTemplateGallery()
         ElseIf _templateCombo.Items.Count > 0 Then
-            SetStatus("Markdown 大纲编辑完成，请预览并选择模板后生成。")
+            SetStatus("请选择模板，选中后点击下一步。")
+            ShowTemplateGallery()
         End If
-    End Sub
+    End Function
 
     Private Sub OutlineEditor_TextChanged(sender As Object, e As EventArgs)
         If Not _suppressOutlineEditorChange Then
@@ -1451,7 +1693,7 @@ Public Class ThemePptTaskPane
         RefreshActionButtons()
 
         If hadCompletedEdit Then
-            SetStatus("Markdown 大纲已修改，请先完成编辑，再选择模板生成。")
+            SetStatus("大纲已修改，改完后点击右下角的挑选模板。")
         End If
     End Sub
 
@@ -1728,9 +1970,53 @@ Public Class ThemePptTaskPane
         Await GenerateOutlineAsync()
     End Sub
 
+    Private Sub RestartButton_Click(sender As Object, e As EventArgs)
+        If HasGenerationState() Then
+            Dim result = MessageBox.Show(
+                "将清空右侧当前大纲和模板选择，回到输入状态。已导入到 PPT 的页面不会删除。是否继续？",
+                "重新生成",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Question)
+            If result <> DialogResult.OK Then Return
+        End If
+
+        ResetGenerationFlow()
+    End Sub
+
+    Private Sub ResetGenerationFlow()
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() ResetGenerationFlow(), MethodInvoker))
+            Return
+        End If
+
+        _taskId = ""
+        _outline = Nothing
+        _outlineMarkdown = ""
+        _isOutlineEditCompleted = False
+        _templateConfirmedForCurrentOutline = False
+        _confirmedTemplateId = ""
+        _hasChosenGenerationMode = False
+        _generationModeCombo.SelectedIndex = -1
+        _selectedDocumentPath = ""
+        _documentPathBox.Clear()
+        _outlineStreamBuffer.Clear()
+        ClearGeneratedPptState()
+        CancelTemplateCoverLoad()
+        SetOutlineEditorText("")
+        _outputBox.Clear()
+        SetTemplateSectionVisible(False)
+        _contentPanel.Visible = False
+        ShowOutlineOutput()
+        _contentPanel.Visible = False
+        SetGenerationInputSectionVisible(True)
+        _generateButton.Enabled = True
+        RefreshActionButtons()
+        SetStatus("请选择生成方式。")
+    End Sub
+
     Private Async Sub RefreshTemplatesButton_Click(sender As Object, e As EventArgs)
         If Not _isOutlineEditCompleted Then
-            MessageBox.Show("请先完成 Markdown 大纲编辑。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            MessageBox.Show("请先确认内容编辑。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
@@ -1741,7 +2027,7 @@ Public Class ThemePptTaskPane
         If _isTemplateLoading Then Return
 
         If Not _isOutlineEditCompleted Then
-            MessageBox.Show("请先完成 Markdown 大纲编辑。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            MessageBox.Show("请先确认内容编辑。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
@@ -1855,18 +2141,24 @@ Public Class ThemePptTaskPane
             _selectTemplateButton.Enabled = False
             CancelTemplateCoverLoad()
             ClearTemplateCoverImages()
-            SetStatus("Docmee 配置已保存，请刷新模板或重新生成大纲。")
+            SetStatus("Docmee 配置已保存，请重新创作内容。")
             RefreshActionButtons()
         End Using
     End Sub
 
     Private Async Function GenerateOutlineAsync() As Task
+        If Not _hasChosenGenerationMode OrElse _generationModeCombo.SelectedIndex < 0 Then
+            MessageBox.Show("请先选择生成方式。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
         Dim mode = GetSelectedGenerationMode()
 
         _generateButton.Enabled = False
         _finishOutlineEditButton.Enabled = False
         ShowOutlineOutput()
         _outputBox.Clear()
+        _outlineStreamBuffer.Clear()
         _outline = Nothing
         _outlineMarkdown = ""
         SetOutlineEditorText("")
@@ -1885,17 +2177,17 @@ Public Class ThemePptTaskPane
                     _outlineMarkdown = PrepareMarkdownOutlineFromInput()
                     _taskId = ""
                 Case Else
-                    Dim topic = _topicBox.Text.Trim()
+                    Dim topic = GetCreativeTopicText()
                     If String.IsNullOrWhiteSpace(topic) Then
-                        MessageBox.Show("请输入 PPT 主题。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                        MessageBox.Show("请输入 PPT 主题。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
                         Return
                     End If
 
                     Dim requestContent = BuildRequestContent(topic)
-                    SetStatus("正在创建 Docmee 主题任务...")
+                    SetStatus("正在创建 AI 智能创作任务...")
                     _taskId = Await _client.CreateTaskAsync(requestContent)
 
-                    SetStatus("正在生成 PPT Markdown 大纲...")
+                    SetStatus("正在创作 PPT 内容...")
                     _outputBox.Clear()
                     _outlineMarkdown = Await _client.GenerateMarkdownContentAsync(_taskId, AddressOf AppendOutlineStreamText)
             End Select
@@ -1903,17 +2195,23 @@ Public Class ThemePptTaskPane
             SetOutlineEditorText(_outlineMarkdown.Trim())
             MarkOutlineEditingRequired()
             ShowOutlineEditor()
-            SetStatus("大纲已生成，请编辑 Markdown，完成编辑后再选择模板生成。")
+            SetStatus("内容已生成，可直接编辑，确认后选择模板导入 PPT。")
         Catch ex As Exception
             AppendThemePptLog("GenerateOutlineAsync exception: " & ex.ToString())
             SetStatus("生成失败。")
             ShowOutlineOutput()
             SetTopicBoxVisible(True)
-            MessageBox.Show("主题生成PPT失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("AI智能创作失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
             _generateButton.Enabled = True
             RefreshActionButtons()
         End Try
+    End Function
+
+    Private Function GetCreativeTopicText() As String
+        Dim topic = If(_topicBox.Text, "").Trim()
+        If String.Equals(topic, TopicPromptText, StringComparison.Ordinal) Then Return ""
+        Return topic
     End Function
 
     Private Async Function GenerateOutlineFromDocumentAsync() As Task(Of String)
@@ -1990,7 +2288,9 @@ Public Class ThemePptTaskPane
             Return
         End If
 
-        _outputBox.AppendText(chunkText)
+        _outlineStreamBuffer.Append(chunkText)
+        Dim formattedText = NormalizeMarkdownForStreamingDisplay(_outlineStreamBuffer.ToString())
+        _outputBox.Text = formattedText
         _outputBox.SelectionStart = _outputBox.TextLength
         _outputBox.ScrollToCaret()
     End Sub
@@ -2029,7 +2329,7 @@ Public Class ThemePptTaskPane
                                                   If _templateCombo.Items.Count = 0 Then
                                                       SetStatus("未获取到可用模板。")
                                                   Else
-                                                      SetStatus($"已加载第 {_templatePage} 页，共 {_templateCombo.Items.Count} 个模板。选择模板后点击导入PPT。")
+                                                      SetStatus($"已加载第 {_templatePage} 页，共 {_templateCombo.Items.Count} 个模板。选择模板后点击下一步。")
                                                       ShowTemplateGallery()
                                                   End If
                                               End Sub, MethodInvoker))
@@ -2783,7 +3083,7 @@ Public Class ThemePptTaskPane
         RefreshActionButtons()
 
         Dim displayName = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
-        SetStatus("已选择模板：" & displayName & "。点击导入PPT开始生成。")
+        SetStatus("已选择模板：" & displayName & "。点击下一步开始生成。")
     End Sub
 
     Private Sub TemplateCombo_SelectedIndexChanged(sender As Object, e As EventArgs)
@@ -2974,7 +3274,7 @@ Public Class ThemePptTaskPane
     Private Async Function GenerateAndImportPptxAsync() As Task
         Dim markdown = PrepareEditedMarkdownForDocmee(GetEditedMarkdown())
         If String.IsNullOrWhiteSpace(markdown) Then
-            MessageBox.Show("请先生成或填写大纲。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            MessageBox.Show("请先创作或填写内容。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
@@ -2991,7 +3291,7 @@ Public Class ThemePptTaskPane
 
         Dim selectedTemplate = TryCast(_templateCombo.SelectedItem, DocmeeTemplateInfo)
         If selectedTemplate Is Nothing OrElse String.IsNullOrWhiteSpace(selectedTemplate.Id) Then
-            MessageBox.Show("请先选择模板。", "主题生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            MessageBox.Show("请先选择模板。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
             Return
         End If
 
@@ -3040,6 +3340,7 @@ Public Class ThemePptTaskPane
             CaptureImportedSlideRange(importedCount)
             AppendTaskPaneLine("已导入页数: " & importedCount.ToString())
             SetStatus($"已生成并导入当前演示文稿，共 {importedCount} 页。")
+            CompleteImportAndHidePane()
         Catch ex As Exception
             SetStatus("生成或导入失败。")
             AppendTaskPaneLine("生成并导入失败: " & ex.Message)
@@ -3050,6 +3351,20 @@ Public Class ThemePptTaskPane
             RefreshActionButtons()
         End Try
     End Function
+
+    Private Sub CompleteImportAndHidePane()
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() CompleteImportAndHidePane(), MethodInvoker))
+            Return
+        End If
+
+        Try
+            ResetGenerationFlow()
+            Globals.ThisAddIn.HideThemePptTaskPane()
+        Catch ex As Exception
+            AppendThemePptLog("Hide task pane after import failed: " & ex.ToString())
+        End Try
+    End Sub
 
     Private Sub SaveDocmeePptxIdToCurrentPresentation(pptxId As String)
         If String.IsNullOrWhiteSpace(pptxId) Then Return
@@ -3144,12 +3459,12 @@ Public Class ThemePptTaskPane
 
     Public Sub InsertOutlineIntoPresentation(outline As JObject)
         If outline Is Nothing Then
-            Throw New InvalidOperationException("请先生成大纲。")
+            Throw New InvalidOperationException("请先创作内容。")
         End If
 
         Dim presentation = GetOrCreatePresentation()
         Dim root = GetContentRoot(outline)
-        Dim presentationTitle = GetNodeText(root, "主题生成PPT")
+        Dim presentationTitle = GetNodeText(root, "AI生成PPT")
         Dim sections = GetChildren(root)
 
         CreateCoverSlide(presentation, presentationTitle)
@@ -3622,7 +3937,7 @@ Public Class ThemePptTaskPane
 
     Private Function ConvertOutlineToMarkdown(outline As JObject) As String
         Dim root = GetContentRoot(outline)
-        Dim title = CleanMarkdown(GetNodeText(root, "主题生成PPT"))
+        Dim title = CleanMarkdown(GetNodeText(root, "AI生成PPT"))
         Dim builder As New StringBuilder()
         builder.AppendLine("# " & title)
         builder.AppendLine()
