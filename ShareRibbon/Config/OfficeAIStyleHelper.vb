@@ -35,10 +35,12 @@ Public Module OfficeAIStyleHelper
     Public ReadOnly FontHeading As New Font("Microsoft YaHei UI", 11.0!, FontStyle.Bold)
 
     ' 尺寸常量
-    Public Const ButtonHeight As Integer = 32
-    Public Const ButtonHeightSmall As Integer = 28
-    Public Const InputHeight As Integer = 28
-    Public Const CornerRadius As Integer = 6
+    Public Const ButtonHeight As Integer = 48
+    Public Const ButtonHeightSmall As Integer = 44
+    Public Const ButtonMinWidth As Integer = 128
+    Public Const ButtonSmallMinWidth As Integer = 108
+    Public Const InputHeight As Integer = 40
+    Public Const CornerRadius As Integer = 10
     Public Const SpacingXs As Integer = 4
     Public Const SpacingSm As Integer = 8
     Public Const SpacingMd As Integer = 12
@@ -48,20 +50,17 @@ Public Module OfficeAIStyleHelper
 
     ''' <summary>品牌色填充主按钮</summary>
     Public Sub StyleButtonPrimary(btn As Button)
-        btn.FlatStyle = FlatStyle.Flat
+        ApplyButtonBase(btn, ButtonHeight, ButtonMinWidth, FontUiBold)
         btn.FlatAppearance.BorderSize = 0
         btn.BackColor = BrandPrimary
         btn.ForeColor = Color.White
-        btn.Font = FontUiBold
-        btn.Height = ButtonHeight
-        btn.Cursor = Cursors.Hand
-        btn.TextAlign = ContentAlignment.MiddleCenter
-        btn.UseVisualStyleBackColor = False
         AddHandler btn.MouseEnter, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = BrandPrimaryDark
                                        btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.MouseLeave, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = BrandPrimary
                                        btn.ForeColor = Color.White
                                    End Sub
@@ -78,21 +77,18 @@ Public Module OfficeAIStyleHelper
 
     ''' <summary>边框次要按钮</summary>
     Public Sub StyleButtonSecondary(btn As Button)
-        btn.FlatStyle = FlatStyle.Flat
+        ApplyButtonBase(btn, ButtonHeight, ButtonMinWidth, FontUi)
         btn.FlatAppearance.BorderSize = 1
         btn.FlatAppearance.BorderColor = BorderMedium
         btn.BackColor = BgSurface
         btn.ForeColor = TextPrimary
-        btn.Font = FontUi
-        btn.Height = ButtonHeight
-        btn.Cursor = Cursors.Hand
-        btn.TextAlign = ContentAlignment.MiddleCenter
-        btn.UseVisualStyleBackColor = False
         AddHandler btn.MouseEnter, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = BrandPrimaryLight
                                        btn.FlatAppearance.BorderColor = BrandPrimary
                                    End Sub
         AddHandler btn.MouseLeave, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = BgSurface
                                        btn.FlatAppearance.BorderColor = BorderMedium
                                    End Sub
@@ -111,26 +107,23 @@ Public Module OfficeAIStyleHelper
 
     ''' <summary>强调色按钮（橙色）</summary>
     Public Sub StyleButtonAccent(btn As Button)
-        btn.FlatStyle = FlatStyle.Flat
+        ApplyButtonBase(btn, ButtonHeight, ButtonMinWidth, FontUiBold)
         btn.FlatAppearance.BorderSize = 0
-        btn.BackColor = BrandAccent
+        btn.BackColor = BrandPrimary
         btn.ForeColor = Color.White
-        btn.Font = FontUiBold
-        btn.Height = ButtonHeight
-        btn.Cursor = Cursors.Hand
-        btn.TextAlign = ContentAlignment.MiddleCenter
-        btn.UseVisualStyleBackColor = False
         AddHandler btn.MouseEnter, Sub(s, e)
-                                       btn.BackColor = Color.FromArgb(234, 88, 12)
+                                       If Not btn.Enabled Then Return
+                                       btn.BackColor = BrandPrimaryDark
                                        btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.MouseLeave, Sub(s, e)
-                                       btn.BackColor = BrandAccent
+                                       If Not btn.Enabled Then Return
+                                       btn.BackColor = BrandPrimary
                                        btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.EnabledChanged, Sub(s, e)
                                            If btn.Enabled Then
-                                               btn.BackColor = BrandAccent
+                                               btn.BackColor = BrandPrimary
                                                btn.ForeColor = Color.White
                                            Else
                                                btn.BackColor = BorderMedium
@@ -141,41 +134,37 @@ Public Module OfficeAIStyleHelper
 
     ''' <summary>危险按钮（红色）</summary>
     Public Sub StyleButtonDanger(btn As Button)
-        btn.FlatStyle = FlatStyle.Flat
+        ApplyButtonBase(btn, ButtonHeight, ButtonMinWidth, FontUiBold)
         btn.FlatAppearance.BorderSize = 0
         btn.BackColor = BrandDanger
         btn.ForeColor = Color.White
-        btn.Font = FontUiBold
-        btn.Height = ButtonHeight
-        btn.Cursor = Cursors.Hand
-        btn.TextAlign = ContentAlignment.MiddleCenter
-        btn.UseVisualStyleBackColor = False
         AddHandler btn.MouseEnter, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = Color.FromArgb(220, 38, 38)
+                                       btn.ForeColor = Color.White
                                    End Sub
         AddHandler btn.MouseLeave, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = BrandDanger
+                                       btn.ForeColor = Color.White
                                    End Sub
     End Sub
 
     ''' <summary>小号图标按钮</summary>
     Public Sub StyleButtonSmall(btn As Button)
-        btn.FlatStyle = FlatStyle.Flat
+        ApplyButtonBase(btn, ButtonHeightSmall, ButtonSmallMinWidth, FontUi)
         btn.FlatAppearance.BorderSize = 1
         btn.FlatAppearance.BorderColor = BorderMedium
         btn.BackColor = BgSurface
         btn.ForeColor = TextSecondary
-        btn.Font = FontUiSmall
-        btn.Height = ButtonHeightSmall
-        btn.Cursor = Cursors.Hand
-        btn.TextAlign = ContentAlignment.MiddleCenter
-        btn.UseVisualStyleBackColor = False
         AddHandler btn.MouseEnter, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = BrandPrimaryLight
                                        btn.ForeColor = BrandPrimary
                                        btn.FlatAppearance.BorderColor = BrandPrimary
                                    End Sub
         AddHandler btn.MouseLeave, Sub(s, e)
+                                       If Not btn.Enabled Then Return
                                        btn.BackColor = BgSurface
                                        btn.ForeColor = TextSecondary
                                        btn.FlatAppearance.BorderColor = BorderMedium
@@ -185,6 +174,40 @@ Public Module OfficeAIStyleHelper
     ' ========== 输入控件样式 ==========
 
     ''' <summary>文本框样式</summary>
+    Private Sub ApplyButtonBase(btn As Button, height As Integer, minWidth As Integer, font As Font)
+        btn.FlatStyle = FlatStyle.Flat
+        btn.Font = font
+        btn.Height = height
+        btn.MinimumSize = New Size(minWidth, height)
+        btn.Padding = New Padding(18, 0, 18, 0)
+        btn.Cursor = Cursors.Hand
+        btn.TextAlign = ContentAlignment.MiddleCenter
+        btn.UseVisualStyleBackColor = False
+        btn.AutoEllipsis = False
+        EnsureButtonTextFits(btn, minWidth)
+        ApplyButtonRoundedRegion(btn)
+        AddHandler btn.Resize, Sub(s, e) ApplyButtonRoundedRegion(btn)
+        AddHandler btn.TextChanged, Sub(s, e) EnsureButtonTextFits(btn, minWidth)
+    End Sub
+
+    Private Sub EnsureButtonTextFits(btn As Button, minWidth As Integer)
+        If btn Is Nothing OrElse btn.IsDisposed Then Return
+
+        Dim measured = TextRenderer.MeasureText(If(btn.Text, ""), btn.Font)
+        Dim targetWidth = Math.Max(minWidth, measured.Width + btn.Padding.Horizontal + 20)
+        If btn.Width < targetWidth Then btn.Width = targetWidth
+    End Sub
+
+    Private Sub ApplyButtonRoundedRegion(btn As Button)
+        If btn.Width <= 0 OrElse btn.Height <= 0 Then Return
+
+        Dim oldRegion = btn.Region
+        Using path = CreateRoundedRect(New Rectangle(0, 0, btn.Width, btn.Height), CornerRadius)
+            btn.Region = New Region(path)
+        End Using
+        If oldRegion IsNot Nothing Then oldRegion.Dispose()
+    End Sub
+
     Public Sub StyleTextBox(tb As TextBoxBase)
         tb.BackColor = BgInput
         tb.ForeColor = TextPrimary

@@ -21,6 +21,8 @@ Public Class ThemePptTaskPane
     Private Const ThemePptPaneBuild As String = "2026.06.04.9"
     Private Const MaxConcurrentTemplateCoverLoads As Integer = 1
     Private Const TemplatePageSize As Integer = 8
+    Private Const TemplateCardBottomSpacerName As String = "TemplateCardBottomSpacer"
+    Private Const TemplateCardBottomSpacerHeight As Integer = 220
     Private Const TemplateCoverHostName As String = "theme-ppt-covers.local"
     Private Const DocmeePptxIdTagName As String = "wenduoduoAI_DocmeePptxId"
     Private Const WM_SETREDRAW As Integer = &HB
@@ -117,7 +119,7 @@ Public Class ThemePptTaskPane
     Private ReadOnly _templateStyleFilterView As New TemplateFilterPillButton()
     Private ReadOnly _templateCategoryFilterView As New TemplateFilterPillButton()
     Private ReadOnly _templateThemeColorFilterView As New TemplateColorFilterButton()
-    Private ReadOnly _templateCardPanel As New FlowLayoutPanel()
+    Private ReadOnly _templateCardPanel As New TemplateCardFlowLayoutPanel()
     Private ReadOnly _templatePagerPanel As New FlowLayoutPanel()
     Private ReadOnly _templatePrevPageButton As New Button()
     Private ReadOnly _templateNextPageButton As New Button()
@@ -137,6 +139,7 @@ Public Class ThemePptTaskPane
     Private ReadOnly _templateCoverFilePaths As New Dictionary(Of String, String)()
     Private ReadOnly _templateCoverMessages As New Dictionary(Of String, String)()
     Private ReadOnly _statusLabel As New Label()
+    Private _templateWheelMessageFilter As TemplateWheelMessageFilter
     Private _templateCoverLoadGeneration As Integer
     Private _templateWebViewReady As Boolean
     Private _templateWebViewInitializing As Boolean
@@ -149,8 +152,19 @@ Public Class ThemePptTaskPane
         _pptApp = pptApp
         AppendThemePptLog("Pane constructing. Build=" & ThemePptPaneBuild)
         BuildLayout()
+        _templateWheelMessageFilter = New TemplateWheelMessageFilter(Me)
+        Application.AddMessageFilter(_templateWheelMessageFilter)
         AddHandler Me.Load, AddressOf ThemePptTaskPane_Load
         AppendThemePptLog("Pane constructed.")
+    End Sub
+
+    Protected Overrides Sub Dispose(disposing As Boolean)
+        If disposing AndAlso _templateWheelMessageFilter IsNot Nothing Then
+            Application.RemoveMessageFilter(_templateWheelMessageFilter)
+            _templateWheelMessageFilter = Nothing
+        End If
+
+        MyBase.Dispose(disposing)
     End Sub
 
     Private Sub BuildLayout()
@@ -185,14 +199,6 @@ Public Class ThemePptTaskPane
         headerTitle.Location = New Point(OfficeAIStyleHelper.SpacingLg, 11)
         headerPanel.Controls.Add(headerTitle)
 
-        Dim headerVersion As New Label()
-        headerVersion.Text = "v" & ThemePptPaneBuild
-        headerVersion.Font = New Font("Microsoft YaHei UI", 8.0!, FontStyle.Regular)
-        headerVersion.ForeColor = Color.FromArgb(180, 180, 255)
-        headerVersion.AutoSize = True
-        headerVersion.Location = New Point(headerTitle.Right + 8, 18)
-        headerPanel.Controls.Add(headerVersion)
-
         ' 主体滚动区域
         Dim scrollPanel As New Panel()
         scrollPanel.Dock = DockStyle.Fill
@@ -204,7 +210,7 @@ Public Class ThemePptTaskPane
         layout.Dock = DockStyle.Fill
         layout.AutoSize = False
         layout.ColumnCount = 1
-        layout.RowCount = 9
+        layout.RowCount = 8
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 260.0F))
@@ -213,7 +219,6 @@ Public Class ThemePptTaskPane
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        layout.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         layout.BackColor = Color.Transparent
 
         ' --- 生成方式选择器（Segmented Control 风格）---
@@ -223,12 +228,12 @@ Public Class ThemePptTaskPane
         modeLabel.Margin = New Padding(0)
         modeLabel.Visible = True
 
-        _modeSegmentedPanel.Height = 40
+        _modeSegmentedPanel.Height = 54
         _modeSegmentedPanel.BackColor = OfficeAIStyleHelper.BorderLight
         _modeSegmentedPanel.Padding = New Padding(1)
-        _modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        _modeSegmentedPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingLg)
         _modeSegmentedPanel.Dock = DockStyle.Fill
-        _modeSegmentedPanel.MinimumSize = New Size(220, 40)
+        _modeSegmentedPanel.MinimumSize = New Size(220, 54)
 
         ' 模式按钮作为 Segmented Control
         Dim modes() As String = {GenerationModeTitle, GenerationModeDocument}
@@ -240,11 +245,11 @@ Public Class ThemePptTaskPane
             modeBtn.FlatAppearance.MouseOverBackColor = Color.Transparent
             modeBtn.FlatAppearance.MouseDownBackColor = Color.Transparent
             modeBtn.UseVisualStyleBackColor = False
-            modeBtn.Height = 38
-            modeBtn.Width = 104
+            modeBtn.Height = 52
+            modeBtn.Width = 148
             modeBtn.Left = 1 + i * 105
             modeBtn.Top = 1
-            modeBtn.Font = OfficeAIStyleHelper.FontUi
+            modeBtn.Font = OfficeAIStyleHelper.FontHeading
             modeBtn.Cursor = Cursors.Hand
             modeBtn.TextAlign = ContentAlignment.MiddleCenter
             modeBtn.Tag = i
@@ -297,13 +302,15 @@ Public Class ThemePptTaskPane
 
         ' --- 文档选择面板 ---
         _documentPanel.Dock = DockStyle.Fill
+        _documentPanel.AutoSize = True
         _documentPanel.ColumnCount = 2
         _documentPanel.RowCount = 2
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        _documentPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        _documentPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
-        _documentPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingMd)
+        _documentPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 58.0F))
+        _documentPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 56.0F))
+        _documentPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingLg)
+        _documentPanel.Padding = New Padding(0, 4, 0, 4)
         _documentPanel.Visible = False
         _documentPanel.BackColor = Color.Transparent
 
@@ -311,21 +318,25 @@ Public Class ThemePptTaskPane
         OfficeAIStyleHelper.StyleLabelBody(documentLabel)
         documentLabel.Text = "文档"
         documentLabel.AutoSize = False
-        documentLabel.Size = New Size(68, OfficeAIStyleHelper.ButtonHeight)
+        documentLabel.Font = OfficeAIStyleHelper.FontHeading
+        documentLabel.Size = New Size(84, 52)
         documentLabel.TextAlign = ContentAlignment.MiddleLeft
-        documentLabel.Margin = New Padding(0, 0, 10, OfficeAIStyleHelper.SpacingSm)
+        documentLabel.Margin = New Padding(0, 0, 16, 0)
 
         _documentPathBox.Dock = DockStyle.Fill
+        _documentPathBox.Multiline = True
         _documentPathBox.ReadOnly = True
-        _documentPathBox.Margin = New Padding(0, 0, 0, 0)
+        _documentPathBox.Height = 48
+        _documentPathBox.Margin = New Padding(0, 4, 0, 0)
         OfficeAIStyleHelper.StyleTextBox(_documentPathBox)
+        _documentPathBox.Font = New Font("Microsoft YaHei UI", 11.0!, FontStyle.Regular)
 
         _chooseDocumentButton.Text = "选择文档"
-        _chooseDocumentButton.Width = 96
-        _chooseDocumentButton.Height = OfficeAIStyleHelper.ButtonHeight
-        _chooseDocumentButton.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingSm)
+        _chooseDocumentButton.Width = 156
+        _chooseDocumentButton.Height = 48
+        _chooseDocumentButton.Margin = New Padding(0, 2, 0, 0)
         AddHandler _chooseDocumentButton.Click, AddressOf ChooseDocumentButton_Click
-        OfficeAIStyleHelper.StyleButtonSmall(_chooseDocumentButton)
+        OfficeAIStyleHelper.StyleButtonSecondary(_chooseDocumentButton)
 
         _documentPanel.Controls.Add(documentLabel, 0, 0)
         _documentPanel.Controls.Add(_chooseDocumentButton, 1, 0)
@@ -342,14 +353,14 @@ Public Class ThemePptTaskPane
         OfficeAIStyleHelper.StyleFlowPanel(_actionButtonPanel)
 
         _generateButton.Text = "立即创作"
-        _generateButton.Width = 104
-        _generateButton.Height = OfficeAIStyleHelper.ButtonHeight
-        _generateButton.Margin = New Padding(0, 0, 8, 8)
+        _generateButton.Width = 160
+        _generateButton.Height = 48
+        _generateButton.Margin = New Padding(0, 4, 12, 12)
         AddHandler _generateButton.Click, AddressOf GenerateButton_Click
         OfficeAIStyleHelper.StyleButtonPrimary(_generateButton)
 
         _restartButton.Text = "重新生成"
-        _restartButton.Width = 96
+        _restartButton.Width = 122
         _restartButton.Height = OfficeAIStyleHelper.ButtonHeight
         _restartButton.Margin = New Padding(0, 0, 8, 8)
         _restartButton.Visible = False
@@ -357,7 +368,7 @@ Public Class ThemePptTaskPane
         OfficeAIStyleHelper.StyleButtonSecondary(_restartButton)
 
         _finishOutlineEditButton.Text = "确认内容"
-        _finishOutlineEditButton.Width = 104
+        _finishOutlineEditButton.Width = 122
         _finishOutlineEditButton.Height = OfficeAIStyleHelper.ButtonHeight
         _finishOutlineEditButton.Margin = New Padding(0, 0, 8, 8)
         _finishOutlineEditButton.Enabled = False
@@ -366,7 +377,7 @@ Public Class ThemePptTaskPane
         OfficeAIStyleHelper.StyleButtonSecondary(_finishOutlineEditButton)
 
         _insertButton.Text = "下一步"
-        _insertButton.Width = 96
+        _insertButton.Width = 112
         _insertButton.Height = OfficeAIStyleHelper.ButtonHeight
         _insertButton.Margin = New Padding(0, 0, 8, 8)
         _insertButton.Enabled = False
@@ -403,13 +414,13 @@ Public Class ThemePptTaskPane
         AddHandler _templateCombo.SelectedIndexChanged, AddressOf TemplateCombo_SelectedIndexChanged
 
         _refreshTemplatesButton.Text = "刷新"
-        _refreshTemplatesButton.Width = 66
+        _refreshTemplatesButton.Width = 96
         _refreshTemplatesButton.Enabled = False
         AddHandler _refreshTemplatesButton.Click, AddressOf RefreshTemplatesButton_Click
         OfficeAIStyleHelper.StyleButtonSmall(_refreshTemplatesButton)
 
         _selectTemplateButton.Text = "模板库"
-        _selectTemplateButton.Width = 96
+        _selectTemplateButton.Width = 112
         _selectTemplateButton.Enabled = False
         AddHandler _selectTemplateButton.Click, AddressOf SelectTemplateButton_Click
         OfficeAIStyleHelper.StyleButtonSecondary(_selectTemplateButton)
@@ -445,7 +456,7 @@ Public Class ThemePptTaskPane
         outlineEditorPanel.RowCount = 3
         outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.AutoSize))
         outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 42.0F))
+        outlineEditorPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 60.0F))
         outlineEditorPanel.BackColor = Color.Transparent
 
         Dim outlineEditorLabel As New Label()
@@ -470,14 +481,14 @@ Public Class ThemePptTaskPane
         _outlineActionPanel.BackColor = Color.Transparent
 
         _chooseTemplateFromOutlineButton.Text = "挑选模板"
-        _chooseTemplateFromOutlineButton.Width = 104
+        _chooseTemplateFromOutlineButton.Width = 128
         _chooseTemplateFromOutlineButton.Height = 30
         _chooseTemplateFromOutlineButton.Margin = New Padding(8, 0, 0, 0)
         AddHandler _chooseTemplateFromOutlineButton.Click, AddressOf ChooseTemplateFromOutlineButton_Click
         OfficeAIStyleHelper.StyleButtonPrimary(_chooseTemplateFromOutlineButton)
 
         _editOutlineButton.Text = "修改大纲"
-        _editOutlineButton.Width = 104
+        _editOutlineButton.Width = 122
         _editOutlineButton.Height = 30
         _editOutlineButton.Margin = New Padding(8, 0, 0, 0)
         AddHandler _editOutlineButton.Click, AddressOf EditOutlineButton_Click
@@ -530,16 +541,16 @@ Public Class ThemePptTaskPane
         _templateGalleryPanel.ColumnCount = 1
         _templateGalleryPanel.RowCount = 3
         _templateGalleryPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 58.0F))
+        _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 76.0F))
         _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
-        _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 38.0F))
+        _templateGalleryPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 60.0F))
         _templateGalleryPanel.BackColor = OfficeAIStyleHelper.BgSurface
         _templateGalleryPanel.Visible = False
 
         _templateFilterPanel.Dock = DockStyle.Fill
         _templateFilterPanel.FlowDirection = FlowDirection.LeftToRight
         _templateFilterPanel.WrapContents = False
-        _templateFilterPanel.Padding = New Padding(8, 10, 8, 4)
+        _templateFilterPanel.Padding = New Padding(10, 14, 10, 8)
         _templateFilterPanel.Margin = New Padding(0)
         _templateFilterPanel.BackColor = OfficeAIStyleHelper.BgSurface
         AddHandler _templateFilterPanel.Resize, AddressOf TemplateFilterPanel_Resize
@@ -549,11 +560,11 @@ Public Class ThemePptTaskPane
         ConfigureTemplateFilterCombo(_templateThemeColorFilterCombo)
         InitializeTemplateFilterOptions()
 
-        ConfigureTemplateFilterView(_templateStyleFilterView, "风格", 164)
-        ConfigureTemplateFilterView(_templateCategoryFilterView, "类别", 164)
-        _templateThemeColorFilterView.Width = 34
-        _templateThemeColorFilterView.Height = 34
-        _templateThemeColorFilterView.Margin = New Padding(4, 0, 0, 8)
+        ConfigureTemplateFilterView(_templateStyleFilterView, "风格", 210)
+        ConfigureTemplateFilterView(_templateCategoryFilterView, "类别", 210)
+        _templateThemeColorFilterView.Width = 46
+        _templateThemeColorFilterView.Height = 46
+        _templateThemeColorFilterView.Margin = New Padding(4, 0, 0, 10)
         AddHandler _templateStyleFilterView.Click, Sub(sender, args) ShowTemplateFilterMenu(_templateStyleFilterCombo, _templateStyleFilterView)
         AddHandler _templateCategoryFilterView.Click, Sub(sender, args) ShowTemplateFilterMenu(_templateCategoryFilterCombo, _templateCategoryFilterView)
         AddHandler _templateThemeColorFilterView.Click, Sub(sender, args) ShowTemplateFilterMenu(_templateThemeColorFilterCombo, _templateThemeColorFilterView)
@@ -567,35 +578,35 @@ Public Class ThemePptTaskPane
         _templateCardPanel.AutoScroll = True
         _templateCardPanel.FlowDirection = FlowDirection.LeftToRight
         _templateCardPanel.WrapContents = True
-        _templateCardPanel.Padding = New Padding(8, 8, 0, 8)
+        _templateCardPanel.Padding = New Padding(10, 10, 4, 10)
         _templateCardPanel.BackColor = OfficeAIStyleHelper.BgSurface
         AddHandler _templateCardPanel.Resize, AddressOf TemplateCardPanel_Resize
 
         _templatePagerPanel.Dock = DockStyle.Fill
         _templatePagerPanel.FlowDirection = FlowDirection.RightToLeft
         _templatePagerPanel.WrapContents = False
-        _templatePagerPanel.Padding = New Padding(8, 5, 8, 4)
+        _templatePagerPanel.Padding = New Padding(8, 7, 8, 7)
         _templatePagerPanel.Margin = New Padding(0)
         _templatePagerPanel.BackColor = OfficeAIStyleHelper.BgSurface
 
         _templateNextPageButton.Text = "下一页"
-        _templateNextPageButton.Width = 72
-        _templateNextPageButton.Height = 28
+        _templateNextPageButton.Width = 96
+        _templateNextPageButton.Height = OfficeAIStyleHelper.ButtonHeightSmall
         _templateNextPageButton.Enabled = False
         AddHandler _templateNextPageButton.Click, AddressOf TemplateNextPageButton_Click
         OfficeAIStyleHelper.StyleButtonSmall(_templateNextPageButton)
 
         _templateNextStepButton.Text = "下一步"
-        _templateNextStepButton.Width = 82
-        _templateNextStepButton.Height = 28
+        _templateNextStepButton.Width = 112
+        _templateNextStepButton.Height = OfficeAIStyleHelper.ButtonHeight
         _templateNextStepButton.Enabled = False
         _templateNextStepButton.Margin = New Padding(8, 0, 0, 0)
         AddHandler _templateNextStepButton.Click, AddressOf InsertButton_Click
         OfficeAIStyleHelper.StyleButtonPrimary(_templateNextStepButton)
 
         _templateBackStepButton.Text = "上一步"
-        _templateBackStepButton.Width = 82
-        _templateBackStepButton.Height = 28
+        _templateBackStepButton.Width = 112
+        _templateBackStepButton.Height = OfficeAIStyleHelper.ButtonHeight
         _templateBackStepButton.Enabled = True
         _templateBackStepButton.Margin = New Padding(8, 0, 0, 0)
         AddHandler _templateBackStepButton.Click, AddressOf TemplateBackStepButton_Click
@@ -603,15 +614,15 @@ Public Class ThemePptTaskPane
 
         _templatePageLabel.AutoSize = False
         _templatePageLabel.Width = 104
-        _templatePageLabel.Height = 28
+        _templatePageLabel.Height = OfficeAIStyleHelper.ButtonHeightSmall
         _templatePageLabel.TextAlign = ContentAlignment.MiddleCenter
         _templatePageLabel.ForeColor = OfficeAIStyleHelper.TextSecondary
         _templatePageLabel.Font = OfficeAIStyleHelper.FontUiSmall
         _templatePageLabel.Text = "第 1 页"
 
         _templatePrevPageButton.Text = "上一页"
-        _templatePrevPageButton.Width = 72
-        _templatePrevPageButton.Height = 28
+        _templatePrevPageButton.Width = 96
+        _templatePrevPageButton.Height = OfficeAIStyleHelper.ButtonHeightSmall
         _templatePrevPageButton.Enabled = False
         AddHandler _templatePrevPageButton.Click, AddressOf TemplatePrevPageButton_Click
         OfficeAIStyleHelper.StyleButtonSmall(_templatePrevPageButton)
@@ -649,16 +660,6 @@ Public Class ThemePptTaskPane
         _contentPanel.Controls.Add(_outlineWorkspacePanel)
         _contentPanel.Controls.Add(_outputBox)
 
-        ' 底部提示
-        Dim hintLabel As New Label()
-        hintLabel.AutoSize = False
-        hintLabel.Dock = DockStyle.Fill
-        hintLabel.Height = 36
-        OfficeAIStyleHelper.StyleLabelHint(hintLabel)
-        hintLabel.AutoSize = False
-        hintLabel.TextAlign = ContentAlignment.MiddleLeft
-        hintLabel.Text = "版本 " & ThemePptPaneBuild & " | Docmee 地址和 token 可配置"
-
         ' --- 组装布局 ---
         layout.Controls.Add(modeLabel, 0, 0)
         layout.Controls.Add(_modeSegmentedPanel, 0, 1)
@@ -668,7 +669,6 @@ Public Class ThemePptTaskPane
         layout.Controls.Add(templateSectionLabel, 0, 5)
         layout.Controls.Add(templatePanel, 0, 6)
         layout.Controls.Add(_contentPanel, 0, 7)
-        layout.Controls.Add(hintLabel, 0, 8)
 
         scrollPanel.Controls.Add(layout)
         rootLayout.Controls.Add(headerPanel, 0, 0)
@@ -693,8 +693,8 @@ Public Class ThemePptTaskPane
 
         Dim gap As Integer = 1
         Dim availableWidth = Math.Max(220, _modeSegmentedPanel.ClientSize.Width - 2 - gap * (buttons.Count - 1))
-        Dim buttonWidth = Math.Max(104, CInt(Math.Floor(availableWidth / buttons.Count)))
-        Dim buttonHeight = Math.Max(32, _modeSegmentedPanel.ClientSize.Height - 2)
+        Dim buttonWidth = Math.Max(148, CInt(Math.Floor(availableWidth / buttons.Count)))
+        Dim buttonHeight = Math.Max(48, _modeSegmentedPanel.ClientSize.Height - 2)
 
         For i As Integer = 0 To buttons.Count - 1
             buttons(i).SetBounds(1 + i * (buttonWidth + gap), 1, buttonWidth, buttonHeight)
@@ -710,11 +710,11 @@ Public Class ThemePptTaskPane
             If idx = selectedIndex Then
                 btn.BackColor = OfficeAIStyleHelper.BgSurface
                 btn.ForeColor = OfficeAIStyleHelper.BrandPrimary
-                btn.Font = OfficeAIStyleHelper.FontUiBold
+                btn.Font = OfficeAIStyleHelper.FontHeading
             Else
                 btn.BackColor = Color.Transparent
                 btn.ForeColor = OfficeAIStyleHelper.TextSecondary
-                btn.Font = OfficeAIStyleHelper.FontUi
+                btn.Font = OfficeAIStyleHelper.FontHeading
             End If
         Next
     End Sub
@@ -736,6 +736,7 @@ Public Class ThemePptTaskPane
         _actionButtonPanel.Visible = False
         If Not visible Then
             SetTopicBoxVisible(False)
+            UpdateGenerateButtonState()
         Else
             UpdateGenerationModeUi()
         End If
@@ -757,8 +758,8 @@ Public Class ThemePptTaskPane
         view.PrefixText = prefixText
         view.ValueText = "全部"
         view.Width = width
-        view.Height = 34
-        view.Margin = New Padding(0, 0, 10, 8)
+        view.Height = 46
+        view.Margin = New Padding(0, 0, 12, 10)
     End Sub
 
     Private Sub TemplateFilterPanel_Resize(sender As Object, e As EventArgs)
@@ -771,21 +772,21 @@ Public Class ThemePptTaskPane
         Dim innerWidth = Math.Max(260,
                                   _templateFilterPanel.ClientSize.Width -
                                   _templateFilterPanel.Padding.Horizontal)
-        Dim gap = 10
-        Dim colorWidth = 34
+        Dim gap = 12
+        Dim colorWidth = 46
         Dim availableForPills = innerWidth - colorWidth - gap * 2
         Dim pillWidth = CInt(Math.Floor(availableForPills / 2.0R))
-        pillWidth = Math.Max(112, Math.Min(188, pillWidth))
+        pillWidth = Math.Max(150, Math.Min(240, pillWidth))
 
         _templateStyleFilterView.Width = pillWidth
         _templateCategoryFilterView.Width = pillWidth
-        _templateStyleFilterView.Height = 34
-        _templateCategoryFilterView.Height = 34
+        _templateStyleFilterView.Height = 46
+        _templateCategoryFilterView.Height = 46
         _templateThemeColorFilterView.Width = colorWidth
-        _templateThemeColorFilterView.Height = 34
-        _templateStyleFilterView.Margin = New Padding(0, 0, gap, 8)
-        _templateCategoryFilterView.Margin = New Padding(0, 0, gap, 8)
-        _templateThemeColorFilterView.Margin = New Padding(0, 0, 0, 8)
+        _templateThemeColorFilterView.Height = 46
+        _templateStyleFilterView.Margin = New Padding(0, 0, gap, 10)
+        _templateCategoryFilterView.Margin = New Padding(0, 0, gap, 10)
+        _templateThemeColorFilterView.Margin = New Padding(0, 0, 0, 10)
     End Sub
 
     Private Sub InitializeTemplateFilterOptions()
@@ -826,7 +827,7 @@ Public Class ThemePptTaskPane
 
         Dim menu As New ContextMenuStrip()
         menu.ShowImageMargin = True
-        menu.Font = OfficeAIStyleHelper.FontUi
+        menu.Font = New Font("Microsoft YaHei UI", 10.0!, FontStyle.Regular)
 
         For index As Integer = 0 To sourceCombo.Items.Count - 1
             Dim optionItem = TryCast(sourceCombo.Items(index), TemplateFilterOption)
@@ -1019,6 +1020,7 @@ Public Class ThemePptTaskPane
             SetTemplateSectionVisible(False)
             _contentPanel.Visible = False
             UpdateModeButtonsStyle(_modeSegmentedPanel, -1)
+            UpdateGenerateButtonState()
             SetStatus("请选择生成方式。")
             Return
         End If
@@ -1047,6 +1049,8 @@ Public Class ThemePptTaskPane
                 ApplyTopicPromptIfEmpty()
                 SetStatus("输入主题后点击立即创作，生成可编辑内容。")
         End Select
+
+        UpdateGenerateButtonState()
     End Sub
 
     Private Function GetSelectedGenerationMode() As String
@@ -1076,6 +1080,7 @@ Public Class ThemePptTaskPane
 
     Private Sub TopicBox_TextChanged(sender As Object, e As EventArgs)
         ApplyTopicPromptIfEmpty()
+        UpdateGenerateButtonState()
     End Sub
 
     Private Sub ChooseDocumentButton_Click(sender As Object, e As EventArgs)
@@ -1089,6 +1094,7 @@ Public Class ThemePptTaskPane
             _selectedDocumentPath = dialog.FileName
             _documentPathBox.Text = _selectedDocumentPath
             SetStatus("已选择文档：" & Path.GetFileName(_selectedDocumentPath))
+            UpdateGenerateButtonState()
         End Using
     End Sub
 
@@ -1249,6 +1255,7 @@ Public Class ThemePptTaskPane
         _templateGalleryPanel.Visible = True
         _templateBackStepButton.Enabled = True
         _templateGalleryPanel.BringToFront()
+        FocusTemplateCardPanel()
         LayoutTemplateFilterControls()
         _templateFilterPanel.PerformLayout()
         RefreshTemplatePager()
@@ -1525,6 +1532,32 @@ Public Class ThemePptTaskPane
                (_outputBox.Visible AndAlso Not String.IsNullOrWhiteSpace(_outputBox.Text))
     End Function
 
+    Private Function CanStartOutlineGeneration() As Boolean
+        If Not _hasChosenGenerationMode OrElse _generationModeCombo.SelectedIndex < 0 Then Return False
+        If Not _actionButtonPanel.Visible Then Return False
+
+        Dim mode = GetSelectedGenerationMode()
+        If String.Equals(mode, GenerationModeDocument, StringComparison.Ordinal) Then
+            Return Not String.IsNullOrWhiteSpace(GetSelectedDocumentPath())
+        End If
+
+        If String.Equals(mode, GenerationModeMarkdown, StringComparison.Ordinal) Then
+            Return Not String.IsNullOrWhiteSpace(_topicBox.Text)
+        End If
+
+        Return Not String.IsNullOrWhiteSpace(GetCreativeTopicText())
+    End Function
+
+    Private Sub UpdateGenerateButtonState(Optional forceDisabled As Boolean = False)
+        If _generateButton Is Nothing OrElse _generateButton.IsDisposed Then Return
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() UpdateGenerateButtonState(forceDisabled), MethodInvoker))
+            Return
+        End If
+
+        _generateButton.Enabled = Not forceDisabled AndAlso CanStartOutlineGeneration()
+    End Sub
+
     Private Sub RefreshActionButtons()
         If Not IsOnPaneUiThread() Then
             BeginInvokeIfAlive(CType(Sub() RefreshActionButtons(), MethodInvoker))
@@ -1540,6 +1573,7 @@ Public Class ThemePptTaskPane
         _selectTemplateButton.Enabled = CanChooseTemplate()
         _insertButton.Enabled = CanGenerateFromTemplate()
         _templateNextStepButton.Enabled = CanGenerateFromTemplate()
+        UpdateGenerateButtonState()
         RefreshTemplatePager()
     End Sub
 
@@ -2339,8 +2373,8 @@ Public Class ThemePptTaskPane
         ShowOutlineOutput()
         _contentPanel.Visible = False
         SetGenerationInputSectionVisible(True)
-        _generateButton.Enabled = True
         RefreshActionButtons()
+        UpdateGenerateButtonState()
         SetStatus("请选择生成方式。")
     End Sub
 
@@ -2427,16 +2461,18 @@ Public Class ThemePptTaskPane
             }
             Dim okButton As New Button() With {
                 .Text = "保存",
-                .Width = 78,
-                .Height = 28,
+                .Width = 96,
+                .Height = OfficeAIStyleHelper.ButtonHeight,
                 .DialogResult = DialogResult.OK
             }
             Dim cancelButton As New Button() With {
                 .Text = "取消",
-                .Width = 78,
-                .Height = 28,
+                .Width = 96,
+                .Height = OfficeAIStyleHelper.ButtonHeight,
                 .DialogResult = DialogResult.Cancel
             }
+            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
+            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
             actionPanel.Controls.Add(okButton)
             actionPanel.Controls.Add(cancelButton)
 
@@ -2503,7 +2539,16 @@ Public Class ThemePptTaskPane
             Return
         End If
 
-        _generateButton.Enabled = False
+        If String.Equals(mode, GenerationModeDocument, StringComparison.Ordinal) AndAlso
+           String.IsNullOrWhiteSpace(GetSelectedDocumentPath()) Then
+            MessageBox.Show("请先选择文档。", "AI生成PPT", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            _contentPanel.Visible = False
+            SetStatus("请先选择文档。")
+            UpdateGenerateButtonState()
+            Return
+        End If
+
+        UpdateGenerateButtonState(True)
         _finishOutlineEditButton.Enabled = False
         ShowOutlineOutput()
         ShowOutlineGenerationPlaceholder("正在生成...")
@@ -2549,8 +2594,8 @@ Public Class ThemePptTaskPane
             SetTopicBoxVisible(True)
             MessageBox.Show("AI智能创作失败: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         Finally
-            _generateButton.Enabled = True
             RefreshActionButtons()
+            UpdateGenerateButtonState()
         End Try
     End Function
 
@@ -2853,6 +2898,10 @@ Public Class ThemePptTaskPane
                 _templateListBox.Items.Add(template)
                 _templateCardPanel.Controls.Add(CreateTemplateCard(template))
             Next
+
+            If templateList.Count > 0 Then
+                _templateCardPanel.Controls.Add(CreateTemplateBottomSpacer())
+            End If
         Finally
             _templateCardPanel.ResumeLayout(True)
         End Try
@@ -3194,7 +3243,7 @@ Public Class ThemePptTaskPane
         If _templateCoverBoxes.ContainsKey(templateId) Then
             Dim cover = _templateCoverBoxes(templateId)
             oldImage = cover.Image
-            cover.Image = CreateScaledTemplateImage(image, 640, 360)
+            cover.Image = CreateScaledTemplateImage(image, 960, 540)
             cover.Visible = True
             cover.BringToFront()
             cover.Invalidate()
@@ -3204,7 +3253,7 @@ Public Class ThemePptTaskPane
         If _templatePreviewImages.ContainsKey(templateId) Then
             _templatePreviewImages(templateId).Dispose()
         End If
-        _templatePreviewImages(templateId) = CreateScaledTemplateImage(image, 320, 180)
+        _templatePreviewImages(templateId) = CreateScaledTemplateImage(image, 640, 360)
         If Not String.IsNullOrWhiteSpace(coverVirtualUrl) Then
             _templateCoverImageUrls(templateId) = coverVirtualUrl
         End If
@@ -3294,10 +3343,10 @@ Public Class ThemePptTaskPane
 
     Private Function CreateTemplateCard(template As DocmeeTemplateInfo) As Panel
         Dim card As New Panel()
-        card.Width = 208
-        card.Height = 214
+        card.Width = 320
+        card.Height = GetTemplateCardHeight(320)
         card.Padding = New Padding(8)
-        card.Margin = New Padding(0, 0, 12, 12)
+        card.Margin = New Padding(0, 0, 0, 14)
         card.BackColor = Color.White
         card.BorderStyle = BorderStyle.None
         card.Tag = template
@@ -3378,7 +3427,7 @@ Public Class ThemePptTaskPane
         nameLabel.TextAlign = ContentAlignment.MiddleLeft
         nameLabel.AutoEllipsis = True
         nameLabel.ForeColor = Color.FromArgb(39, 45, 55)
-        nameLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
+        nameLabel.Font = New Font(Me.Font.FontFamily, 10.0F, FontStyle.Bold)
         nameLabel.Text = If(String.IsNullOrWhiteSpace(template.Name), template.Id, template.Name)
         nameLabel.Tag = template
         nameLabel.Cursor = Cursors.Hand
@@ -3389,7 +3438,7 @@ Public Class ThemePptTaskPane
         detailLabel.TextAlign = ContentAlignment.MiddleLeft
         detailLabel.AutoEllipsis = True
         detailLabel.ForeColor = Color.FromArgb(86, 94, 108)
-        detailLabel.Font = New Font(Me.Font.FontFamily, 8.0F, FontStyle.Regular)
+        detailLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Regular)
         detailLabel.Text = BuildTemplateMetaText(template) & If(String.IsNullOrWhiteSpace(template.Id), "", " | ID " & template.Id)
         detailLabel.Tag = template
         detailLabel.Cursor = Cursors.Hand
@@ -3401,7 +3450,7 @@ Public Class ThemePptTaskPane
         selectLabel.TextAlign = ContentAlignment.MiddleCenter
         selectLabel.ForeColor = OfficeAIStyleHelper.TextPrimary
         selectLabel.BackColor = Color.FromArgb(241, 245, 249)
-        selectLabel.Font = New Font(Me.Font.FontFamily, 9.0F, FontStyle.Bold)
+        selectLabel.Font = New Font(Me.Font.FontFamily, 10.0F, FontStyle.Bold)
         selectLabel.Tag = template
         selectLabel.Cursor = Cursors.Hand
 
@@ -3424,19 +3473,44 @@ Public Class ThemePptTaskPane
         Return card
     End Function
 
+    Private Function CreateTemplateBottomSpacer() As Panel
+        Dim spacer As New Panel()
+        spacer.Name = TemplateCardBottomSpacerName
+        spacer.Height = TemplateCardBottomSpacerHeight
+        spacer.Width = Math.Max(260, _templateCardPanel.ClientSize.Width - _templateCardPanel.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth)
+        spacer.Margin = New Padding(0)
+        spacer.BackColor = OfficeAIStyleHelper.BgSurface
+        spacer.TabStop = False
+        Return spacer
+    End Function
+
+    Private Function GetTemplateCardCoverHeight(cardWidth As Integer) As Integer
+        Dim innerWidth = Math.Max(220, cardWidth - 16)
+        Dim coverHeight = CInt(Math.Round(innerWidth * 9.0R / 16.0R))
+        Return Math.Max(190, coverHeight)
+    End Function
+
+    Private Function GetTemplateCardHeight(cardWidth As Integer) As Integer
+        Dim coverHeight = GetTemplateCardCoverHeight(cardWidth)
+        Dim nameHeight = 38
+        Dim metaHeight = 26
+        Dim buttonHeight = 34
+        Dim gap = 8
+        Return 16 + coverHeight + nameHeight + metaHeight + buttonHeight + gap * 3
+    End Function
+
     Private Sub LayoutTemplateCard(card As Panel)
         If card Is Nothing Then Return
 
         Dim left = card.Padding.Left
         Dim top = card.Padding.Top
-        Dim innerWidth = Math.Max(120, card.ClientSize.Width - card.Padding.Horizontal)
-        Dim coverHeight = CInt(Math.Round(innerWidth * 9.0R / 16.0R))
-        coverHeight = Math.Max(92, Math.Min(136, coverHeight))
-        Dim nameHeight = 34
-        Dim metaHeight = 22
-        Dim buttonHeight = 28
-        Dim gap = 7
-        Dim targetHeight = card.Padding.Vertical + coverHeight + nameHeight + metaHeight + buttonHeight + gap * 3
+        Dim innerWidth = Math.Max(220, card.ClientSize.Width - card.Padding.Horizontal)
+        Dim coverHeight = GetTemplateCardCoverHeight(card.ClientSize.Width)
+        Dim nameHeight = 38
+        Dim metaHeight = 26
+        Dim buttonHeight = 34
+        Dim gap = 8
+        Dim targetHeight = GetTemplateCardHeight(card.ClientSize.Width)
         If card.Height <> targetHeight Then card.Height = targetHeight
 
         Dim coverHost = FindTemplateCardChild(card, "TemplateCoverHost")
@@ -3591,12 +3665,31 @@ Public Class ThemePptTaskPane
     End Function
 
     Private Sub AddTemplateCardClickHandlers(control As Control, template As DocmeeTemplateInfo)
-        AddHandler control.Click, Sub(sender, args) SelectTemplate(template)
+        AddHandler control.Click,
+            Sub(sender, args)
+                FocusTemplateCardPanel()
+                SelectTemplate(template)
+            End Sub
+        AddHandler control.MouseEnter, Sub(sender, args) FocusTemplateCardPanel()
 
         For Each child As Control In control.Controls
             AddTemplateCardClickHandlers(child, template)
         Next
     End Sub
+
+    Private Sub FocusTemplateCardPanel()
+        If _templateCardPanel Is Nothing OrElse _templateCardPanel.IsDisposed Then Return
+        If Not _templateCardPanel.Visible Then Return
+        If _templateCardPanel.CanFocus Then _templateCardPanel.Focus()
+    End Sub
+
+    Private Function IsMouseOverTemplateCardPanel() As Boolean
+        If _templateCardPanel Is Nothing OrElse _templateCardPanel.IsDisposed Then Return False
+        If Not _templateCardPanel.Visible OrElse Not _templateGalleryPanel.Visible Then Return False
+
+        Dim clientPoint = _templateCardPanel.PointToClient(Cursor.Position)
+        Return _templateCardPanel.ClientRectangle.Contains(clientPoint)
+    End Function
 
     Private Sub SelectTemplate(template As DocmeeTemplateInfo)
         If template Is Nothing Then Return
@@ -3794,22 +3887,96 @@ Public Class ThemePptTaskPane
                              SystemInformation.VerticalScrollBarWidth -
                              _templateCardPanel.Padding.Horizontal -
                              4
-        availableWidth = Math.Max(168, availableWidth)
+        availableWidth = Math.Max(260, availableWidth)
 
-        Dim gap = 12
-        Dim minCardWidth = 168
-        Dim maxCardWidth = 226
-        Dim columns = Math.Max(1, CInt(Math.Floor((availableWidth + gap) / CDbl(minCardWidth + gap))))
-        Dim cardWidth = CInt(Math.Floor((availableWidth - gap * (columns - 1)) / CDbl(columns)))
-        cardWidth = Math.Max(minCardWidth, Math.Min(maxCardWidth, cardWidth))
+        Dim gap = 16
+        Dim preferredCardWidth = 720
+        Dim cardWidth = Math.Min(preferredCardWidth, availableWidth)
+        Dim columns = Math.Max(1, CInt(Math.Floor((availableWidth + gap) / CDbl(cardWidth + gap))))
+        Dim horizontalGap = If(columns > 1, gap, 0)
 
         For Each card As Control In _templateCardPanel.Controls
+            If String.Equals(card.Name, TemplateCardBottomSpacerName, StringComparison.Ordinal) Then
+                card.Width = availableWidth
+                card.Height = TemplateCardBottomSpacerHeight
+                card.Margin = New Padding(0)
+                Continue For
+            End If
+
             card.Width = cardWidth
-            card.Margin = New Padding(0, 0, gap, gap)
+            card.Margin = New Padding(0, 0, horizontalGap, gap)
             Dim panel = TryCast(card, Panel)
             If panel IsNot Nothing Then LayoutTemplateCard(panel)
         Next
+
+        _templateCardPanel.PerformLayout()
     End Sub
+
+    Private Class TemplateCardFlowLayoutPanel
+        Inherits FlowLayoutPanel
+
+        Public Sub New()
+            DoubleBuffered = True
+            TabStop = True
+            SetStyle(ControlStyles.Selectable, True)
+        End Sub
+
+        Protected Overrides Sub OnMouseEnter(e As EventArgs)
+            MyBase.OnMouseEnter(e)
+            If CanFocus Then Focus()
+        End Sub
+
+        Protected Overrides Sub OnMouseWheel(e As MouseEventArgs)
+            If ScrollByWheelDelta(e.Delta) Then
+                Dim handledArgs = TryCast(e, HandledMouseEventArgs)
+                If handledArgs IsNot Nothing Then handledArgs.Handled = True
+                Return
+            End If
+
+            MyBase.OnMouseWheel(e)
+        End Sub
+
+        Public Function ScrollByWheelDelta(delta As Integer) As Boolean
+            If Not AutoScroll OrElse Not VerticalScroll.Visible Then Return False
+
+            Dim currentY = Math.Max(0, -AutoScrollPosition.Y)
+            Dim lines = SystemInformation.MouseWheelScrollLines
+            If lines <= 0 OrElse lines = Integer.MaxValue Then lines = 3
+
+            Dim notches = Math.Max(1, Math.Abs(delta) \ 120)
+            Dim scrollStep = Math.Max(120, lines * 46) * notches
+            Dim nextY = If(delta < 0, currentY + scrollStep, currentY - scrollStep)
+            Dim maxY = Math.Max(0, VerticalScroll.Maximum - VerticalScroll.LargeChange + 1)
+            If maxY <= 0 Then maxY = Math.Max(0, DisplayRectangle.Height - ClientSize.Height)
+            nextY = Math.Max(0, Math.Min(maxY, nextY))
+            If nextY = currentY Then Return True
+
+            AutoScrollPosition = New Point(0, nextY)
+            Invalidate()
+            Return True
+        End Function
+    End Class
+
+    Private Class TemplateWheelMessageFilter
+        Implements IMessageFilter
+
+        Private Const WM_MOUSEWHEEL As Integer = &H20A
+        Private ReadOnly _owner As ThemePptTaskPane
+
+        Public Sub New(owner As ThemePptTaskPane)
+            _owner = owner
+        End Sub
+
+        Public Function PreFilterMessage(ByRef m As Message) As Boolean Implements IMessageFilter.PreFilterMessage
+            If m.Msg <> WM_MOUSEWHEEL Then Return False
+            If _owner Is Nothing OrElse _owner.IsDisposed Then Return False
+            If Not _owner.IsMouseOverTemplateCardPanel() Then Return False
+
+            Dim highWord = CInt((m.WParam.ToInt64() >> 16) And &HFFFFL)
+            If highWord >= &H8000 Then highWord -= &H10000
+            Return _owner._templateCardPanel.ScrollByWheelDelta(highWord)
+        End Function
+    End Class
 
     Private Class TemplateFilterOption
         Public Property Text As String
@@ -3829,7 +3996,7 @@ Public Class ThemePptTaskPane
         Public Sub New()
             DoubleBuffered = True
             Cursor = Cursors.Hand
-            Font = OfficeAIStyleHelper.FontUi
+            Font = New Font("Microsoft YaHei UI", 10.5!, FontStyle.Regular)
             SetStyle(ControlStyles.AllPaintingInWmPaint Or
                      ControlStyles.OptimizedDoubleBuffer Or
                      ControlStyles.ResizeRedraw Or
@@ -3842,7 +4009,7 @@ Public Class ThemePptTaskPane
             g.SmoothingMode = SmoothingMode.AntiAlias
 
             Dim bounds = New Rectangle(0, 0, Width - 1, Height - 1)
-            Using path = CreateRoundedPath(bounds, 8)
+            Using path = CreateRoundedPath(bounds, 10)
                 Using fill As New SolidBrush(If(Enabled, Color.White, Color.FromArgb(248, 250, 252))),
                       border As New Pen(Color.FromArgb(226, 232, 240), 1.0F)
                     g.FillPath(fill, path)
@@ -3856,18 +4023,18 @@ Public Class ThemePptTaskPane
             Dim valueColor = If(Enabled, OfficeAIStyleHelper.TextPrimary, Color.FromArgb(148, 163, 184))
             Dim textY = 0
             Dim textHeight = Height
-            Dim left = 12
+            Dim left = 16
 
             Using prefixFont As New Font(Font, FontStyle.Bold)
                 Dim prefixSize = TextRenderer.MeasureText(prefix, prefixFont, New Size(Width, Height), TextFormatFlags.NoPadding)
                 TextRenderer.DrawText(g,
                                       prefix,
                                       prefixFont,
-                                      New Rectangle(left, textY, Math.Min(prefixSize.Width + 2, Width - 48), textHeight),
+                                      New Rectangle(left, textY, Math.Min(prefixSize.Width + 4, Width - 58), textHeight),
                                       prefixColor,
                                       TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.NoPadding)
-                Dim valueLeft = left + prefixSize.Width + 8
-                Dim valueWidth = Math.Max(20, Width - valueLeft - 34)
+                Dim valueLeft = left + prefixSize.Width + 12
+                Dim valueWidth = Math.Max(24, Width - valueLeft - 42)
                 TextRenderer.DrawText(g,
                                       value,
                                       Font,
@@ -3876,7 +4043,7 @@ Public Class ThemePptTaskPane
                                       TextFormatFlags.Left Or TextFormatFlags.VerticalCenter Or TextFormatFlags.EndEllipsis Or TextFormatFlags.NoPadding)
             End Using
 
-            DrawTemplateFilterChevron(g, New Rectangle(Width - 28, 0, 18, Height), Enabled)
+            DrawTemplateFilterChevron(g, New Rectangle(Width - 34, 0, 22, Height), Enabled)
         End Sub
     End Class
 
@@ -3899,12 +4066,12 @@ Public Class ThemePptTaskPane
             Dim g = e.Graphics
             g.SmoothingMode = SmoothingMode.AntiAlias
 
-            Dim squareSize = Math.Min(30, Math.Min(Width, Height) - 2)
+            Dim squareSize = Math.Min(40, Math.Min(Width, Height) - 2)
             Dim rect = New Rectangle((Width - squareSize) \ 2,
                                      (Height - squareSize) \ 2,
                                      squareSize,
                                      squareSize)
-            Using path = CreateRoundedPath(rect, 8)
+            Using path = CreateRoundedPath(rect, 10)
                 Using brush = CreateTemplateColorBrush(SelectedColorValue, rect)
                     g.FillPath(brush, path)
                 End Using
@@ -4185,7 +4352,7 @@ Public Class ThemePptTaskPane
             Return
         End If
 
-        _generateButton.Enabled = False
+        UpdateGenerateButtonState(True)
         _finishOutlineEditButton.Enabled = False
         _refreshTemplatesButton.Enabled = False
         _selectTemplateButton.Enabled = False
@@ -4253,8 +4420,8 @@ Public Class ThemePptTaskPane
         Finally
             _suppressTaskPaneOutput = False
             CloseGenerationProgressForm(progressForm)
-            _generateButton.Enabled = True
             RefreshActionButtons()
+            UpdateGenerateButtonState()
         End Try
     End Function
 

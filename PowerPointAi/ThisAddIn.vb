@@ -5,6 +5,9 @@ Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 
 Public Class ThisAddIn
 
+    Private Const ThemePptTaskPaneInitialWidth As Integer = 780
+    Private Const ThemePptTaskPaneMinUsableWidth As Integer = 680
+
     Private themePptTaskPane As Microsoft.Office.Tools.CustomTaskPane
     Private themePptControl As ThemePptTaskPane
     Private _translateService As PowerPointTranslateService
@@ -51,7 +54,9 @@ Public Class ThisAddIn
             themePptControl = New ThemePptTaskPane(Me.Application)
             themePptTaskPane = Me.CustomTaskPanes.Add(themePptControl, "AI生成PPT")
             themePptTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
-            themePptTaskPane.Width = 420
+            themePptTaskPane.Width = ThemePptTaskPaneInitialWidth
+        ElseIf themePptTaskPane.Width < ThemePptTaskPaneMinUsableWidth Then
+            themePptTaskPane.Width = ThemePptTaskPaneInitialWidth
         End If
 
         themePptTaskPane.Visible = True
