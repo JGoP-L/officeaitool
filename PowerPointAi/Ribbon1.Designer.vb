@@ -1,7 +1,17 @@
 ﻿Imports Microsoft.Office.Tools.Ribbon
 Imports ShareRibbon  ' 添加此引用
+Imports System.Drawing
+Imports System.Drawing.Drawing2D
+Imports System.Drawing.Text
+
 Partial Class Ribbon1
     Inherits ShareRibbon.BaseOfficeRibbon
+
+    Private WithEvents DocumentGeneratePptButton As RibbonButton
+    Private WithEvents TextExpandButton As RibbonButton
+    Private WithEvents TextShortenButton As RibbonButton
+    Private WithEvents TextTranslateButton As RibbonButton
+    Private WithEvents GroupSinglePage As RibbonGroup
 
     <System.Diagnostics.DebuggerNonUserCode()>
     Public Sub New(ByVal container As System.ComponentModel.IContainer)
@@ -43,7 +53,7 @@ Partial Class Ribbon1
     '不要使用代码编辑器修改它。
     <System.Diagnostics.DebuggerStepThrough()>
     Private Overloads Sub InitializeComponent()
-        Me.TabAI.Label = "wenduoduoAI"
+        Me.TabAI.Label = "文多多"
 
         ' 设置特定的图标
         Me.ConfigApiButton.Image = ShareRibbon.SharedResources.AiApiConfig
@@ -93,10 +103,162 @@ Partial Class Ribbon1
         Me.DataAnalysisButton.Visible = False
         Me.TemplateFormatButton.Visible = True
         Me.TemplateFormatButton.Image = ShareRibbon.SharedResources.Aiwrite
-        Me.TemplateFormatButton.Label = "AI生成PPT"
-        Me.TemplateFormatButton.ScreenTip = "AI生成PPT"
-        Me.TemplateFormatButton.SuperTip = "支持 AI智能创作、文档生成、内容编辑、选择模板生成和一键导入 PPT"
+        Me.TemplateFormatButton.Label = "生成PPT"
+        Me.TemplateFormatButton.ScreenTip = "生成PPT"
+        Me.TemplateFormatButton.SuperTip = "输入主题，AI 生成大纲、选择模板并导入 PPT"
+
+        ConfigureSplitPowerPointRibbon()
     End Sub
+
+    Private Sub ConfigureSplitPowerPointRibbon()
+        Me.DocumentGeneratePptButton = Me.Factory.CreateRibbonButton
+        Me.TextExpandButton = Me.Factory.CreateRibbonButton
+        Me.TextShortenButton = Me.Factory.CreateRibbonButton
+        Me.TextTranslateButton = Me.Factory.CreateRibbonButton
+        Me.GroupSinglePage = Me.Factory.CreateRibbonGroup
+
+        ApplyRibbonIcon(Me.TemplateFormatButton, CreateRibbonGlyphIcon("P", Color.FromArgb(79, 70, 229), Color.FromArgb(24, 144, 255)))
+        SetupLargeButton(Me.DocumentGeneratePptButton,
+                         "文档生成PPT",
+                         "文档生成PPT",
+                         "选择 Word/PDF/Markdown 等文档，生成 PPT 大纲并导入 PPT",
+                         CreateRibbonGlyphIcon("文", Color.FromArgb(59, 130, 246), Color.FromArgb(20, 184, 166)))
+        SetupLargeButton(Me.TranslateButton,
+                         "润色",
+                         "润色选中文字",
+                         "优化选中文本表达，让文字更自然、专业，并替换回当前 PPT",
+                         CreateRibbonGlyphIcon("润", Color.FromArgb(99, 102, 241), Color.FromArgb(168, 85, 247)))
+        SetupLargeButton(Me.TextExpandButton,
+                         "扩写",
+                         "扩写选中文字",
+                         "补充细节，将选中文本扩展为更完整表述，并替换回当前 PPT",
+                         CreateRibbonGlyphIcon("扩", Color.FromArgb(14, 165, 233), Color.FromArgb(99, 102, 241)))
+        SetupLargeButton(Me.TextShortenButton,
+                         "缩写",
+                         "缩写选中文字",
+                         "精简选中文本，保留核心信息和重点，并替换回当前 PPT",
+                         CreateRibbonGlyphIcon("缩", Color.FromArgb(16, 185, 129), Color.FromArgb(59, 130, 246)))
+        SetupLargeButton(Me.TextTranslateButton,
+                         "翻译",
+                         "翻译选中文字",
+                         "选择目标语言，翻译选中文本并替换回当前 PPT",
+                         CreateRibbonGlyphIcon("译", Color.FromArgb(245, 158, 11), Color.FromArgb(239, 68, 68)))
+
+        ApplyRibbonIcon(Me.ReformatButton, CreateRibbonGlyphIcon("美", Color.FromArgb(236, 72, 153), Color.FromArgb(124, 58, 237)))
+        Me.ProofreadButton.Label = "生成单页"
+        Me.ProofreadButton.ScreenTip = "AI生成单页"
+        Me.ProofreadButton.SuperTip = "根据输入要求生成新单页，并应用到当前幻灯片"
+        ApplyRibbonIcon(Me.ProofreadButton, CreateRibbonGlyphIcon("页", Color.FromArgb(45, 212, 191), Color.FromArgb(37, 99, 235)))
+
+        Me.GroupChat.Items.Clear()
+        Me.GroupChat.Items.Add(Me.TemplateFormatButton)
+        Me.GroupChat.Items.Add(Me.DocumentGeneratePptButton)
+        Me.GroupChat.Label = "AI生成PPT"
+
+        Me.GroupAIContent.Items.Clear()
+        Me.GroupAIContent.Items.Add(Me.TranslateButton)
+        Me.GroupAIContent.Items.Add(Me.TextExpandButton)
+        Me.GroupAIContent.Items.Add(Me.TextShortenButton)
+        Me.GroupAIContent.Items.Add(Me.TextTranslateButton)
+        Me.GroupAIContent.Label = "AI文本创作"
+
+        Me.GroupSinglePage.Items.Add(Me.ReformatButton)
+        Me.GroupSinglePage.Items.Add(Me.ProofreadButton)
+        Me.GroupSinglePage.Label = "AI单页"
+        Me.GroupSinglePage.Name = "GroupSinglePage"
+
+        Me.GroupTools.Visible = False
+        Me.GroupMCP.Visible = False
+        Me.GroupAbout.Visible = False
+        Me.TabAI.Groups.Clear()
+        Me.TabAI.Groups.Add(Me.GroupChat)
+        Me.TabAI.Groups.Add(Me.GroupAIContent)
+        Me.TabAI.Groups.Add(Me.GroupSinglePage)
+
+        AddHandler Me.DocumentGeneratePptButton.Click, AddressOf DocumentGeneratePptButton_Click
+        AddHandler Me.TextExpandButton.Click, AddressOf TextExpandButton_Click
+        AddHandler Me.TextShortenButton.Click, AddressOf TextShortenButton_Click
+        AddHandler Me.TextTranslateButton.Click, AddressOf TextTranslateButton_Click
+    End Sub
+
+    Private Sub SetupLargeButton(button As RibbonButton,
+                                 label As String,
+                                 screenTip As String,
+                                 superTip As String,
+                                 image As Drawing.Image)
+        button.Label = label
+        button.Name = label.Replace(" ", "")
+        button.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
+        button.ShowImage = True
+        button.Image = image
+        button.ScreenTip = screenTip
+        button.SuperTip = superTip
+    End Sub
+
+    Private Sub ApplyRibbonIcon(button As RibbonButton, image As Image)
+        If button Is Nothing Then Return
+        button.ControlSize = Microsoft.Office.Core.RibbonControlSize.RibbonControlSizeLarge
+        button.ShowImage = True
+        button.Image = image
+    End Sub
+
+    Private Shared Function CreateRibbonGlyphIcon(glyph As String, startColor As Color, endColor As Color) As Image
+        Dim bitmap As New Bitmap(32, 32)
+        Using g = Graphics.FromImage(bitmap)
+            g.SmoothingMode = SmoothingMode.AntiAlias
+            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit
+            g.Clear(Color.Transparent)
+
+            Dim rect As New Rectangle(2, 2, 28, 28)
+            Using shadowPath = CreateRoundedIconPath(New Rectangle(3, 4, 28, 28), 7)
+                Using shadowBrush As New SolidBrush(Color.FromArgb(32, 15, 23, 42))
+                    g.FillPath(shadowBrush, shadowPath)
+                End Using
+            End Using
+
+            Using path = CreateRoundedIconPath(rect, 7)
+                Using brush As New LinearGradientBrush(rect, startColor, endColor, LinearGradientMode.ForwardDiagonal)
+                    g.FillPath(brush, path)
+                End Using
+
+                Using shineBrush As New LinearGradientBrush(New Rectangle(2, 2, 28, 14),
+                                                            Color.FromArgb(70, Color.White),
+                                                            Color.FromArgb(0, Color.White),
+                                                            LinearGradientMode.Vertical)
+                    g.FillPath(shineBrush, path)
+                End Using
+            End Using
+
+            Dim fontSize As Single = If(glyph.Length > 1, 9.0F, 14.0F)
+            Using font As New Font("Microsoft YaHei UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel)
+                Using textBrush As New SolidBrush(Color.White)
+                    Using format As New StringFormat()
+                        format.Alignment = StringAlignment.Center
+                        format.LineAlignment = StringAlignment.Center
+                        g.DrawString(glyph, font, textBrush, New RectangleF(2, 2, 28, 28), format)
+                    End Using
+                End Using
+            End Using
+        End Using
+
+        Return bitmap
+    End Function
+
+    Private Shared Function CreateRoundedIconPath(rect As Rectangle, radius As Integer) As GraphicsPath
+        Dim path As New GraphicsPath()
+        Dim diameter = Math.Max(1, radius * 2)
+        Dim arc As New Rectangle(rect.Location, New Size(diameter, diameter))
+
+        path.AddArc(arc, 180, 90)
+        arc.X = rect.Right - diameter
+        path.AddArc(arc, 270, 90)
+        arc.Y = rect.Bottom - diameter
+        path.AddArc(arc, 0, 90)
+        arc.X = rect.Left
+        path.AddArc(arc, 90, 90)
+        path.CloseFigure()
+        Return path
+    End Function
 
 End Class
 

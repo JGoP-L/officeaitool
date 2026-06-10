@@ -333,7 +333,7 @@ Public Class AutocompleteService
 
         Select Case appType.ToLower()
             Case "excel"
-                Return $"你是wenduoduoAI助手的输入补全引擎。根据用户当前输入和Excel上下文，预测用户想要的操作。
+                Return $"你是文多多助手的输入补全引擎。根据用户当前输入和Excel上下文，预测用户想要的操作。
 
 常见Excel场景补全示例：
 - ""帮我"" → ""计算这列的总和"", ""筛选重复数据"", ""生成数据透视表""
@@ -345,7 +345,7 @@ Public Class AutocompleteService
 {baseRules}"
 
             Case "word"
-                Return $"你是wenduoduoAI助手的输入补全引擎。根据用户当前输入和Word上下文，预测用户想要的操作。
+                Return $"你是文多多助手的输入补全引擎。根据用户当前输入和Word上下文，预测用户想要的操作。
 
 常见Word场景补全示例：
 - ""帮我"" → ""润色这段文字"", ""翻译选中内容"", ""生成文章大纲""
@@ -357,7 +357,7 @@ Public Class AutocompleteService
 {baseRules}"
 
             Case "powerpoint"
-                Return $"你是wenduoduoAI助手的输入补全引擎。根据用户当前输入和PPT上下文，预测用户想要的操作。
+                Return $"你是文多多助手的输入补全引擎。根据用户当前输入和PPT上下文，预测用户想要的操作。
 
 常见PPT场景补全示例：
 - ""帮我"" → ""美化这张幻灯片"", ""生成演讲稿"", ""添加过渡动画""
@@ -369,7 +369,7 @@ Public Class AutocompleteService
 {baseRules}"
 
             Case Else
-                Return $"你是wenduoduoAI助手的输入补全引擎。根据用户当前输入和Office上下文，预测用户想要输入的内容。
+                Return $"你是文多多助手的输入补全引擎。根据用户当前输入和Office上下文，预测用户想要输入的内容。
 {baseRules}
 5. 考虑Office上下文（选中内容、文档类型）"
         End Select

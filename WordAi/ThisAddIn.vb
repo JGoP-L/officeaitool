@@ -85,12 +85,12 @@ Public Class ThisAddIn
     Private Sub CreateChatTaskPane()
         Try
             chatControl = New ChatControl()
-            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "wenduoduoAI智能助手")
+            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "文多多智能助手")
                 chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
                 chatTaskPane.Width = 420
 
         Catch ex As Exception
-            MessageBox.Show($"初始化 wenduoduoAI 任务窗格失败: {ex.Message}")
+            MessageBox.Show($"初始化 文多多 任务窗格失败: {ex.Message}")
         End Try
     End Sub
 

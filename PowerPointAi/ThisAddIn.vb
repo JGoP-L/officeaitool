@@ -3,6 +3,12 @@ Imports Microsoft.Office.Core
 Imports ShareRibbon
 Imports PowerPoint = Microsoft.Office.Interop.PowerPoint
 
+Public Enum ThemePptStartupMode
+    None = 0
+    Title = 1
+    Document = 2
+End Enum
+
 Public Class ThisAddIn
 
     Private Const ThemePptTaskPaneInitialWidth As Integer = 780
@@ -47,7 +53,7 @@ Public Class ThisAddIn
         End Try
     End Sub
 
-    Public Sub ShowThemePptTaskPane()
+    Public Sub ShowThemePptTaskPane(Optional startupMode As ThemePptStartupMode = ThemePptStartupMode.None)
         EnsureCoreServicesLoaded()
 
         If themePptTaskPane Is Nothing Then
@@ -60,6 +66,9 @@ Public Class ThisAddIn
         End If
 
         themePptTaskPane.Visible = True
+        If startupMode <> ThemePptStartupMode.None AndAlso themePptControl IsNot Nothing Then
+            themePptControl.ActivateGenerationMode(startupMode)
+        End If
     End Sub
 
     Public Sub HideThemePptTaskPane()

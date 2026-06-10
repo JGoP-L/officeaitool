@@ -77,7 +77,7 @@ Partial Class BaseOfficeRibbon
         Me.TabAI.Groups.Add(Me.GroupMCP)        ' 4. MCP连接
         Me.TabAI.Groups.Add(Me.GroupAbout)      ' 5. 设置
 
-        Me.TabAI.Label = "wenduoduoAI"
+        Me.TabAI.Label = "文多多"
         Me.TabAI.Name = "TabAI"
 
         ' ========== Group 1: 模型配置 ==========

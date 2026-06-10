@@ -145,6 +145,7 @@ Public Class ThemePptTaskPane
     Private _templateWebViewInitializing As Boolean
     Private _pendingTemplateGalleryRender As Boolean
     Private _suppressTaskPaneOutput As Boolean
+    Private _lockedStartupMode As ThemePptStartupMode = ThemePptStartupMode.None
     Private ReadOnly _uiThreadId As Integer
 
     Public Sub New(pptApp As PowerPoint.Application)
@@ -305,10 +306,10 @@ Public Class ThemePptTaskPane
         _documentPanel.AutoSize = True
         _documentPanel.ColumnCount = 2
         _documentPanel.RowCount = 2
-        _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
         _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
-        _documentPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 58.0F))
-        _documentPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 56.0F))
+        _documentPanel.ColumnStyles.Add(New ColumnStyle(SizeType.AutoSize))
+        _documentPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 44.0F))
+        _documentPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 48.0F))
         _documentPanel.Margin = New Padding(0, 0, 0, OfficeAIStyleHelper.SpacingLg)
         _documentPanel.Padding = New Padding(0, 4, 0, 4)
         _documentPanel.Visible = False
@@ -319,29 +320,30 @@ Public Class ThemePptTaskPane
         documentLabel.Text = "文档"
         documentLabel.AutoSize = False
         documentLabel.Font = OfficeAIStyleHelper.FontHeading
-        documentLabel.Size = New Size(84, 52)
+        documentLabel.Dock = DockStyle.Fill
         documentLabel.TextAlign = ContentAlignment.MiddleLeft
-        documentLabel.Margin = New Padding(0, 0, 16, 0)
+        documentLabel.Margin = New Padding(0, 0, 0, 0)
 
         _documentPathBox.Dock = DockStyle.Fill
         _documentPathBox.Multiline = True
         _documentPathBox.ReadOnly = True
-        _documentPathBox.Height = 48
-        _documentPathBox.Margin = New Padding(0, 4, 0, 0)
+        _documentPathBox.Height = OfficeAIStyleHelper.ButtonHeight
+        _documentPathBox.Margin = New Padding(0, 0, 12, 0)
         OfficeAIStyleHelper.StyleTextBox(_documentPathBox)
         _documentPathBox.Font = New Font("Microsoft YaHei UI", 11.0!, FontStyle.Regular)
 
         _chooseDocumentButton.Text = "选择文档"
         _chooseDocumentButton.Width = 156
-        _chooseDocumentButton.Height = 48
-        _chooseDocumentButton.Margin = New Padding(0, 2, 0, 0)
+        _chooseDocumentButton.Height = OfficeAIStyleHelper.ButtonHeight
+        _chooseDocumentButton.Dock = DockStyle.Fill
+        _chooseDocumentButton.Margin = New Padding(0, 0, 0, 0)
         AddHandler _chooseDocumentButton.Click, AddressOf ChooseDocumentButton_Click
-        OfficeAIStyleHelper.StyleButtonSecondary(_chooseDocumentButton)
+        OfficeAIStyleHelper.StyleButtonPrimary(_chooseDocumentButton)
 
         _documentPanel.Controls.Add(documentLabel, 0, 0)
-        _documentPanel.Controls.Add(_chooseDocumentButton, 1, 0)
         _documentPanel.Controls.Add(_documentPathBox, 0, 1)
-        _documentPanel.SetColumnSpan(_documentPathBox, 2)
+        _documentPanel.Controls.Add(_chooseDocumentButton, 1, 1)
+        _documentPanel.SetColumnSpan(documentLabel, 2)
 
         ' --- 按钮组 ---
         _actionButtonPanel.AutoSize = True
@@ -730,8 +732,7 @@ Public Class ThemePptTaskPane
     End Sub
 
     Private Sub SetGenerationInputSectionVisible(visible As Boolean)
-        _generationModeLabel.Visible = visible
-        _modeSegmentedPanel.Visible = visible
+        SetModeSelectorVisible(visible AndAlso _lockedStartupMode = ThemePptStartupMode.None)
         _documentPanel.Visible = False
         _actionButtonPanel.Visible = False
         If Not visible Then
@@ -739,6 +740,24 @@ Public Class ThemePptTaskPane
             UpdateGenerateButtonState()
         Else
             UpdateGenerationModeUi()
+        End If
+    End Sub
+
+    Private Sub SetModeSelectorVisible(visible As Boolean)
+        _generationModeLabel.Visible = visible
+        _modeSegmentedPanel.Visible = visible
+
+        Dim layout = TryCast(_modeSegmentedPanel.Parent, TableLayoutPanel)
+        If layout Is Nothing OrElse layout.RowCount <= 1 Then Return
+
+        If visible Then
+            layout.RowStyles(0).SizeType = SizeType.AutoSize
+            layout.RowStyles(1).SizeType = SizeType.AutoSize
+        Else
+            layout.RowStyles(0).SizeType = SizeType.Absolute
+            layout.RowStyles(0).Height = 0
+            layout.RowStyles(1).SizeType = SizeType.Absolute
+            layout.RowStyles(1).Height = 0
         End If
     End Sub
 
@@ -999,6 +1018,30 @@ Public Class ThemePptTaskPane
         End If
         UpdateGenerationModeUi()
     End Sub
+
+    Public Sub ActivateGenerationMode(startupMode As ThemePptStartupMode)
+        If Not IsOnPaneUiThread() Then
+            BeginInvokeIfAlive(CType(Sub() ActivateGenerationMode(startupMode), MethodInvoker))
+            Return
+        End If
+
+        _lockedStartupMode = startupMode
+        SetGenerationInputSectionVisible(True)
+
+        Dim index = GetGenerationModeIndex(startupMode)
+        If index >= 0 Then SelectGenerationMode(index)
+    End Sub
+
+    Private Shared Function GetGenerationModeIndex(startupMode As ThemePptStartupMode) As Integer
+        Select Case startupMode
+            Case ThemePptStartupMode.Title
+                Return 0
+            Case ThemePptStartupMode.Document
+                Return 1
+            Case Else
+                Return -1
+        End Select
+    End Function
 
     Private Sub SelectGenerationMode(index As Integer)
         If index < 0 OrElse index >= _generationModeCombo.Items.Count Then Return
@@ -2373,9 +2416,13 @@ Public Class ThemePptTaskPane
         ShowOutlineOutput()
         _contentPanel.Visible = False
         SetGenerationInputSectionVisible(True)
+        Dim lockedIndex = GetGenerationModeIndex(_lockedStartupMode)
+        If lockedIndex >= 0 Then
+            SelectGenerationMode(lockedIndex)
+        End If
         RefreshActionButtons()
         UpdateGenerateButtonState()
-        SetStatus("请选择生成方式。")
+        If lockedIndex < 0 Then SetStatus("请选择生成方式。")
     End Sub
 
     Private Async Sub RefreshTemplatesButton_Click(sender As Object, e As EventArgs)

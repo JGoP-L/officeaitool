@@ -74,7 +74,7 @@ Public Module ExcelDnaFunctions
 
     ' 基本 LLM 函数
     <ExcelFunction(Description:="使用AI模型生成文本",
-                  Category:="wenduoduoAI 函数",
+                  Category:="文多多 函数",
                   Name:="ELLM",
                   IsVolatile:=False,
                   IsThreadSafe:=True)>
@@ -104,7 +104,7 @@ Public Module ExcelDnaFunctions
 
     ' 高级 LLM 函数
     <ExcelFunction(Description:="使用AI模型生成文本(高级版)",
-                  Category:="wenduoduoAI 函数",
+                  Category:="文多多 函数",
                   Name:="ADLLM",
                   IsVolatile:=False,
                   IsThreadSafe:=True)>
@@ -170,7 +170,7 @@ Public Module ExcelDnaFunctions
 
     ' 异步 LLM 函数 - 修复版本，去掉未定义的接口
     <ExcelFunction(Description:="异步调用AI模型生成文本",
-                  Category:="wenduoduoAI 函数",
+                  Category:="文多多 函数",
                   Name:="ALLM",
                   IsVolatile:=False,
                   IsThreadSafe:=True)>

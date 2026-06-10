@@ -43,7 +43,7 @@ Partial Class Ribbon1
     '不要使用代码编辑器修改它。
     <System.Diagnostics.DebuggerStepThrough()>
     Private Overloads Sub InitializeComponent()
-        Me.TabAI.Label = "wenduoduoAI"
+        Me.TabAI.Label = "文多多"
 
         ' 设置特定的图标
         Me.ConfigApiButton.Image = ShareRibbon.SharedResources.AiApiConfig

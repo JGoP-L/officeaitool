@@ -236,7 +236,7 @@ Public Class ThisAddIn
         Try
             ' 为新工作簿创建任务窗格
             chatControl = New ChatControl()
-            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "wenduoduoAI智能助手")
+            chatTaskPane = Me.CustomTaskPanes.Add(chatControl, "文多多智能助手")
             chatTaskPane.DockPosition = MsoCTPDockPosition.msoCTPDockPositionRight
             chatTaskPane.Width = 420
             'AddHandler chatTaskPane.VisibleChanged, AddressOf ChatTaskPane_VisibleChanged

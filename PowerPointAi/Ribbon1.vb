@@ -1989,23 +1989,134 @@ Public Class Ribbon1
         End If
     End Sub
 
-    ' 文本翻译入口改为选中文本 AI 创作，使用 Docmee 流式 textOptimize 接口。
+    Private Function ShowTranslationLanguageDialog() As String
+        Using dialog As New Form()
+            OfficeAIStyleHelper.StyleFormDialog(dialog)
+            dialog.Text = "翻译"
+            dialog.StartPosition = FormStartPosition.CenterScreen
+            dialog.ClientSize = New Size(460, 178)
+            dialog.BackColor = OfficeAIStyleHelper.BgPage
+
+            Dim footerPanel As New Panel() With {
+                .Dock = DockStyle.Bottom,
+                .Height = 68,
+                .BackColor = OfficeAIStyleHelper.BgSurface
+            }
+            dialog.Controls.Add(footerPanel)
+
+            Dim footerSeparator As New Panel() With {
+                .Dock = DockStyle.Top,
+                .Height = 1,
+                .BackColor = OfficeAIStyleHelper.BorderLight
+            }
+            footerPanel.Controls.Add(footerSeparator)
+
+            Dim label As New Label() With {
+                .Text = "目标语言：",
+                .Location = New Point(32, 30),
+                .Size = New Size(92, OfficeAIStyleHelper.InputHeight),
+                .TextAlign = ContentAlignment.MiddleLeft
+            }
+            OfficeAIStyleHelper.StyleLabelBody(label)
+            dialog.Controls.Add(label)
+
+            Dim languageCombo As New ComboBox() With {
+                .Location = New Point(124, 30),
+                .Size = New Size(dialog.ClientSize.Width - 156, OfficeAIStyleHelper.InputHeight),
+                .DropDownStyle = ComboBoxStyle.DropDownList
+            }
+            languageCombo.Items.AddRange(New Object() {
+                "英语", "中文", "日语", "韩语", "法语",
+                "德语", "西班牙语", "葡萄牙语", "俄语", "意大利语"
+            })
+            languageCombo.SelectedIndex = 0
+            OfficeAIStyleHelper.StyleComboBox(languageCombo)
+            dialog.Controls.Add(languageCombo)
+
+            Dim okButton As New Button() With {
+                .Text = "开始翻译",
+                .Size = New Size(132, OfficeAIStyleHelper.ButtonHeight),
+                .DialogResult = DialogResult.OK
+            }
+            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
+            okButton.Size = New Size(132, OfficeAIStyleHelper.ButtonHeight)
+            okButton.Location = New Point(footerPanel.Width - 132 - 112 - 20 - 28, 10)
+            okButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+            footerPanel.Controls.Add(okButton)
+            dialog.AcceptButton = okButton
+
+            Dim cancelButton As New Button() With {
+                .Text = "取消",
+                .Size = New Size(112, OfficeAIStyleHelper.ButtonHeight),
+                .DialogResult = DialogResult.Cancel
+            }
+            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
+            cancelButton.Size = New Size(112, OfficeAIStyleHelper.ButtonHeight)
+            cancelButton.Location = New Point(footerPanel.Width - 112 - 28, 10)
+            cancelButton.Anchor = AnchorStyles.Top Or AnchorStyles.Right
+            footerPanel.Controls.Add(cancelButton)
+            dialog.CancelButton = cancelButton
+
+            If dialog.ShowDialog() <> DialogResult.OK Then Return ""
+            Return languageCombo.SelectedItem.ToString()
+        End Using
+    End Function
+
+    Private Async Function RunSelectedTextCreationAsync(modeName As String) As Task
+        Dim creationOptions As New AiCreationOptions() With {
+            .ModeName = modeName,
+            .TargetLanguageName = "",
+            .TargetLanguageCode = ""
+        }
+
+        If String.Equals(modeName, "翻译", StringComparison.Ordinal) Then
+            Dim selectedLanguage = ShowTranslationLanguageDialog()
+            If String.IsNullOrWhiteSpace(selectedLanguage) Then Return
+            creationOptions.TargetLanguageName = selectedLanguage
+            creationOptions.TargetLanguageCode = GetDocmeeLanguageCode(selectedLanguage)
+        End If
+
+        ShareRibbon.GlobalStatusStripAll.ShowProgress($"AI内容提效：正在启动{modeName}...")
+
+        Dim targets = GetSelectedPptTextTargets(modeName)
+        If targets.Count = 0 Then
+            MessageBox.Show("请先选中 PPT 里的文字或文本框。", modeName, MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        Await OptimizeSelectedTextWithDocmeeAsync(targets, creationOptions)
+    End Function
+
+    ' 文本创作拆分为润色、扩写、缩写、翻译四个独立入口，使用 Docmee 流式 textOptimize 接口。
     Protected Overrides Async Sub TranslateButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            ShareRibbon.GlobalStatusStripAll.ShowProgress("AI内容提效：正在启动 AI创作...")
-            Dim creationOptions = ShowAiCreationDialog()
-            If creationOptions Is Nothing OrElse String.IsNullOrWhiteSpace(creationOptions.ModeName) Then Return
-
-            Dim targets = GetSelectedPptTextTargets("AI创作")
-            If targets.Count = 0 Then
-                MessageBox.Show("请先选中 PPT 里的文字或文本框。", "AI创作", MessageBoxButtons.OK, MessageBoxIcon.Information)
-                Return
-            End If
-
-            Dim changedCount = Await OptimizeSelectedTextWithDocmeeAsync(targets, creationOptions)
-            ' 结果已通过状态栏提示，无需弹窗打断用户操作
+            Await RunSelectedTextCreationAsync("润色")
         Catch ex As Exception
-            MessageBox.Show("AI创作出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            MessageBox.Show("润色出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Async Sub TextExpandButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Await RunSelectedTextCreationAsync("扩写")
+        Catch ex As Exception
+            MessageBox.Show("扩写出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Async Sub TextShortenButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Await RunSelectedTextCreationAsync("缩写")
+        Catch ex As Exception
+            MessageBox.Show("缩写出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Async Sub TextTranslateButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Await RunSelectedTextCreationAsync("翻译")
+        Catch ex As Exception
+            MessageBox.Show("翻译出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 
@@ -2015,9 +2126,17 @@ Public Class Ribbon1
     ' 主题生成PPT - 打开 Docmee V2 演示任务窗格
     Protected Overrides Sub TemplateFormatButton_Click(sender As Object, e As RibbonControlEventArgs)
         Try
-            Globals.ThisAddIn.ShowThemePptTaskPane()
+            Globals.ThisAddIn.ShowThemePptTaskPane(ThemePptStartupMode.Title)
         Catch ex As Exception
             MessageBox.Show("打开主题生成PPT面板出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Sub DocumentGeneratePptButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Globals.ThisAddIn.ShowThemePptTaskPane(ThemePptStartupMode.Document)
+        Catch ex As Exception
+            MessageBox.Show("打开文档生成PPT面板出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
 

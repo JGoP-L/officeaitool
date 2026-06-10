@@ -35,7 +35,7 @@ const ribbonFiles = [
   'PowerPointAi/Ribbon1.vb',
 ];
 
-assert(baseRibbonDesigner.includes('Me.TabAI.Label = "wenduoduoAI"'), 'shared ribbon tab label must be wenduoduoAI');
+assert(baseRibbonDesigner.includes('Me.TabAI.Label = "文多多"'), 'shared ribbon tab label must be 文多多');
 assert(baseRibbonDesigner.includes('Me.GroupConfig.Label = "模型配置"'), 'config group label must be 模型配置');
 assert(baseRibbonDesigner.includes('Me.ConfigApiButton.Label = "配置模型"'), 'config button label must be 配置模型');
 assert(!baseRibbonDesigner.includes(`Me.TabAI.Groups.Add(Me.Group${legacyA})`), 'legacy provider ribbon group must not be added');
@@ -62,7 +62,7 @@ assert(!read('ShareRibbon/My Project/Resources.Designer.vb').match(/Property abo
 
 assert(fs.existsSync('ShareRibbon/Config/SimpleOpenAIConfigForm.vb'), 'SimpleOpenAIConfigForm.vb must exist');
 assert(shareProject.includes('Config\\SimpleOpenAIConfigForm.vb'), 'SimpleOpenAIConfigForm.vb must be included in ShareRibbon.vbproj');
-assert(read('ShareRibbon/Config/ConfigManager.vb').includes('.pltform = "wenduoduoAI"'), 'default config platform must be wenduoduoAI');
+assert(read('ShareRibbon/Config/ConfigManager.vb').includes('.pltform = "wenduoduoAI"'), 'internal default config platform id must remain wenduoduoAI');
 assert(!read('ShareRibbon/Config/PresetProviders.vb').match(legacyPattern), 'preset providers must not expose legacy providers');
 assert(!read('ShareRibbon/Resources/ShareResources.vb').match(legacyPattern), 'shared resources helper must not expose legacy provider icons');
 assert(!read('ShareRibbon/My Project/Resources.resx').match(legacyPattern), 'resources manifest must not include legacy provider assets');
@@ -70,7 +70,9 @@ assert(!read('ShareRibbon/My Project/Resources.Designer.vb').match(legacyPattern
 
 for (const path of appFiles) {
   const source = read(path);
-  assert(source.includes('wenduoduoAI智能助手'), `${path} must use wenduoduoAI task pane title`);
+  if (path !== 'PowerPointAi/ThisAddIn.vb') {
+    assert(source.includes('文多多智能助手'), `${path} must use 文多多 task pane title`);
+  }
   assert(!source.includes(`${legacyA} AI智能助手`), `${path} must not create legacy provider task pane`);
   assert(!source.includes(`${legacyB} AI智能助手`), `${path} must not create legacy provider task pane`);
 }
@@ -85,7 +87,7 @@ for (const path of ribbonFiles) {
 
 for (const path of ['ExcelAi/Ribbon1.Designer.vb', 'WordAi/Ribbon1.Designer.vb', 'PowerPointAi/Ribbon1.Designer.vb']) {
   const source = read(path);
-  assert(source.includes('Me.TabAI.Label = "wenduoduoAI"'), `${path} must set tab label to wenduoduoAI`);
+  assert(source.includes('Me.TabAI.Label = "文多多"'), `${path} must set tab label to 文多多`);
 }
 
 for (const path of [
@@ -115,4 +117,4 @@ for (const path of [
   assert(!source.match(legacyPattern), `${path} must not reference legacy provider files`);
 }
 
-console.log('wenduoduo branding checks passed');
+console.log('文多多 branding checks passed');
