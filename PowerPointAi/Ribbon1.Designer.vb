@@ -12,6 +12,8 @@ Partial Class Ribbon1
     Private WithEvents TextShortenButton As RibbonButton
     Private WithEvents TextTranslateButton As RibbonButton
     Private WithEvents GroupSinglePage As RibbonGroup
+    Private WithEvents ThemeColorButton As RibbonButton
+    Private WithEvents GroupTheme As RibbonGroup
 
     <System.Diagnostics.DebuggerNonUserCode()>
     Public Sub New(ByVal container As System.ComponentModel.IContainer)
@@ -116,6 +118,8 @@ Partial Class Ribbon1
         Me.TextShortenButton = Me.Factory.CreateRibbonButton
         Me.TextTranslateButton = Me.Factory.CreateRibbonButton
         Me.GroupSinglePage = Me.Factory.CreateRibbonGroup
+        Me.ThemeColorButton = Me.Factory.CreateRibbonButton
+        Me.GroupTheme = Me.Factory.CreateRibbonGroup
 
         ApplyRibbonIcon(Me.TemplateFormatButton, CreateRibbonGlyphIcon("P", Color.FromArgb(79, 70, 229), Color.FromArgb(24, 144, 255)))
         SetupLargeButton(Me.DocumentGeneratePptButton,
@@ -149,6 +153,11 @@ Partial Class Ribbon1
         Me.ProofreadButton.ScreenTip = "AI生成单页"
         Me.ProofreadButton.SuperTip = "根据输入要求生成新单页，并应用到当前幻灯片"
         ApplyRibbonIcon(Me.ProofreadButton, CreateRibbonGlyphIcon("页", Color.FromArgb(45, 212, 191), Color.FromArgb(37, 99, 235)))
+        SetupLargeButton(Me.ThemeColorButton,
+                         "一键换主题",
+                         "PPT一键换主题",
+                         "选择颜色后，将当前演示文稿的主题色、形状、线条和有色文字统一切换为对应色系",
+                         CreateRibbonGlyphIcon("色", Color.FromArgb(124, 58, 237), Color.FromArgb(245, 158, 11)))
 
         Me.GroupChat.Items.Clear()
         Me.GroupChat.Items.Add(Me.TemplateFormatButton)
@@ -167,6 +176,10 @@ Partial Class Ribbon1
         Me.GroupSinglePage.Label = "AI单页"
         Me.GroupSinglePage.Name = "GroupSinglePage"
 
+        Me.GroupTheme.Items.Add(Me.ThemeColorButton)
+        Me.GroupTheme.Label = "AI主题"
+        Me.GroupTheme.Name = "GroupTheme"
+
         Me.GroupTools.Visible = False
         Me.GroupMCP.Visible = False
         Me.GroupAbout.Visible = False
@@ -174,11 +187,13 @@ Partial Class Ribbon1
         Me.TabAI.Groups.Add(Me.GroupChat)
         Me.TabAI.Groups.Add(Me.GroupAIContent)
         Me.TabAI.Groups.Add(Me.GroupSinglePage)
+        Me.TabAI.Groups.Add(Me.GroupTheme)
 
         AddHandler Me.DocumentGeneratePptButton.Click, AddressOf DocumentGeneratePptButton_Click
         AddHandler Me.TextExpandButton.Click, AddressOf TextExpandButton_Click
         AddHandler Me.TextShortenButton.Click, AddressOf TextShortenButton_Click
         AddHandler Me.TextTranslateButton.Click, AddressOf TextTranslateButton_Click
+        AddHandler Me.ThemeColorButton.Click, AddressOf ThemeColorButton_Click
     End Sub
 
     Private Sub SetupLargeButton(button As RibbonButton,

@@ -37,6 +37,34 @@ Public Class Ribbon1
     End Class
 
     Private Shared _lastReplaceSlidePptxId As String = ""
+    Private Const ThemeTintShapeTagName As String = "wenduoduoAI_ThemeTint"
+
+    Private Const ThemeColorMixedValue As Integer = -2
+    Private Const ThemeColorNotThemeValue As Integer = 0
+    Private Const ThemeColorDark1Value As Integer = 1
+    Private Const ThemeColorLight1Value As Integer = 2
+    Private Const ThemeColorDark2Value As Integer = 3
+    Private Const ThemeColorLight2Value As Integer = 4
+    Private Const ThemeColorAccent1Value As Integer = 5
+    Private Const ThemeColorAccent2Value As Integer = 6
+    Private Const ThemeColorAccent3Value As Integer = 7
+    Private Const ThemeColorAccent4Value As Integer = 8
+    Private Const ThemeColorAccent5Value As Integer = 9
+    Private Const ThemeColorAccent6Value As Integer = 10
+    Private Const ThemeColorHyperlinkValue As Integer = 11
+    Private Const ThemeColorFollowedHyperlinkValue As Integer = 12
+
+    Private Structure ThemeColorPalette
+        Public Primary As Color
+        Public Accent2 As Color
+        Public Accent3 As Color
+        Public Accent4 As Color
+        Public Accent5 As Color
+        Public Accent6 As Color
+        Public Dark As Color
+        Public Light As Color
+        Public Soft As Color
+    End Structure
 
     Protected Overrides Sub ChatButton_Click(sender As Object, e As RibbonControlEventArgs)
     End Sub
@@ -2139,6 +2167,729 @@ Public Class Ribbon1
             MessageBox.Show("打开文档生成PPT面板出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub
+
+    Private Sub ThemeColorButton_Click(sender As Object, e As RibbonControlEventArgs)
+        Try
+            Dim selectedColor = ShowThemeColorDialog()
+            If Not selectedColor.HasValue Then Return
+
+            ApplyThemeColorToActivePresentation(selectedColor.Value)
+        Catch ex As Exception
+            MessageBox.Show("一键换主题出错: " & ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub
+
+    Private Function ShowThemeColorDialog() As System.Nullable(Of Color)
+        Using dialog As New ThemeColorChoiceForm()
+            If dialog.ShowDialog() <> DialogResult.OK Then Return New System.Nullable(Of Color)()
+            Return New System.Nullable(Of Color)(dialog.SelectedColor)
+        End Using
+    End Function
+
+    Private Sub ApplyThemeColorToActivePresentation(selectedColor As Color)
+        Dim presentation As PowerPoint.Presentation = Nothing
+        Try
+            presentation = Globals.ThisAddIn.Application.ActivePresentation
+        Catch
+        End Try
+
+        If presentation Is Nothing Then
+            MessageBox.Show("请先打开一个 PPT 后再使用一键换主题。", "一键换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End If
+
+        ShareRibbon.GlobalStatusStripAll.ShowProgress("正在切换 PPT 主题色...")
+
+        Dim palette = BuildThemeColorPalette(selectedColor)
+        Dim changedCount As Integer = 0
+
+        TryApplyThemeColorScheme(presentation, palette)
+        ApplyThemePaletteToPresentationShapes(presentation, palette, changedCount)
+
+        ShareRibbon.GlobalStatusStripAll.ShowProgress("PPT 主题色已切换")
+        MessageBox.Show($"已将当前 PPT 切换为所选色系，共更新 {changedCount} 处颜色。", "一键换主题", MessageBoxButtons.OK, MessageBoxIcon.Information)
+    End Sub
+
+    Private Function BuildThemeColorPalette(selectedColor As Color) As ThemeColorPalette
+        Return New ThemeColorPalette() With {
+            .Primary = selectedColor,
+            .Accent2 = BlendColors(selectedColor, Color.White, 0.22),
+            .Accent3 = BlendColors(selectedColor, Color.Black, 0.12),
+            .Accent4 = BlendColors(selectedColor, Color.White, 0.42),
+            .Accent5 = BlendColors(selectedColor, Color.Black, 0.28),
+            .Accent6 = BlendColors(selectedColor, Color.White, 0.62),
+            .Dark = BlendColors(selectedColor, Color.Black, 0.48),
+            .Light = BlendColors(selectedColor, Color.White, 0.78),
+            .Soft = BlendColors(selectedColor, Color.White, 0.9)
+        }
+    End Function
+
+    Private Sub TryApplyThemeColorScheme(presentation As PowerPoint.Presentation, palette As ThemeColorPalette)
+        Try
+            TryApplyThemeColorSchemeObject(presentation.SlideMaster.Theme.ThemeColorScheme, palette)
+        Catch ex As Exception
+            Debug.WriteLine("应用当前母版主题色失败: " & ex.Message)
+        End Try
+
+        Try
+            For i = 1 To presentation.Designs.Count
+                Try
+                    TryApplyThemeColorSchemeObject(presentation.Designs(i).SlideMaster.Theme.ThemeColorScheme, palette)
+                Catch ex As Exception
+                    Debug.WriteLine("应用设计主题色失败: " & ex.Message)
+                End Try
+            Next
+        Catch ex As Exception
+            Debug.WriteLine("遍历设计主题失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub TryApplyThemeColorSchemeObject(themeColorScheme As Object, palette As ThemeColorPalette)
+        If themeColorScheme Is Nothing Then Return
+
+        SetThemeSchemeColor(themeColorScheme, ThemeColorDark1Value, palette.Dark)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorLight1Value, Color.White)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorDark2Value, BlendColors(palette.Dark, Color.Black, 0.18))
+        SetThemeSchemeColor(themeColorScheme, ThemeColorLight2Value, palette.Soft)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorAccent1Value, palette.Primary)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorAccent2Value, palette.Accent2)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorAccent3Value, palette.Accent3)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorAccent4Value, palette.Accent4)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorAccent5Value, palette.Accent5)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorAccent6Value, palette.Accent6)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorHyperlinkValue, palette.Primary)
+        SetThemeSchemeColor(themeColorScheme, ThemeColorFollowedHyperlinkValue, palette.Accent5)
+    End Sub
+
+    Private Sub SetThemeSchemeColor(themeColorScheme As Object, colorIndex As Integer, color As Color)
+        Try
+            Dim themeColor As Object = themeColorScheme.Colors(colorIndex)
+            themeColor.RGB = ToOfficeRgb(color)
+        Catch ex As Exception
+            Debug.WriteLine("设置主题色失败: index=" & colorIndex.ToString() & ", " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub ApplyThemePaletteToPresentationShapes(presentation As PowerPoint.Presentation,
+                                                      palette As ThemeColorPalette,
+                                                      ByRef changedCount As Integer)
+        Try
+            ApplyThemePaletteToShapes(presentation.SlideMaster.Shapes, palette, changedCount)
+        Catch ex As Exception
+            Debug.WriteLine("应用母版形状主题色失败: " & ex.Message)
+        End Try
+
+        Try
+            For i = 1 To presentation.SlideMaster.CustomLayouts.Count
+                Try
+                    ApplyThemePaletteToShapes(presentation.SlideMaster.CustomLayouts(i).Shapes, palette, changedCount)
+                Catch ex As Exception
+                    Debug.WriteLine("应用版式形状主题色失败: " & ex.Message)
+                End Try
+            Next
+        Catch ex As Exception
+            Debug.WriteLine("遍历版式失败: " & ex.Message)
+        End Try
+
+        Try
+            For i = 1 To presentation.Slides.Count
+                Try
+                    ApplyThemeTintToSlide(presentation.Slides(i), presentation, palette, changedCount)
+                    ApplyThemePaletteToShapes(presentation.Slides(i).Shapes, palette, changedCount)
+                Catch ex As Exception
+                    Debug.WriteLine("应用幻灯片形状主题色失败: " & ex.Message)
+                End Try
+            Next
+        Catch ex As Exception
+            Debug.WriteLine("遍历幻灯片失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub ApplyThemeTintToSlide(slide As PowerPoint.Slide,
+                                      presentation As PowerPoint.Presentation,
+                                      palette As ThemeColorPalette,
+                                      ByRef changedCount As Integer)
+        Try
+            For i = slide.Shapes.Count To 1 Step -1
+                Dim existing = slide.Shapes(i)
+                If IsThemeTintShape(existing) Then existing.Delete()
+            Next
+
+            Dim tintShape = slide.Shapes.AddShape(Microsoft.Office.Core.MsoAutoShapeType.msoShapeRectangle,
+                                                  0,
+                                                  0,
+                                                  presentation.PageSetup.SlideWidth,
+                                                  presentation.PageSetup.SlideHeight)
+            tintShape.Name = ThemeTintShapeTagName
+            tintShape.Tags.Add(ThemeTintShapeTagName, "1")
+            tintShape.Line.Visible = Microsoft.Office.Core.MsoTriState.msoFalse
+            tintShape.Fill.Visible = Microsoft.Office.Core.MsoTriState.msoTrue
+            tintShape.Fill.Solid()
+            tintShape.Fill.ForeColor.RGB = ToOfficeRgb(palette.Soft)
+            tintShape.Fill.Transparency = 0.08F
+            tintShape.ZOrder(Microsoft.Office.Core.MsoZOrderCmd.msoSendToBack)
+            changedCount += 1
+        Catch ex As Exception
+            Debug.WriteLine("应用页面主题底色失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub ApplyThemePaletteToShapes(shapes As Object,
+                                           palette As ThemeColorPalette,
+                                           ByRef changedCount As Integer)
+        If shapes Is Nothing Then Return
+
+        Dim shapeCount As Integer
+        Try
+            shapeCount = CInt(shapes.Count)
+        Catch
+            Return
+        End Try
+
+        For i = 1 To shapeCount
+            Try
+                Dim shape = TryCast(shapes.Item(i), PowerPoint.Shape)
+                If shape Is Nothing Then Continue For
+                ApplyThemePaletteToShape(shape, palette, changedCount)
+            Catch ex As Exception
+                Debug.WriteLine("应用形状主题色失败: " & ex.Message)
+            End Try
+        Next
+    End Sub
+
+    Private Sub ApplyThemePaletteToShape(shape As PowerPoint.Shape,
+                                          palette As ThemeColorPalette,
+                                          ByRef changedCount As Integer)
+        If shape Is Nothing Then Return
+        If IsThemeTintShape(shape) Then Return
+
+        Try
+            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoGroup Then
+                ApplyThemePaletteToShapes(shape.GroupItems, palette, changedCount)
+                Return
+            End If
+        Catch
+        End Try
+
+        Try
+            If shape.HasTable = Microsoft.Office.Core.MsoTriState.msoTrue Then
+                Dim table = shape.Table
+                For row = 1 To table.Rows.Count
+                    For col = 1 To table.Columns.Count
+                        ApplyThemePaletteToShape(table.Cell(row, col).Shape, palette, changedCount)
+                    Next
+                Next
+                Return
+            End If
+        Catch ex As Exception
+            Debug.WriteLine("应用表格主题色失败: " & ex.Message)
+        End Try
+
+        ApplyThemePaletteToShapeFill(shape, palette, changedCount)
+        ApplyThemePaletteToShapeLine(shape, palette, changedCount)
+        ApplyThemePaletteToShapeText(shape, palette, changedCount)
+    End Sub
+
+    Private Function IsThemeTintShape(shape As PowerPoint.Shape) As Boolean
+        Try
+            If shape Is Nothing Then Return False
+            If String.Equals(shape.Name, ThemeTintShapeTagName, StringComparison.OrdinalIgnoreCase) Then Return True
+            Return String.Equals(shape.Tags.Item(ThemeTintShapeTagName), "1", StringComparison.Ordinal)
+        Catch
+            Return False
+        End Try
+    End Function
+
+    Private Sub ApplyThemePaletteToShapeFill(shape As PowerPoint.Shape,
+                                              palette As ThemeColorPalette,
+                                              ByRef changedCount As Integer)
+        Try
+            If shape.Type = Microsoft.Office.Core.MsoShapeType.msoPicture OrElse
+               shape.Type = Microsoft.Office.Core.MsoShapeType.msoLinkedPicture Then Return
+
+            If shape.Fill Is Nothing OrElse shape.Fill.Visible <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+
+            Try
+                If CSng(shape.Fill.Transparency) >= 0.98F Then Return
+            Catch
+            End Try
+
+            If TrySetMappedColor(shape.Fill.ForeColor, palette, False) Then changedCount += 1
+            Try
+                If TrySetMappedColor(shape.Fill.BackColor, palette, False) Then changedCount += 1
+            Catch
+            End Try
+        Catch ex As Exception
+            Debug.WriteLine("应用填充主题色失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub ApplyThemePaletteToShapeLine(shape As PowerPoint.Shape,
+                                             palette As ThemeColorPalette,
+                                             ByRef changedCount As Integer)
+        Try
+            If shape.Line Is Nothing OrElse shape.Line.Visible <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+
+            Try
+                If CSng(shape.Line.Transparency) >= 0.98F Then Return
+            Catch
+            End Try
+
+            If TrySetMappedColor(shape.Line.ForeColor, palette, False) Then changedCount += 1
+        Catch ex As Exception
+            Debug.WriteLine("应用线条主题色失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Sub ApplyThemePaletteToShapeText(shape As PowerPoint.Shape,
+                                             palette As ThemeColorPalette,
+                                             ByRef changedCount As Integer)
+        Try
+            If shape.HasTextFrame <> Microsoft.Office.Core.MsoTriState.msoTrue OrElse
+               shape.TextFrame.HasText <> Microsoft.Office.Core.MsoTriState.msoTrue Then Return
+
+            If TrySetTitleTextThemeColor(shape, palette) Then
+                changedCount += 1
+                Return
+            End If
+
+            If TrySetMappedColor(shape.TextFrame.TextRange.Font.Color, palette, True) Then changedCount += 1
+        Catch ex As Exception
+            Debug.WriteLine("应用文字主题色失败: " & ex.Message)
+        End Try
+    End Sub
+
+    Private Function TrySetTitleTextThemeColor(shape As PowerPoint.Shape, palette As ThemeColorPalette) As Boolean
+        If Not IsTitleLikeShape(shape) Then Return False
+
+        Try
+            Dim fontColor = shape.TextFrame.TextRange.Font.Color
+            Dim currentColor = TryGetOfficeColor(fontColor)
+            If currentColor.HasValue Then
+                Dim luminance = GetLuminance(currentColor.Value)
+                Dim saturation = GetSaturation(currentColor.Value)
+                If luminance > 0.82 AndAlso saturation < 0.14 Then Return False
+            End If
+
+            Dim titleColor = GetTitleThemeTextColor(palette)
+            If currentColor.HasValue AndAlso ColorsAreClose(currentColor.Value, titleColor) Then Return False
+
+            fontColor.RGB = ToOfficeRgb(titleColor)
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine("应用标题主题色失败: " & ex.Message)
+            Return False
+        End Try
+    End Function
+
+    Private Function IsTitleLikeShape(shape As PowerPoint.Shape) As Boolean
+        Try
+            If shape.PlaceholderFormat IsNot Nothing Then
+                Select Case shape.PlaceholderFormat.Type
+                    Case PowerPoint.PpPlaceholderType.ppPlaceholderTitle,
+                         PowerPoint.PpPlaceholderType.ppPlaceholderCenterTitle,
+                         PowerPoint.PpPlaceholderType.ppPlaceholderSubtitle
+                        Return True
+                End Select
+            End If
+        Catch
+        End Try
+
+        Try
+            Dim textRange = shape.TextFrame.TextRange
+            Dim text = If(textRange.Text, "").Trim()
+            If text.Length = 0 Then Return False
+
+            Dim fontSize = CSng(textRange.Font.Size)
+            If fontSize >= 24.0F AndAlso text.Length <= 120 Then Return True
+            If shape.Top <= 150.0F AndAlso fontSize >= 18.0F AndAlso text.Length <= 80 Then Return True
+        Catch
+        End Try
+
+        Return False
+    End Function
+
+    Private Function GetTitleThemeTextColor(palette As ThemeColorPalette) As Color
+        If GetLuminance(palette.Primary) > 0.58 Then Return palette.Dark
+        Return palette.Primary
+    End Function
+
+    Private Function TrySetMappedColor(formatColor As Object,
+                                       palette As ThemeColorPalette,
+                                       isText As Boolean) As Boolean
+        Dim mappedColor = ResolveMappedColor(formatColor, palette, isText)
+        If Not mappedColor.HasValue Then Return False
+
+        Try
+            Dim oldColor = TryGetOfficeColor(formatColor)
+            If oldColor.HasValue AndAlso ColorsAreClose(oldColor.Value, mappedColor.Value) Then Return False
+
+            formatColor.RGB = ToOfficeRgb(mappedColor.Value)
+            Return True
+        Catch ex As Exception
+            Debug.WriteLine("设置颜色失败: " & ex.Message)
+            Return False
+        End Try
+    End Function
+
+    Private Function ResolveMappedColor(formatColor As Object,
+                                        palette As ThemeColorPalette,
+                                        isText As Boolean) As System.Nullable(Of Color)
+        If formatColor Is Nothing Then Return New System.Nullable(Of Color)()
+
+        Dim themeIndex = TryGetThemeColorIndex(formatColor)
+        If themeIndex <> ThemeColorNotThemeValue AndAlso themeIndex <> ThemeColorMixedValue Then
+            Dim themedColor = MapThemeColorIndex(themeIndex, palette, isText)
+            If themedColor.HasValue Then Return themedColor
+        End If
+
+        Dim directColor = TryGetOfficeColor(formatColor)
+        If directColor.HasValue AndAlso ShouldRecolorDirectColor(directColor.Value, isText) Then
+            Return New System.Nullable(Of Color)(MapDirectColorToPalette(directColor.Value, palette, isText))
+        End If
+
+        Return New System.Nullable(Of Color)()
+    End Function
+
+    Private Function MapThemeColorIndex(themeIndex As Integer,
+                                        palette As ThemeColorPalette,
+                                        isText As Boolean) As System.Nullable(Of Color)
+        Select Case themeIndex
+            Case ThemeColorDark1Value, ThemeColorDark2Value
+                Return New System.Nullable(Of Color)(If(isText, palette.Dark, palette.Dark))
+            Case ThemeColorLight1Value, ThemeColorLight2Value
+                Return New System.Nullable(Of Color)(If(isText, Color.White, palette.Soft))
+            Case ThemeColorAccent1Value
+                Return New System.Nullable(Of Color)(palette.Primary)
+            Case ThemeColorAccent2Value
+                Return New System.Nullable(Of Color)(palette.Accent2)
+            Case ThemeColorAccent3Value
+                Return New System.Nullable(Of Color)(palette.Accent3)
+            Case ThemeColorAccent4Value
+                Return New System.Nullable(Of Color)(palette.Accent4)
+            Case ThemeColorAccent5Value
+                Return New System.Nullable(Of Color)(palette.Accent5)
+            Case ThemeColorAccent6Value
+                Return New System.Nullable(Of Color)(palette.Accent6)
+            Case ThemeColorHyperlinkValue
+                Return New System.Nullable(Of Color)(palette.Primary)
+            Case ThemeColorFollowedHyperlinkValue
+                Return New System.Nullable(Of Color)(palette.Accent5)
+        End Select
+
+        Return New System.Nullable(Of Color)()
+    End Function
+
+    Private Function MapDirectColorToPalette(originalColor As Color,
+                                             palette As ThemeColorPalette,
+                                             isText As Boolean) As Color
+        Dim luminance = GetLuminance(originalColor)
+
+        If isText Then
+            Return If(luminance < 0.45, palette.Dark, palette.Primary)
+        End If
+
+        If luminance >= 0.78 Then Return palette.Soft
+        If luminance <= 0.28 Then Return palette.Dark
+
+        Dim saturation = GetSaturation(originalColor)
+        If saturation < 0.12 Then
+            Return BlendColors(palette.Primary, Color.White, If(luminance > 0.55, 0.35, 0.15))
+        End If
+
+        Dim blendTarget = If(luminance > 0.55, Color.White, Color.Black)
+        Dim amount = Math.Min(0.42, Math.Abs(luminance - 0.5) * 0.9)
+        Return BlendColors(palette.Primary, blendTarget, amount)
+    End Function
+
+    Private Function ShouldRecolorDirectColor(color As Color, isText As Boolean) As Boolean
+        Dim luminance = GetLuminance(color)
+        Dim saturation = GetSaturation(color)
+
+        If luminance >= 0.94 AndAlso saturation < 0.08 Then Return Not isText
+        If luminance <= 0.08 AndAlso saturation < 0.08 Then Return False
+
+        If isText Then
+            Return saturation >= 0.16
+        End If
+
+        If saturation >= 0.1 Then Return True
+        Return luminance >= 0.25 AndAlso luminance <= 0.86
+    End Function
+
+    Private Function TryGetThemeColorIndex(formatColor As Object) As Integer
+        Try
+            Return CInt(formatColor.ObjectThemeColor)
+        Catch
+            Return ThemeColorNotThemeValue
+        End Try
+    End Function
+
+    Private Function TryGetOfficeColor(formatColor As Object) As System.Nullable(Of Color)
+        Try
+            Dim rgb = CLng(formatColor.RGB)
+            If rgb < 0 Then Return New System.Nullable(Of Color)()
+            Return New System.Nullable(Of Color)(FromOfficeRgb(CInt(rgb And &HFFFFFFL)))
+        Catch
+            Return New System.Nullable(Of Color)()
+        End Try
+    End Function
+
+    Private Shared Function ToOfficeRgb(color As Color) As Integer
+        Dim rgbValue As Long = CLng(color.R) Or (CLng(color.G) << 8) Or (CLng(color.B) << 16)
+        Return CInt(rgbValue And &HFFFFFFL)
+    End Function
+
+    Private Shared Function FromOfficeRgb(rgb As Integer) As Color
+        Dim safeRgb = CLng(rgb) And &HFFFFFFL
+        Return Color.FromArgb(CInt(safeRgb And &HFFL),
+                              CInt((safeRgb >> 8) And &HFFL),
+                              CInt((safeRgb >> 16) And &HFFL))
+    End Function
+
+    Private Shared Function BlendColors(source As Color, target As Color, amount As Double) As Color
+        Dim safeAmount = Clamp01(amount)
+        Dim sourceRed = CDbl(source.R)
+        Dim sourceGreen = CDbl(source.G)
+        Dim sourceBlue = CDbl(source.B)
+        Dim targetRed = CDbl(target.R)
+        Dim targetGreen = CDbl(target.G)
+        Dim targetBlue = CDbl(target.B)
+        Dim red = CInt(Math.Round(sourceRed + (targetRed - sourceRed) * safeAmount))
+        Dim green = CInt(Math.Round(sourceGreen + (targetGreen - sourceGreen) * safeAmount))
+        Dim blue = CInt(Math.Round(sourceBlue + (targetBlue - sourceBlue) * safeAmount))
+        Return Color.FromArgb(ClampByte(red), ClampByte(green), ClampByte(blue))
+    End Function
+
+    Private Shared Function Clamp01(value As Double) As Double
+        If value < 0 Then Return 0
+        If value > 1 Then Return 1
+        Return value
+    End Function
+
+    Private Shared Function ClampByte(value As Integer) As Integer
+        If value < 0 Then Return 0
+        If value > 255 Then Return 255
+        Return value
+    End Function
+
+    Private Shared Function GetLuminance(color As Color) As Double
+        Return (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) / 255.0
+    End Function
+
+    Private Shared Function GetSaturation(color As Color) As Double
+        Dim maxValue = Math.Max(color.R, Math.Max(color.G, color.B))
+        Dim minValue = Math.Min(color.R, Math.Min(color.G, color.B))
+        If maxValue = 0 Then Return 0
+        Return (maxValue - minValue) / CDbl(maxValue)
+    End Function
+
+    Private Shared Function ColorsAreClose(left As Color, right As Color) As Boolean
+        Return Math.Abs(CInt(left.R) - CInt(right.R)) < 3 AndAlso
+               Math.Abs(CInt(left.G) - CInt(right.G)) < 3 AndAlso
+               Math.Abs(CInt(left.B) - CInt(right.B)) < 3
+    End Function
+
+    Private Class ThemeColorChoiceForm
+        Inherits Form
+
+        Private ReadOnly _previewPanel As New Panel()
+        Private ReadOnly _previewLabel As New Label()
+        Private ReadOnly _swatchButtons As New List(Of Button)()
+
+        Public Property SelectedColor As Color = Color.FromArgb(79, 70, 229)
+
+        Public Sub New()
+            Text = "一键换主题"
+            ClientSize = New Size(560, 430)
+            FormBorderStyle = FormBorderStyle.FixedDialog
+            StartPosition = FormStartPosition.CenterScreen
+            MaximizeBox = False
+            MinimizeBox = False
+            ShowIcon = False
+            BackColor = OfficeAIStyleHelper.BgPage
+            Font = OfficeAIStyleHelper.FontUi
+
+            Dim header As New Panel() With {
+                .Dock = DockStyle.Top,
+                .Height = 82,
+                .BackColor = OfficeAIStyleHelper.BrandPrimary
+            }
+            Controls.Add(header)
+
+            Dim titleLabel As New Label() With {
+                .Text = "一键换主题",
+                .AutoSize = False,
+                .Location = New Point(28, 13),
+                .Size = New Size(260, 34),
+                .ForeColor = Color.White,
+                .Font = New Font("Microsoft YaHei UI", 20.0!, FontStyle.Bold),
+                .TextAlign = ContentAlignment.MiddleLeft
+            }
+            header.Controls.Add(titleLabel)
+
+            Dim subtitleLabel As New Label() With {
+                .Text = "选择颜色后，当前 PPT 会切换为对应色系",
+                .AutoSize = False,
+                .Location = New Point(30, 49),
+                .Size = New Size(430, 22),
+                .ForeColor = Color.FromArgb(225, 229, 255),
+                .Font = New Font("Microsoft YaHei UI", 9.5!, FontStyle.Regular),
+                .TextAlign = ContentAlignment.MiddleLeft
+            }
+            header.Controls.Add(subtitleLabel)
+
+            Dim hintLabel As New Label() With {
+                .Text = "选择主题色",
+                .AutoSize = True,
+                .Location = New Point(32, 108),
+                .ForeColor = OfficeAIStyleHelper.TextPrimary,
+                .Font = New Font("Microsoft YaHei UI", 12.0!, FontStyle.Bold)
+            }
+            Controls.Add(hintLabel)
+
+            Dim swatchPanel As New FlowLayoutPanel() With {
+                .Location = New Point(32, 142),
+                .Size = New Size(496, 106),
+                .BackColor = Color.Transparent,
+                .WrapContents = True,
+                .Padding = New Padding(0),
+                .Margin = New Padding(0)
+            }
+            Controls.Add(swatchPanel)
+
+            AddThemeSwatch(swatchPanel, "文多多紫", Color.FromArgb(79, 70, 229))
+            AddThemeSwatch(swatchPanel, "商务蓝", Color.FromArgb(37, 99, 235))
+            AddThemeSwatch(swatchPanel, "科技青", Color.FromArgb(8, 145, 178))
+            AddThemeSwatch(swatchPanel, "清新绿", Color.FromArgb(22, 163, 74))
+            AddThemeSwatch(swatchPanel, "活力橙", Color.FromArgb(249, 115, 22))
+            AddThemeSwatch(swatchPanel, "热情红", Color.FromArgb(239, 68, 68))
+            AddThemeSwatch(swatchPanel, "玫红", Color.FromArgb(219, 39, 119))
+            AddThemeSwatch(swatchPanel, "高级灰蓝", Color.FromArgb(71, 85, 105))
+
+            Dim previewShell As New Panel() With {
+                .Location = New Point(32, 270),
+                .Size = New Size(496, 54),
+                .BackColor = Color.White
+            }
+            previewShell.Padding = New Padding(1)
+            Controls.Add(previewShell)
+
+            _previewPanel.Location = New Point(16, 11)
+            _previewPanel.Size = New Size(76, 32)
+            _previewPanel.BackColor = SelectedColor
+            previewShell.Controls.Add(_previewPanel)
+
+            _previewLabel.Location = New Point(110, 10)
+            _previewLabel.Size = New Size(250, 34)
+            _previewLabel.TextAlign = ContentAlignment.MiddleLeft
+            _previewLabel.ForeColor = OfficeAIStyleHelper.TextPrimary
+            _previewLabel.Font = New Font("Microsoft YaHei UI", 10.0!, FontStyle.Regular)
+            previewShell.Controls.Add(_previewLabel)
+
+            Dim customButton As New Button() With {
+                .Text = "更多颜色",
+                .Location = New Point(366, 8),
+                .Size = New Size(112, 38),
+                .FlatStyle = FlatStyle.Flat,
+                .BackColor = Color.White,
+                .ForeColor = OfficeAIStyleHelper.TextPrimary,
+                .Font = New Font("Microsoft YaHei UI", 10.0!, FontStyle.Regular)
+            }
+            customButton.FlatAppearance.BorderColor = OfficeAIStyleHelper.BorderLight
+            customButton.FlatAppearance.BorderSize = 1
+            AddHandler customButton.Click, AddressOf CustomButton_Click
+            previewShell.Controls.Add(customButton)
+
+            Dim footer As New Panel() With {
+                .Dock = DockStyle.Bottom,
+                .Height = 78,
+                .BackColor = OfficeAIStyleHelper.BgPage
+            }
+            Controls.Add(footer)
+
+            Dim separator = OfficeAIStyleHelper.CreateSeparator(ClientSize.Width - 64)
+            separator.Location = New Point(32, 0)
+            footer.Controls.Add(separator)
+
+            Dim okButton As New Button() With {
+                .Text = "应用主题",
+                .Location = New Point(296, 22),
+                .Size = New Size(128, 42),
+                .DialogResult = DialogResult.OK,
+                .Font = New Font("Microsoft YaHei UI", 10.5!, FontStyle.Bold)
+            }
+            OfficeAIStyleHelper.StyleButtonPrimary(okButton)
+            okButton.Size = New Size(128, 42)
+            footer.Controls.Add(okButton)
+            AcceptButton = okButton
+
+            Dim cancelButton As New Button() With {
+                .Text = "取消",
+                .Location = New Point(436, 22),
+                .Size = New Size(92, 42),
+                .DialogResult = DialogResult.Cancel,
+                .Font = New Font("Microsoft YaHei UI", 10.0!, FontStyle.Regular)
+            }
+            OfficeAIStyleHelper.StyleButtonSecondary(cancelButton)
+            cancelButton.Size = New Size(92, 42)
+            footer.Controls.Add(cancelButton)
+            CancelButton = cancelButton
+
+            UpdatePreview()
+        End Sub
+
+        Private Sub AddThemeSwatch(container As FlowLayoutPanel, name As String, color As Color)
+            Dim button As New Button() With {
+                .Text = "",
+                .Tag = color,
+                .AccessibleName = name,
+                .Size = New Size(50, 50),
+                .Margin = New Padding(0, 0, 14, 14),
+                .BackColor = color,
+                .FlatStyle = FlatStyle.Flat,
+                .Cursor = Cursors.Hand
+            }
+            button.FlatAppearance.BorderColor = OfficeAIStyleHelper.BorderLight
+            button.FlatAppearance.BorderSize = 2
+            AddHandler button.Click,
+                Sub(sender, args)
+                    Dim clicked = TryCast(sender, Button)
+                    If clicked Is Nothing OrElse clicked.Tag Is Nothing Then Return
+                    SelectedColor = DirectCast(clicked.Tag, Color)
+                    UpdatePreview()
+                End Sub
+            _swatchButtons.Add(button)
+            container.Controls.Add(button)
+        End Sub
+
+        Private Sub CustomButton_Click(sender As Object, e As EventArgs)
+            Using dialog As New ColorDialog() With {
+                .Color = SelectedColor,
+                .FullOpen = True
+            }
+                If dialog.ShowDialog(Me) = DialogResult.OK Then
+                    SelectedColor = dialog.Color
+                    UpdatePreview()
+                End If
+            End Using
+        End Sub
+
+        Private Sub UpdatePreview()
+            _previewPanel.BackColor = SelectedColor
+            _previewLabel.Text = $"当前选择：#{SelectedColor.R:X2}{SelectedColor.G:X2}{SelectedColor.B:X2}"
+            For Each button In _swatchButtons
+                Dim buttonColor = DirectCast(button.Tag, Color)
+                If ColorsAreClose(buttonColor, SelectedColor) Then
+                    button.FlatAppearance.BorderColor = OfficeAIStyleHelper.BrandPrimaryDark
+                    button.FlatAppearance.BorderSize = 3
+                Else
+                    button.FlatAppearance.BorderColor = OfficeAIStyleHelper.BorderLight
+                    button.FlatAppearance.BorderSize = 2
+                End If
+            Next
+        End Sub
+    End Class
 
     ''' <summary>
     ''' 提取PPT演示文稿的完整结构为JSON格式
