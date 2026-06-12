@@ -1,0 +1,15 @@
+{
+  "name": "wenduoduo-wps-ppt",
+  "version": "0.1.0",
+  "private": true,
+  "addonType": "wpp",
+  "description": "文多多 WPS 演示 AI 助手",
+  "scripts": {
+    "debug": "wpsjs debug",
+    "build": "wpsjs build"
+  },
+  "devDependencies": {
+    "wpsjs": "latest",
+    "wpp-jsapi-declare": "latest"
+  }
+}

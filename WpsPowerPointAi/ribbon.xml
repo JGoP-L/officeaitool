@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui" onLoad="OnAddinLoad">
+  <ribbon>
+    <tabs>
+      <tab id="tabWenduoduoAi" label="文多多">
+        <group id="groupGeneratePpt" label="AI生成PPT">
+          <button id="btnGeneratePpt" label="生成PPT" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+          <button id="btnDocumentGeneratePpt" label="文档生成PPT" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+        </group>
+        <group id="groupTextCreate" label="AI文本创作">
+          <button id="btnPolish" label="润色" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+          <button id="btnExpand" label="扩写" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+          <button id="btnShorten" label="缩写" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+          <button id="btnTranslate" label="翻译" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+        </group>
+        <group id="groupSinglePage" label="AI单页">
+          <button id="btnBeautifyPage" label="美化单页" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+          <button id="btnGeneratePage" label="生成单页" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+        </group>
+        <group id="groupTheme" label="AI主题">
+          <button id="btnThemeColor" label="一键换主题" size="large" onAction="OnAction" getImage="GetImage" getEnabled="OnGetEnabled" />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

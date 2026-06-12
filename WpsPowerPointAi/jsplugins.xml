@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jsplugins>
+  <jspluginonline name="wenduoduo-wps-ppt" type="wpp" url="./" debug="" enable="enable_dev" install="null" />
+</jsplugins>

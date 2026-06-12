@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文多多 WPS 演示</title>
+  <link rel="stylesheet" href="../assets/styles.css?v=20260612-wps-beautify-full-slide">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <h1 id="appTitle">AI 生成 PPT</h1>
+        <p id="appSubtitle">输入主题后生成大纲，再选择模板生成演示文稿</p>
+      </div>
+    </header>
+
+    <section class="panel active" data-panel="generate-ppt">
+      <div class="mode-card">
+        <h2>输入创作灵感</h2>
+        <textarea id="topicInput" class="big-input" placeholder="输入您的创作灵感，例如：AI 办公趋势"></textarea>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="createOutlineButton" type="button" disabled>立即创作</button>
+        <button class="secondary-button" id="editOutlineButton" type="button" disabled>修改大纲</button>
+        <button class="secondary-button" id="pickTemplateButton" type="button" disabled>挑选模板</button>
+      </div>
+      <div class="status-line" id="outlineStatus"></div>
+      <textarea id="markdownOutput" class="markdown-editor result-editor is-hidden" placeholder="生成后的 Markdown 大纲会展示在这里"></textarea>
+    </section>
+
+    <section class="panel" data-panel="document-generate">
+      <div class="mode-card">
+        <div class="file-row">
+          <label for="documentPath">文档</label>
+          <input id="documentPath" class="file-name-input" type="text" readonly placeholder="请选择 Word、PDF、Markdown、PPT 等文档">
+          <button class="primary-button" id="selectDocumentButton" type="button">选择文档</button>
+          <input id="documentFileInput" type="file" hidden accept=".doc,.docx,.pdf,.ppt,.pptx,.txt,.md,.xls,.xlsx,.csv,.html,.epub,.mobi,.xmind,.mm">
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="createDocumentOutlineButton" type="button" disabled>立即创作</button>
+        <button class="secondary-button" id="editDocumentOutlineButton" type="button" disabled>修改大纲</button>
+        <button class="secondary-button" id="pickDocumentTemplateButton" type="button" disabled>挑选模板</button>
+      </div>
+      <div class="status-line" id="documentStatus"></div>
+      <textarea id="documentMarkdownOutput" class="markdown-editor result-editor is-hidden" placeholder="文档解析后的 Markdown 大纲会展示在这里"></textarea>
+    </section>
+
+    <section class="panel" data-panel="template-picker">
+      <div class="panel-title-row">
+        <h2>选择模板</h2>
+        <button class="secondary-button" id="backToOutlineButton" type="button">上一步</button>
+      </div>
+      <div class="filter-row">
+        <label>风格
+          <select id="styleFilter">
+            <option value="">全部</option>
+            <option>扁平简约</option>
+            <option>商务科技</option>
+            <option>创意趣味</option>
+          </select>
+        </label>
+        <label>类别
+          <select id="categoryFilter">
+            <option value="">全部</option>
+            <option>办公报告</option>
+            <option>个人简历</option>
+            <option>教育培训</option>
+            <option>现代商务</option>
+          </select>
+        </label>
+        <input id="themeColorFilter" type="color" value="#4f46e5" title="主题色">
+        <button class="secondary-button" id="refreshTemplatesButton" type="button">刷新</button>
+      </div>
+      <div class="template-grid" id="templateGrid"></div>
+      <div class="button-row sticky-actions">
+        <button class="secondary-button" id="templatePrevPageButton" type="button">上一页</button>
+        <span id="templatePageLabel">第 1 页</span>
+        <button class="secondary-button" id="templateNextPageButton" type="button">下一页</button>
+        <button class="primary-button" id="generatePptButton" type="button" disabled>下一步</button>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="text-create">
+      <div class="mode-card text-panel-card">
+        <h2 id="textModeTitle">润色</h2>
+        <p class="hint" id="textModeHint">优化表达，让文字更自然、专业。</p>
+        <textarea id="textSourceInput" class="medium-input" placeholder="选中文字后打开，或直接输入要处理的文本"></textarea>
+      </div>
+      <label class="language-row" id="languageRow">目标语言
+        <select id="targetLanguage">
+          <option value="英语">英语</option>
+          <option value="中文">中文</option>
+          <option value="日语">日语</option>
+          <option value="韩语">韩语</option>
+          <option value="法语">法语</option>
+          <option value="德语">德语</option>
+          <option value="西班牙语">西班牙语</option>
+        </select>
+      </label>
+      <div class="button-row">
+        <button class="primary-button" id="runTextCreateButton" type="button">开始润色</button>
+        <button class="secondary-button" id="replaceSelectedTextButton" type="button" disabled>替换回选中内容</button>
+      </div>
+      <textarea id="textResultOutput" class="medium-input result-editor is-hidden" placeholder="AI 创作结果"></textarea>
+    </section>
+
+    <section class="panel" data-panel="single-page">
+      <div class="single-page-frame">
+        <div class="frame-label">新页面</div>
+        <h2 id="singlePageTitle">AI 生成单页</h2>
+        <p class="hint" id="singlePageHint">输入页面标题或内容，我会生成一页新的 PPT 页面。</p>
+        <textarea id="singlePageInput" class="big-input" maxlength="1000" placeholder="请输入页面标题或内容"></textarea>
+        <div class="char-count" id="singlePageCount">0 / 1000</div>
+        <button class="primary-button wide-button" id="singlePageActionButton" type="button">AI智能生成新页面</button>
+      </div>
+      <div class="status-line" id="singlePageStatus"></div>
+      <div class="single-page-loading is-hidden" id="singlePageLoading">
+        <button class="single-page-close" id="singlePageLoadingCloseButton" type="button" aria-label="关闭">×</button>
+        <div class="loading-spinner"></div>
+        <div class="loading-title" id="singlePageLoadingTitle">正在生成候选页面...</div>
+        <div class="loading-note">请稍候，不要关闭此界面</div>
+      </div>
+      <div class="single-page-chooser is-hidden" id="singlePageChooser">
+        <button class="single-page-close" id="singlePageChooserCloseButton" type="button" aria-label="关闭">×</button>
+        <div class="single-page-main">
+          <div class="single-page-preview-shell">
+            <img id="singlePageMainPreview" alt="候选页面预览">
+            <div class="single-page-preview-empty" id="singlePagePreviewEmpty">预览生成中...</div>
+          </div>
+          <button class="primary-button single-page-apply" id="applySinglePageButton" type="button">将此页面插入演示文档</button>
+        </div>
+        <aside class="single-page-side">
+          <h3>候选页面</h3>
+          <div class="single-page-side-body">
+            <div class="single-page-side-hint">来试试其他的页面</div>
+            <div class="single-page-thumb-list" id="singlePageThumbList"></div>
+          </div>
+        </aside>
+        <div class="single-page-disclaimer">即便是AI也不能保证百分百正确，请注意甄别并核实。</div>
+      </div>
+      <textarea id="singlePageResult" class="medium-input result-editor is-hidden" placeholder="生成过程和结果"></textarea>
+    </section>
+
+    <section class="panel" data-panel="theme-color">
+      <div class="mode-card">
+        <h2>一键换主题</h2>
+        <p class="hint">选择一个颜色，当前 WPS 演示会切换为对应色系。</p>
+        <div class="swatch-row" id="themeSwatches"></div>
+        <div class="current-color">
+          <input id="themeColorInput" type="color" value="#4f46e5">
+          <span id="themeColorLabel">#4F46E5</span>
+        </div>
+      </div>
+      <button class="primary-button" id="applyThemeButton" type="button">应用主题</button>
+    </section>
+  </main>
+
+  <script charset="utf-8" src="../src/sample-templates.js?v=20260612-wps-beautify-full-slide"></script>
+  <script charset="utf-8" src="../src/docmee-client.js?v=20260612-wps-beautify-full-slide"></script>
+  <script charset="utf-8" src="../src/wps-ppt-adapter.js?v=20260612-wps-beautify-full-slide"></script>
+  <script charset="utf-8" src="../src/app.js?v=20260612-wps-beautify-full-slide"></script>
+</body>
+</html>

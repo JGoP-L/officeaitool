@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>选择翻译语言</title>
+  <style>
+    :root {
+      --brand: #4f46e5;
+      --brand-dark: #4338ca;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #d8e0eb;
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: #f7f9fd;
+      font-size: 16px;
+      overflow: hidden;
+    }
+
+    .dialog {
+      height: 100vh;
+      min-height: 0;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      flex: 0 0 auto;
+      padding: 12px 18px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .panel {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hint {
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    label {
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    select {
+      width: 100%;
+      height: 42px;
+      padding: 0 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font-size: 16px;
+    }
+
+    .status {
+      min-height: 24px;
+      color: var(--brand-dark);
+      font-weight: 800;
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+
+    .footer {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: auto;
+      padding-top: 10px;
+    }
+
+    .primary-button,
+    .cancel-button {
+      min-width: 106px;
+      height: 40px;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .primary-button {
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .primary-button:hover {
+      background: var(--brand-dark);
+    }
+
+    .cancel-button {
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: var(--text);
+    }
+
+    button:disabled,
+    select:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
+  </style>
+</head>
+<body>
+  <main class="dialog">
+    <header class="header">选择翻译语言</header>
+    <section class="panel">
+      <p class="hint">选择目标语言后，会直接翻译当前选中的文字并替换回原位置。</p>
+      <div class="field-row">
+        <label for="targetLanguage">目标语言</label>
+        <select id="targetLanguage"></select>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="footer">
+        <button class="primary-button" id="translateButton" type="button">开始翻译</button>
+        <button class="cancel-button" id="cancelButton" type="button">取消</button>
+      </div>
+    </section>
+  </main>
+
+  <script charset="utf-8" src="../src/docmee-client.js?v=20260612-wps-beautify-full-slide"></script>
+  <script charset="utf-8" src="../src/wps-ppt-adapter.js?v=20260612-wps-beautify-full-slide"></script>
+  <script charset="utf-8" src="../src/translate-dialog.js?v=20260612-wps-beautify-full-slide"></script>
+</body>
+</html>
