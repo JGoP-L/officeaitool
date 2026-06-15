@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<jsplugins>
+  <jspluginonline name="wenduoduo-wps-ppt" type="wpp" url="http://127.0.0.1:3889/" enable="enable" install="null" />
+</jsplugins>

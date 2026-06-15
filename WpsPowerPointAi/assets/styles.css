@@ -750,6 +750,26 @@ h2 {
   background: #f8fafc;
 }
 
+.single-page-thumb.preview-load-failed img {
+  display: none;
+}
+
+.single-page-thumb.preview-load-failed::before {
+  content: "预览图加载失败\\A点击选择此页";
+  display: flex;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  white-space: pre-line;
+}
+
 .single-page-thumb-title {
   margin-top: 6px;
   color: #42526d;

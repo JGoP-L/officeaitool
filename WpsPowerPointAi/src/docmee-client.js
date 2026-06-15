@@ -18,6 +18,29 @@
     return String(baseUrl || "https://test.docmee.cn").replace(/\/+$/, "");
   }
 
+  function isLocalHttpOrigin() {
+    try {
+      return global.location &&
+        /^https?:$/.test(global.location.protocol || "") &&
+        /^(127\.0\.0\.1|localhost)$/i.test(global.location.hostname || "");
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function networkErrorMessage(error) {
+    return error && error.message ? error.message : String(error || "");
+  }
+
+  function shouldRetryWithProxy(error) {
+    var message = networkErrorMessage(error);
+    return !message ||
+      /failed to fetch/i.test(message) ||
+      /network/i.test(message) ||
+      /load failed/i.test(message) ||
+      /cors/i.test(message);
+  }
+
   function randomNewPageTemplateId() {
     return NEW_PAGE_TEMPLATE_IDS[Math.floor(Math.random() * NEW_PAGE_TEMPLATE_IDS.length)];
   }
@@ -271,6 +294,56 @@
     return normalizeBaseUrl(this.config.baseUrl) + path;
   };
 
+  DocmeeClient.prototype.proxyEndpoint = function (path) {
+    var configured = String(this.config.proxyBaseUrl || "").trim();
+    if (configured) return normalizeBaseUrl(configured) + path;
+    if (!isLocalHttpOrigin()) return "";
+    return global.location.origin + "/__docmee_proxy" + path;
+  };
+
+  DocmeeClient.prototype.fetchApi = async function (path, options) {
+    options = options || {};
+    var proxyUrl = this.proxyEndpoint(path);
+    var preferProxy = !!proxyUrl && this.config.disableProxy !== true && isLocalHttpOrigin();
+    var directUrl = this.endpoint(path);
+    var directError = null;
+    var firstProxyError = null;
+
+    if (preferProxy) {
+      try {
+        var proxyResponse = await fetch(proxyUrl, options);
+        if (proxyResponse.status !== 404 && proxyResponse.status < 500) return proxyResponse;
+        if (proxyResponse.status >= 500) {
+          firstProxyError = new Error("本地 Docmee 代理返回 " + proxyResponse.status + " " + proxyResponse.statusText);
+        }
+      } catch (error) {
+        firstProxyError = error;
+      }
+    }
+
+    try {
+      return await fetch(directUrl, options);
+    } catch (error) {
+      directError = error;
+      if (!proxyUrl || !shouldRetryWithProxy(error)) throw error;
+    }
+
+    try {
+      var fallbackProxyResponse = await fetch(proxyUrl, options);
+      if (fallbackProxyResponse.status === 404) {
+        throw new Error("本地 Docmee 代理不可用，请使用 dev-preview-server.py 启动 WPS 预览服务，或配置可用的 proxyBaseUrl。");
+      }
+      if (fallbackProxyResponse.status >= 500) {
+        throw new Error("本地 Docmee 代理返回 " + fallbackProxyResponse.status + " " + fallbackProxyResponse.statusText);
+      }
+      return fallbackProxyResponse;
+    } catch (fallbackProxyError) {
+      throw new Error("Docmee 网络请求失败：直连和本地代理都不可用。" +
+        " 直连错误：" + networkErrorMessage(directError) +
+        "；代理错误：" + networkErrorMessage(firstProxyError || fallbackProxyError));
+    }
+  };
+
   DocmeeClient.prototype.jsonHeaders = function (langOverride) {
     var headers = {
       "Accept": "*/*",
@@ -304,7 +377,7 @@
     form.append("type", type || "1");
     form.append("content", String(content || "").trim());
 
-    var response = await fetch(this.endpoint("/api/ppt/v2/createTask"), {
+    var response = await this.fetchApi("/api/ppt/v2/createTask", {
       method: "POST",
       headers: this.formHeaders(),
       body: form
@@ -323,7 +396,7 @@
     form.append("type", type);
     form.append("file", file, file.name || "document");
 
-    var response = await fetch(this.endpoint("/api/ppt/v2/createTask"), {
+    var response = await this.fetchApi("/api/ppt/v2/createTask", {
       method: "POST",
       headers: this.formHeaders(),
       body: form
@@ -351,7 +424,7 @@
       isGenImg: false
     };
 
-    var response = await fetch(this.endpoint("/api/ppt/v2/generateContent"), {
+    var response = await this.fetchApi("/api/ppt/v2/generateContent", {
       method: "POST",
       headers: this.jsonHeaders(),
       body: JSON.stringify(body)
@@ -377,7 +450,7 @@
       }
     };
 
-    var response = await fetch(this.endpoint("/api/ppt/templates?lang=zh-CN"), {
+    var response = await this.fetchApi("/api/ppt/templates?lang=zh-CN", {
       method: "POST",
       headers: this.jsonHeaders(),
       body: JSON.stringify(body)
@@ -407,7 +480,7 @@
       templateId: String(templateId || "").trim(),
       markdown: String(markdown || "").trim()
     };
-    var response = await fetch(this.endpoint("/api/ppt/v2/generatePptx"), {
+    var response = await this.fetchApi("/api/ppt/v2/generatePptx", {
       method: "POST",
       headers: this.jsonHeaders(),
       body: JSON.stringify(body)
@@ -425,7 +498,7 @@
     var attempts = Math.max(1, Number(maxAttempts) || 1);
     var delay = Math.max(200, Number(retryDelayMs) || 1000);
     for (var attempt = 1; attempt <= attempts; attempt += 1) {
-      var response = await fetch(this.endpoint("/api/ppt/downloadPptx"), {
+      var response = await this.fetchApi("/api/ppt/downloadPptx", {
         method: "POST",
         headers: this.jsonHeaders(),
         body: JSON.stringify({ id: id, refresh: !!refresh })
@@ -461,7 +534,7 @@
       if (targetLanguageName) body.targetLanguage = targetLanguageName;
     }
 
-    var response = await fetch(this.endpoint("/api/ppt/textOptimize"), {
+    var response = await this.fetchApi("/api/ppt/textOptimize", {
       method: "POST",
       headers: this.jsonHeaders(requestLang),
       body: JSON.stringify(body)
@@ -472,10 +545,11 @@
     });
   };
 
-  DocmeeClient.prototype.newPageWithAiV2 = async function (content, onProgress) {
+  DocmeeClient.prototype.newPageWithAiV2 = async function (content, onProgress, options) {
     this.requireToken();
-    var templateId = randomNewPageTemplateId();
-    var pptxId = String(this.config.pptxId || "").trim() || randomNewPageTemplateId();
+    options = options || {};
+    var templateId = String(options.templateId || "").trim() || randomNewPageTemplateId();
+    var pptxId = String(options.pptxId || this.config.pptxId || "").trim() || randomNewPageTemplateId();
     var body = {
       content: String(content || "").trim(),
       pptxId: pptxId,
@@ -485,7 +559,7 @@
     };
     if (!body.content) throw new Error("请输入页面标题或内容。");
 
-    var response = await fetch(this.endpoint("/api/ppt/v2/newPageWithAiV2"), {
+    var response = await this.fetchApi("/api/ppt/v2/newPageWithAiV2", {
       method: "POST",
       headers: this.jsonHeaders(),
       body: JSON.stringify(body)

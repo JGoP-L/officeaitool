@@ -1,6 +1,9 @@
 (function (global) {
   "use strict";
 
+  var DOCMEE_PPTX_ID_TAG_NAME = "wenduoduoAI_DocmeePptxId";
+  var DOCMEE_PPTX_ID_STORAGE_PREFIX = "wenduoduo_wps_ppt_docmee_pptx_id";
+
   function getApplication() {
     if (global.wps && typeof global.wps.WppApplication === "function") {
       return global.wps.WppApplication();
@@ -20,6 +23,67 @@
 
   function getAddinRoot() {
     return global.Application || (global.wps && global.wps.Application) || null;
+  }
+
+  function presentationStorageKey(presentation) {
+    var name = "";
+    try {
+      name = presentation && (presentation.FullName || presentation.Path || presentation.Name || "");
+    } catch (error) {
+      name = "";
+    }
+    return DOCMEE_PPTX_ID_STORAGE_PREFIX + ":" + String(name || "active");
+  }
+
+  function getPluginStorageValue(key) {
+    var root = getAddinRoot();
+    try {
+      if (root && root.PluginStorage && typeof root.PluginStorage.getItem === "function") {
+        return String(root.PluginStorage.getItem(key) || "").trim();
+      }
+    } catch (error) {}
+    return "";
+  }
+
+  function setPluginStorageValue(key, value) {
+    var root = getAddinRoot();
+    try {
+      if (root && root.PluginStorage && typeof root.PluginStorage.setItem === "function") {
+        root.PluginStorage.setItem(key, value);
+      }
+    } catch (error) {}
+  }
+
+  function readPresentationTag(presentation, name) {
+    if (!presentation || !presentation.Tags) return "";
+    try {
+      if (typeof presentation.Tags.Item === "function") return String(presentation.Tags.Item(name) || "").trim();
+    } catch (error) {}
+    try {
+      if (typeof presentation.Tags.item === "function") return String(presentation.Tags.item(name) || "").trim();
+    } catch (error) {}
+    try {
+      return String(presentation.Tags[name] || "").trim();
+    } catch (error) {}
+    return "";
+  }
+
+  function writePresentationTag(presentation, name, value) {
+    if (!presentation || !presentation.Tags || !value) return false;
+    try {
+      if (typeof presentation.Tags.Delete === "function") presentation.Tags.Delete(name);
+    } catch (error) {}
+    try {
+      if (typeof presentation.Tags.Add === "function") {
+        presentation.Tags.Add(name, value);
+        return true;
+      }
+    } catch (error) {}
+    try {
+      presentation.Tags[name] = value;
+      return true;
+    } catch (error) {}
+    return false;
   }
 
   function getEnv(app) {
@@ -67,6 +131,71 @@
     if (!normalized) return "";
     if (/^[a-zA-Z]:\//.test(normalized)) return "file:///" + encodeURI(normalized);
     return "file://" + encodeURI(normalized);
+  }
+
+  function previewHttpUrl(filePath) {
+    if (!filePath) return "";
+    var origin = "http://127.0.0.1:3889";
+    if (global.location && /^https?:$/.test(global.location.protocol || "") && /^(127\.0\.0\.1|localhost)$/i.test(global.location.hostname || "")) {
+      origin = global.location.origin;
+    }
+    return origin + "/__preview?path=" + encodeURIComponent(filePath);
+  }
+
+  function downloadProxyUrl(url) {
+    if (!url) return "";
+    var origin = "http://127.0.0.1:3889";
+    if (global.location && /^https?:$/.test(global.location.protocol || "") && /^(127\.0\.0\.1|localhost)$/i.test(global.location.hostname || "")) {
+      origin = global.location.origin;
+    }
+    return origin + "/__download?url=" + encodeURIComponent(url);
+  }
+
+  function normalizeBinaryString(value) {
+    if (!value) return "";
+    if (value instanceof ArrayBuffer) return arrayBufferToBinaryString(value);
+    if (value.buffer instanceof ArrayBuffer) return arrayBufferToBinaryString(value.buffer);
+    if (typeof value === "object") return normalizeBinaryString(value.data || value.result || value.content || "");
+    return String(value);
+  }
+
+  function binaryStringToBase64(binary) {
+    binary = String(binary || "");
+    if (!binary) return "";
+    var chunkSize = 0x7ffe;
+    var parts = [];
+    for (var i = 0; i < binary.length; i += chunkSize) {
+      var chunk = binary.slice(i, i + chunkSize);
+      for (var j = 0; j < chunk.length; j += 1) {
+        if (chunk.charCodeAt(j) > 255) return "";
+      }
+      parts.push(btoa(chunk));
+    }
+    return parts.join("");
+  }
+
+  async function readBinaryFile(fileSystem, filePath) {
+    if (!fileSystem || !filePath) return "";
+    var readers = ["readAsBinaryString", "readFile", "ReadFile", "read", "Read"];
+    for (var i = 0; i < readers.length; i += 1) {
+      var reader = fileSystem[readers[i]];
+      if (typeof reader !== "function") continue;
+      try {
+        return normalizeBinaryString(await maybeAwait(reader.call(fileSystem, filePath)));
+      } catch (error) {}
+    }
+    return "";
+  }
+
+  async function imageFileToDataUrl(app, filePath) {
+    try {
+      var fileSystem = getFileSystem(app);
+      var binary = await readBinaryFile(fileSystem, filePath);
+      var base64 = binaryStringToBase64(binary);
+      return base64 ? "data:image/png;base64," + base64 : "";
+    } catch (error) {
+      return "";
+    }
   }
 
   function parseDownloadPath(value) {
@@ -159,7 +288,15 @@
     if (!tempPath) throw new Error("当前 WPS 环境没有临时目录 API，无法保存 PPTX。");
 
     var localPath = ensureTrailingSlash(tempPath) + "wenduoduoAI_" + safeFileName(pptId) + "_" + Date.now() + ".pptx";
-    var response = await fetch(url);
+    var response = null;
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      response = await fetch(downloadProxyUrl(url));
+    }
+    if (response && response.status === 404) {
+      response = await fetch(url);
+    }
     if (!response.ok) throw new Error("下载 PPTX 失败：" + response.status + " " + response.statusText);
     var buffer = await response.arrayBuffer();
     await writeBinaryFile(fileSystem, localPath, arrayBufferToBinaryString(buffer));
@@ -353,6 +490,7 @@
     if (!previewPath || !slide || typeof slide.Export !== "function") return "";
     try {
       await maybeAwait(slide.Export(previewPath, "PNG", 960, 540));
+      await waitForFileReady(getFileSystem(app), previewPath, 3000);
       return previewPath;
     } catch (error) {
       return "";
@@ -635,6 +773,25 @@
       return getSlidePlainText(slide);
     },
 
+    getCurrentDocmeePptxId: function () {
+      var app = getApplication();
+      var presentation = getPresentation(app);
+      return readPresentationTag(presentation, DOCMEE_PPTX_ID_TAG_NAME) ||
+        getPluginStorageValue(presentationStorageKey(presentation)) ||
+        getPluginStorageValue(DOCMEE_PPTX_ID_STORAGE_PREFIX);
+    },
+
+    saveCurrentDocmeePptxId: function (pptxId) {
+      pptxId = String(pptxId || "").trim();
+      if (!pptxId) return false;
+      var app = getApplication();
+      var presentation = getPresentation(app);
+      var savedToPresentation = writePresentationTag(presentation, DOCMEE_PPTX_ID_TAG_NAME, pptxId);
+      setPluginStorageValue(presentationStorageKey(presentation), pptxId);
+      setPluginStorageValue(DOCMEE_PPTX_ID_STORAGE_PREFIX, pptxId);
+      return savedToPresentation;
+    },
+
     applyThemeColor: function (hex) {
       var app = getApplication();
       var presentation = getPresentation(app);
@@ -691,11 +848,13 @@
         for (var i = 1; i <= slideCount; i += 1) {
           var slide = item(slides, i);
           var previewPath = await exportSlidePreview(app, slide, pptId, i);
+          var previewUrl = await imageFileToDataUrl(app, previewPath);
+          var httpPreviewUrl = previewHttpUrl(previewPath);
           choices.push({
             slideIndex: i,
             title: getSlideTitle(slide),
             previewPath: previewPath,
-            previewUrl: toFileUrl(previewPath),
+            previewUrl: httpPreviewUrl || previewUrl || toFileUrl(previewPath),
             localPath: localPath
           });
         }

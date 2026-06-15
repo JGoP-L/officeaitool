@@ -1,5 +1,5 @@
 ﻿var WENDUODUO_TASKPANE_ID = "wenduoduo_wps_ppt_taskpane_id";
-var WENDUODUO_ASSET_VERSION = "20260612-wps-beautify-full-slide";
+var WENDUODUO_ASSET_VERSION = "20260615-wps-preview-btoa-fallback";
 var WENDUODUO_DIRECT_TEXT_BUSY = false;
 var WENDUODUO_SCRIPT_LOAD_PROMISE = null;
 

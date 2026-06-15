@@ -127,6 +127,33 @@
     return new global.DocmeeClient(loadConfig());
   }
 
+  function resolveCurrentDocmeePptxId() {
+    var config = loadConfig();
+    var pptxId = String(config.pptxId || "").trim();
+    try {
+      var hostPptxId = global.WpsPptAdapter.getCurrentDocmeePptxId();
+      if (hostPptxId) pptxId = hostPptxId;
+    } catch (error) {}
+    return pptxId;
+  }
+
+  function singlePageClient(pptxId) {
+    var config = loadConfig();
+    if (pptxId) config.pptxId = pptxId;
+    return new global.DocmeeClient(config);
+  }
+
+  function rememberDocmeePptxId(pptxId) {
+    pptxId = String(pptxId || "").trim();
+    if (!pptxId) return;
+    global.WENDUODUO_DOCMEE_CONFIG = Object.assign({}, global.WENDUODUO_DOCMEE_CONFIG || {}, {
+      pptxId: pptxId
+    });
+    try {
+      global.WpsPptAdapter.saveCurrentDocmeePptxId(pptxId);
+    } catch (error) {}
+  }
+
   function docmeeLanguageCode(languageName) {
     var map = {
       "中文": "zh",
@@ -568,6 +595,7 @@
     if (!state.templateId) throw new Error("请先选择模板。");
     $("#generatePptButton").textContent = "生成中...";
     state.generatedPptInfo = await client().generatePptx(state.taskId, state.templateId, state.markdown);
+    if (state.generatedPptInfo && state.generatedPptInfo.id) rememberDocmeePptxId(state.generatedPptInfo.id);
     state.generatedPptUrl = await client().downloadPptx(state.generatedPptInfo.id, false, 6, 1200);
     $("#generatePptButton").textContent = "导入中...";
     var importResult = await global.WpsPptAdapter.importPptxFromUrl(state.generatedPptUrl, state.generatedPptInfo.id);
@@ -636,6 +664,88 @@
     if (message) setText("#singlePageLoadingTitle", message);
   }
 
+  function debugPreview(eventName, payload) {
+    try {
+      var origin = previewServiceOrigin();
+      if (!origin) return;
+      var body = JSON.stringify(Object.assign({ event: eventName, at: Date.now() }, payload || {}));
+      fetch(origin + "/__log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body
+      }).catch(function () {});
+    } catch (error) {}
+  }
+
+  function previewServiceOrigin() {
+    if (global.location && /^https?:$/.test(global.location.protocol || "") && /^(127\.0\.0\.1|localhost)$/i.test(global.location.hostname || "")) {
+      return global.location.origin;
+    }
+    return "http://127.0.0.1:3889";
+  }
+
+  function previewHttpUrl(choice) {
+    if (!choice || !choice.previewPath) return "";
+    return previewServiceOrigin() + "/__preview?path=" + encodeURIComponent(choice.previewPath);
+  }
+
+  function setPreviewImage(image, choice) {
+    if (!image) return false;
+    var fallbackUrl = previewHttpUrl(choice);
+    var primaryUrl = (choice && choice.previewUrl) || fallbackUrl;
+    image.alt = "";
+    image.classList.remove("preview-image-failed");
+    image.removeAttribute("data-preview-retry");
+    var thumb = image.closest ? image.closest(".single-page-thumb") : null;
+    if (thumb) thumb.classList.remove("preview-load-failed");
+    image.onerror = function () {
+      debugPreview("image-error", {
+        currentSrc: image.currentSrc || image.src || "",
+        fallbackUrl: fallbackUrl,
+        previewPath: choice && choice.previewPath,
+        title: choice && choice.title
+      });
+      if (fallbackUrl && image.src !== fallbackUrl && !image.getAttribute("data-preview-retry")) {
+        image.setAttribute("data-preview-retry", "1");
+        image.src = fallbackUrl;
+        return;
+      }
+      image.classList.add("preview-image-failed");
+      var failedThumb = image.closest ? image.closest(".single-page-thumb") : null;
+      if (failedThumb) failedThumb.classList.add("preview-load-failed");
+      var shell = image.closest ? image.closest(".single-page-preview-shell") : null;
+      if (shell) {
+        shell.classList.remove("has-image");
+        var empty = shell.querySelector(".single-page-preview-empty");
+        if (empty) empty.textContent = "预览图加载失败，可从右侧选择候选页";
+      }
+    };
+    image.onload = function () {
+      image.classList.remove("preview-image-failed");
+      var loadedThumb = image.closest ? image.closest(".single-page-thumb") : null;
+      if (loadedThumb) loadedThumb.classList.remove("preview-load-failed");
+      debugPreview("image-load", {
+        currentSrc: image.currentSrc || image.src || "",
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        previewPath: choice && choice.previewPath,
+        title: choice && choice.title
+      });
+    };
+    if (primaryUrl) {
+      debugPreview("image-set", {
+        primaryUrl: primaryUrl,
+        fallbackUrl: fallbackUrl,
+        previewPath: choice && choice.previewPath,
+        title: choice && choice.title
+      });
+      image.src = primaryUrl;
+      return true;
+    }
+    image.removeAttribute("src");
+    return false;
+  }
+
   function selectSinglePageChoice(index) {
     if (!state.singlePageChoices.length) return;
     state.singlePageSelectedIndex = Math.max(0, Math.min(index, state.singlePageChoices.length - 1));
@@ -643,11 +753,9 @@
     var preview = $("#singlePageMainPreview");
     var shell = document.querySelector(".single-page-preview-shell");
     if (preview) {
-      if (choice.previewUrl) {
-        preview.src = choice.previewUrl;
+      if (setPreviewImage(preview, choice)) {
         if (shell) shell.classList.add("has-image");
       } else {
-        preview.removeAttribute("src");
         if (shell) shell.classList.remove("has-image");
       }
     }
@@ -677,8 +785,7 @@
       card.type = "button";
       card.className = "single-page-thumb";
       var image = document.createElement("img");
-      if (choice.previewUrl) image.src = choice.previewUrl;
-      image.alt = choice.title || ("第 " + choice.slideIndex + " 页");
+      setPreviewImage(image, choice);
       var title = document.createElement("div");
       title.className = "single-page-thumb-title";
       title.textContent = "第 " + choice.slideIndex + " 页 - " + (choice.title || "候选页面");
@@ -708,12 +815,12 @@
     setStatus("#singlePageStatus", "正在替换当前页...");
     try {
       await global.WpsPptAdapter.applySinglePageChoice(choice);
-      setStatus("#singlePageStatus", "已应用到当前页。");
+      setStatus("#singlePageStatus", "已替换当前页。");
       global.WpsPptAdapter.closeHostSurface();
     } finally {
       state.isApplyingSinglePage = false;
       $("#applySinglePageButton").disabled = false;
-      $("#applySinglePageButton").textContent = "将此页面插入演示文档";
+      $("#applySinglePageButton").textContent = "替换当前页";
       refreshEnabledState();
     }
   }
@@ -723,26 +830,6 @@
     try {
       global.WpsPptAdapter.closeHostSurface();
     } catch (error) {}
-  }
-
-  async function runSinglePage(content, beautify) {
-    if (!content.trim()) {
-      setStatus("#singlePageStatus", "请输入页面标题或内容。");
-      return;
-    }
-    var label = beautify ? "正在美化当前页..." : "正在生成新页面...";
-    setStatus("#singlePageStatus", label);
-    showResultEditor("#singlePageResult");
-    $("#singlePageResult").value = label + "\n";
-    var progressLines = [];
-    var result = await client().newPageWithAiV2(content, function (partial) {
-      progressLines.push(partial);
-      $("#singlePageResult").value = progressLines.slice(-20).join("\n");
-      $("#singlePageResult").scrollTop = $("#singlePageResult").scrollHeight;
-    });
-    $("#singlePageResult").value = formatSinglePageResult(result);
-    if (result.fileUrl) global.WpsPptAdapter.openPptxDownload(result.fileUrl);
-    setStatus("#singlePageStatus", "生成完成，已打开下载地址。WPS 自动应用当前页能力将在宿主导入接口接通后启用。");
   }
 
   async function runSinglePageV2(content, beautify) {
@@ -758,12 +845,14 @@
     setSinglePageLoading(true, label);
 
     try {
-      var result = await client().newPageWithAiV2(content, function (partial) {
+      var pptxId = resolveCurrentDocmeePptxId();
+      var result = await singlePageClient(pptxId).newPageWithAiV2(content, function (partial) {
         if (partial) {
           setStatus("#singlePageStatus", beautify ? "正在美化当前页..." : "正在生成新页面...");
           setSinglePageLoading(true, label);
         }
-      });
+      }, { pptxId: pptxId });
+      rememberDocmeePptxId(result.pptxId);
 
       if (!result.fileUrl) throw new Error("Docmee 没有返回可下载的 PPTX。");
       setStatus("#singlePageStatus", "正在准备候选页面预览...");
@@ -771,7 +860,7 @@
       var choiceResult = await global.WpsPptAdapter.createSinglePageChoicesFromUrl(result.fileUrl, result.pptxId);
       setVisible("#singlePageLoading", false);
       renderSinglePageChoices(result, choiceResult);
-      setStatus("#singlePageStatus", "请选择一个候选页面应用到当前页。");
+      setStatus("#singlePageStatus", "请选择一个候选页面替换当前页。");
     } finally {
       state.isGeneratingSinglePage = false;
       setSinglePageLoading(false);
@@ -788,7 +877,7 @@
     currentPageContent = String(currentPageContent || "").trim();
     if (!currentPageContent) throw new Error("当前页没有可用于美化的内容。");
 
-    var content = "请基于当前页全部内容进行美化，保留原有信息，不要丢失要点。\n\n当前页内容：\n" + currentPageContent;
+    var content = "请基于当前 PPT 页面全部内容进行美化，保留原有信息，不要丢失要点。请重新组织版式、层级、字体和视觉风格，生成一页可直接替换当前页的 PPT。\n\n当前页内容（已从标题、文本框、表格、图表标题、备注等收集）：\n" + currentPageContent;
     if (extraRequirement) content += "\n\n用户美化要求：\n" + extraRequirement;
     return content;
   }

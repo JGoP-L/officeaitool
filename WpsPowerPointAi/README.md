@@ -32,6 +32,8 @@
    - `main.js`
    - `index.html`
 
+发布给用户时请使用 `jsplugins.release.xml` 或保持 `jsplugins.xml` 中 `enable="enable"`，不要使用 `enable_dev` / `wpsjs debug`，否则 WPS 会在功能区注入“打开JS调试器”。
+
 ## 说明
 
 - WPS 加载项使用 `ribbon.xml` 定义功能区按钮，按钮通过 `main.js` 的 `onAction` 调用打开任务窗格。
