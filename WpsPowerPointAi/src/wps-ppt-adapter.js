@@ -848,13 +848,17 @@
         for (var i = 1; i <= slideCount; i += 1) {
           var slide = item(slides, i);
           var previewPath = await exportSlidePreview(app, slide, pptId, i);
-          var previewUrl = await imageFileToDataUrl(app, previewPath);
+          var previewDataUrl = await imageFileToDataUrl(app, previewPath);
           var httpPreviewUrl = previewHttpUrl(previewPath);
+          var filePreviewUrl = toFileUrl(previewPath);
           choices.push({
             slideIndex: i,
             title: getSlideTitle(slide),
             previewPath: previewPath,
-            previewUrl: httpPreviewUrl || previewUrl || toFileUrl(previewPath),
+            previewUrl: previewDataUrl || httpPreviewUrl || filePreviewUrl,
+            previewDataUrl: previewDataUrl,
+            previewHttpUrl: httpPreviewUrl,
+            previewFileUrl: filePreviewUrl,
             localPath: localPath
           });
         }

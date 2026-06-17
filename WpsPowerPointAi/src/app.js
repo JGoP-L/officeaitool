@@ -686,28 +686,48 @@
 
   function previewHttpUrl(choice) {
     if (!choice || !choice.previewPath) return "";
-    return previewServiceOrigin() + "/__preview?path=" + encodeURIComponent(choice.previewPath);
+    return choice.previewHttpUrl || (previewServiceOrigin() + "/__preview?path=" + encodeURIComponent(choice.previewPath));
+  }
+
+  function addPreviewCandidate(list, value) {
+    if (!value || list.indexOf(value) >= 0) return;
+    list.push(value);
+  }
+
+  function previewImageCandidates(choice) {
+    var list = [];
+    if (!choice) return list;
+    addPreviewCandidate(list, choice.previewUrl);
+    addPreviewCandidate(list, choice.previewDataUrl);
+    addPreviewCandidate(list, choice.previewHttpUrl);
+    addPreviewCandidate(list, previewHttpUrl(choice));
+    addPreviewCandidate(list, choice.previewFileUrl);
+    return list;
   }
 
   function setPreviewImage(image, choice) {
     if (!image) return false;
-    var fallbackUrl = previewHttpUrl(choice);
-    var primaryUrl = (choice && choice.previewUrl) || fallbackUrl;
+    var candidates = previewImageCandidates(choice);
     image.alt = "";
     image.classList.remove("preview-image-failed");
     image.removeAttribute("data-preview-retry");
+    image.removeAttribute("data-preview-index");
     var thumb = image.closest ? image.closest(".single-page-thumb") : null;
     if (thumb) thumb.classList.remove("preview-load-failed");
     image.onerror = function () {
+      var currentIndex = Number(image.getAttribute("data-preview-index") || "0");
+      var nextIndex = currentIndex + 1;
       debugPreview("image-error", {
         currentSrc: image.currentSrc || image.src || "",
-        fallbackUrl: fallbackUrl,
+        nextUrl: candidates[nextIndex] || "",
+        candidates: candidates,
         previewPath: choice && choice.previewPath,
         title: choice && choice.title
       });
-      if (fallbackUrl && image.src !== fallbackUrl && !image.getAttribute("data-preview-retry")) {
+      if (nextIndex < candidates.length) {
         image.setAttribute("data-preview-retry", "1");
-        image.src = fallbackUrl;
+        image.setAttribute("data-preview-index", String(nextIndex));
+        image.src = candidates[nextIndex];
         return;
       }
       image.classList.add("preview-image-failed");
@@ -732,14 +752,15 @@
         title: choice && choice.title
       });
     };
-    if (primaryUrl) {
+    if (candidates.length) {
       debugPreview("image-set", {
-        primaryUrl: primaryUrl,
-        fallbackUrl: fallbackUrl,
+        primaryUrl: candidates[0],
+        candidates: candidates,
         previewPath: choice && choice.previewPath,
         title: choice && choice.title
       });
-      image.src = primaryUrl;
+      image.setAttribute("data-preview-index", "0");
+      image.src = candidates[0];
       return true;
     }
     image.removeAttribute("src");

@@ -434,17 +434,30 @@ h2 {
 }
 
 .sticky-actions {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.9fr) minmax(56px, auto) minmax(72px, 0.9fr) minmax(86px, 1fr);
   flex: 0 0 auto;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: stretch;
+  gap: 8px;
   margin-top: 10px;
   padding: 10px 0 0;
   background: transparent;
 }
 
+.sticky-actions .primary-button,
+.sticky-actions .secondary-button {
+  width: 100%;
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
 #templatePageLabel {
-  min-width: 76px;
+  min-width: 56px;
   text-align: center;
   color: #42526d;
+  white-space: nowrap;
 }
 
 .text-panel-card {
@@ -884,8 +897,9 @@ h2 {
 
   .sticky-actions {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(60px, 0.85fr) minmax(50px, auto) minmax(60px, 0.85fr) minmax(78px, 1fr);
     align-items: center;
+    gap: 6px;
   }
 
   .single-page-chooser {
@@ -936,10 +950,14 @@ h2 {
   .sticky-actions .secondary-button {
     width: 100%;
     min-width: 0;
+    padding-right: 6px;
+    padding-left: 6px;
+    font-size: 15px;
   }
 
   #templatePageLabel {
-    min-width: 0;
+    min-width: 50px;
+    font-size: 15px;
   }
 
   .single-page-frame {
